@@ -30,7 +30,7 @@ import {
 import { OrdersWithProducts } from '@/app/admin/orders/types';
 import { updateOrderStatus } from '@/actions/orders';
 
-const statusOptions = ['Pending', 'Approved', 'Cancelled', 'Completed'];
+const statusOptions = ['Pending', 'InTransit', 'Shipped', 'Completed'];
 
 type Props = {
   ordersWithProducts: OrdersWithProducts;
