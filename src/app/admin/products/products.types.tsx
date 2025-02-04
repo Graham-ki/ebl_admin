@@ -14,7 +14,7 @@ export type ProductsWithCategoriesResponse = ProductWithCategory[];
 export type UpdateProductSchema ={
     category: number;
     heroImage:string;
-    imagesUrl: any;
+    imagesUrl: string;
     maxQuantity: number;
     price: number;
     slug: string;

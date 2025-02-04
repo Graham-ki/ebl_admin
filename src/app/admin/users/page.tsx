@@ -1,22 +1,40 @@
-'use client'
+"use client";
+
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
-const supabaseUrl = "https://kxnrfzcurobahklqefjs.supabase.co"; // Replace with actual Supabase URL
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4bnJmemN1cm9iYWhrbHFlZmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc5NTk1MzUsImV4cCI6MjA1MzUzNTUzNX0.pHrrAPHV1ln1OHugnB93DTUY5TL9K8dYREhz1o0GkjE"; // Replace with actual Supabase Key
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Initialize Supabase client
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+}
+
+interface Order {
+  slug: string;
+  created_at: string;
+  status: string;
+  totalPrice: number;
+}
 
 const UsersPage = () => {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editUser, setEditUser] = useState<any>(null);
+  const [editUser, setEditUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
 
   useEffect(() => {
@@ -27,7 +45,7 @@ const UsersPage = () => {
   const fetchUsers = async () => {
     setLoading(true);
     const { data, error } = await supabase.from("users").select("id, name, email, phone, address");
-    
+
     if (error) {
       console.error("Error fetching users:", error);
     } else {
@@ -39,7 +57,7 @@ const UsersPage = () => {
   // Delete user function
   const handleDeleteUser = async (id: number) => {
     const { error } = await supabase.from("users").delete().eq("id", id);
-  
+
     if (error) {
       console.error("Error deleting user:", error.message);
       alert("Failed to delete user: " + error.message);
@@ -50,7 +68,7 @@ const UsersPage = () => {
   };
 
   // Open Edit Modal
-  const handleEditUser = (user: any) => {
+  const handleEditUser = (user: User) => {
     setEditUser(user);
     setIsEditing(true);
   };
@@ -58,7 +76,7 @@ const UsersPage = () => {
   // Update User in Supabase
   const handleUpdateUser = async () => {
     if (!editUser) return;
-  
+
     const { error } = await supabase
       .from("users")
       .update({
@@ -68,7 +86,7 @@ const UsersPage = () => {
         address: editUser.address,
       })
       .eq("id", editUser.id);
-  
+
     if (error) {
       console.error("Error updating user:", error.message);
       alert("Failed to update user: " + error.message);
@@ -81,12 +99,12 @@ const UsersPage = () => {
 
   // Fetch Orders for a Specific User
   const handleViewOrders = async (userId: number) => {
-    setSelectedUser(userId);
+    setSelectedUser(users.find((user) => user.id === userId) || null);
     setIsOrdersOpen(true);
-    
+
     const { data, error } = await supabase
-      .from("order") // Orders table
-      .select("slug, status, totalPrice,created_at")
+      .from("order")
+      .select("slug, status, totalPrice, created_at")
       .eq("user", userId);
 
     if (error) {
@@ -99,7 +117,7 @@ const UsersPage = () => {
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">User Management</h1>
-      
+
       {loading ? (
         <p>Loading...</p>
       ) : (
@@ -144,65 +162,78 @@ const UsersPage = () => {
             <DialogTitle>Edit User</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <Input 
-              label="Name" 
-              value={editUser?.name || ""} 
-              onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
-            />
-            <Input 
-              label="Email" 
-              type="email" 
-              value={editUser?.email || ""} 
-              onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
-            />
-            <Input 
-              label="Phone" 
-              value={editUser?.phone || ""} 
-              onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
-            />
-            <Input 
-              label="Address" 
-              value={editUser?.address || ""} 
-              onChange={(e) => setEditUser({ ...editUser, address: e.target.value })}
-            />
+            <label>
+              Name:
+              <Input
+                value={editUser?.name || ""}
+                onChange={(e) => setEditUser({ ...editUser!, name: e.target.value })}
+              />
+            </label>
+            <label>
+              Email:
+              <Input
+                type="email"
+                value={editUser?.email || ""}
+                onChange={(e) => setEditUser({ ...editUser!, email: e.target.value })}
+              />
+            </label>
+            <label>
+              Phone:
+              <Input
+                value={editUser?.phone || ""}
+                onChange={(e) => setEditUser({ ...editUser!, phone: e.target.value })}
+              />
+            </label>
+            <label>
+              Address:
+              <Input
+                value={editUser?.address || ""}
+                onChange={(e) => setEditUser({ ...editUser!, address: e.target.value })}
+              />
+            </label>
           </div>
           <DialogFooter className="flex gap-2">
             <Button onClick={() => setIsEditing(false)}>Cancel</Button>
-            <Button variant="primary" onClick={handleUpdateUser}>Update</Button>
+            <Button variant="secondary" onClick={handleUpdateUser}>Update</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Orders Modal */}
+      {/* Orders Modal with Table */}
       <Dialog open={isOrdersOpen} onOpenChange={setIsOrdersOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>User: {selectedUser}</DialogTitle>
+            <DialogTitle>Orders for {selectedUser?.name || "Unknown"}</DialogTitle>
           </DialogHeader>
-          {orders.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order ID</TableHead>
-                  <TableHead>Order date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Total Price</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((order) => (
-                  <TableRow key={order.slug}>
-                    <TableCell>{order.slug}</TableCell>
-                    <TableCell>{order.created_at}</TableCell>
-                    <TableCell>{order.status}</TableCell>
-                    <TableCell>{order.totalPrice}</TableCell>
+          <div>
+            {orders.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Total Price</TableHead>
+                    <TableHead>Created At</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-gray-500">No orders found for this user!.</p>
-          )}
+                </TableHeader>
+                <TableBody>
+                  {orders.map((order) => (
+                    <TableRow key={order.slug}>
+                      <TableCell>{order.slug}</TableCell>
+                      <TableCell>{order.status}</TableCell>
+                      <TableCell>UGX {order.totalPrice}</TableCell>
+                      <TableCell>{new Date(order.created_at).toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p>No orders found for this user.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsOrdersOpen(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

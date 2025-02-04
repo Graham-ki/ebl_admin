@@ -44,6 +44,7 @@ export default function Auth() {
       await authenticate(email, password);
       router.push('/admin');
     } catch (error) {
+      throw new Error('Something went wrong,' + error.message)
     } finally {
       setIsAuthenticating(false);
     }

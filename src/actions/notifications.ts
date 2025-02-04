@@ -31,8 +31,8 @@ async function sendPushNotification({
 }
 
 export const getUserNotificationToken = async (userId: string) => {
-  const supabase = createClient();
-  const { data, error } = await supabase
+  const supabase =  createClient();
+  const { data, error } = await (await supabase)
     .from('users')
     .select('expo_notification_token')
     .eq('id', userId)

@@ -5,8 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { sendNotification } from './notifications';
 
 export const getOrdersWithProducts = async () => {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const supabase =  createClient();
+  const { data, error } = await (await supabase)
     .from('order')
     .select('*, order_items:order_item(*, product(*)), user(*)')
     .order('created_at', { ascending: false });
@@ -17,8 +17,8 @@ export const getOrdersWithProducts = async () => {
 };
 
 export const updateOrderStatus = async (orderId: number, status: string) => {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const supabase = createClient();
+  const { error } = await (await supabase)
     .from('order')
     .update({ status })
     .eq('id', orderId);
@@ -27,9 +27,9 @@ export const updateOrderStatus = async (orderId: number, status: string) => {
 
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await (await supabase).auth.getSession();
 
-  const userId = session?.user.id!;
+  const userId = session?.user?.id ?? null;
 
   await sendNotification(userId, status + ' 🚀');
 
@@ -37,8 +37,8 @@ export const updateOrderStatus = async (orderId: number, status: string) => {
 };
 
 export const getMonthlyOrders = async () => {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from('order').select('created_at');
+  const supabase =  createClient();
+  const { data, error } = await (await supabase).from('order').select('created_at');
 
   if (error) throw new Error(error.message);
 

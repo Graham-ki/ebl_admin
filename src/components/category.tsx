@@ -1,5 +1,4 @@
 import Image from 'next/image';
-import Link from 'next/link';
 import { format } from 'date-fns';
 import { useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
@@ -43,7 +42,6 @@ export const CategoryTableRow = ({
   const handleEditClick = (category: CreateCategorySchema) => {
     setCurrentCategory({
       name: category.name,
-      // @ts-ignore
       image: new File([], ''),
       intent: 'update',
       slug: category.slug,
