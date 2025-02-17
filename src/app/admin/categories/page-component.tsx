@@ -4,8 +4,6 @@ import { FC, useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { PlusCircle } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { v4 as uuid } from 'uuid';
-
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -38,7 +36,6 @@ import { CategoryForm } from '@/app/admin/categories/category-form';
 import {
   createCategory,
   deleteCategory,
-  imageUploadHandler,
   updateCategory,
 } from '@/actions/categories';
 import { useRouter } from 'next/navigation';
@@ -58,59 +55,37 @@ const CategoriesPageComponent: FC<Props> = ({ categories }) => {
     resolver: zodResolver(createCategorySchema),
     defaultValues: {
       name: '',
-      image: undefined,
     },
   });
 
   const router = useRouter();
 
-  const submitCategoryHandler: SubmitHandler<
-    CreateCategorySchema
-  > = async data => {
-    const { image, name, intent = 'create' } = data;
-
-    const handleImageUpload = async () => {
-      const uniqueId = uuid();
-      const fileName = `category/category-${uniqueId}`;
-      const file = new File([data.image[0]], fileName);
-      const formData = new FormData();
-      formData.append('file', file);
-
-      return imageUploadHandler(formData);
-    };
+  const submitCategoryHandler: SubmitHandler<CreateCategorySchema> = async data => {
+    const { name, intent = 'create' } = data;
 
     switch (intent) {
       case 'create': {
-        const imageUrl = await handleImageUpload();
-
-        if (imageUrl) {
-          await createCategory({ imageUrl, name });
-          form.reset();
-          router.refresh();
-          setIsCreateCategoryModalOpen(false);
-          toast.success('Category created successfully');
-        }
+        await createCategory({ name });
+        form.reset();
+        router.refresh();
+        setIsCreateCategoryModalOpen(false);
+        toast.success('Category created successfully');
         break;
       }
       case 'update': {
-        if (image && currentCategory?.slug) {
-          const imageUrl = await handleImageUpload();
-
-          if (imageUrl) {
-            await updateCategory({
-              imageUrl,
-              name,
-              slug: currentCategory.slug,
-              intent: 'update',
-            });
-            form.reset();
-            router.refresh();
-            setIsCreateCategoryModalOpen(false);
-            toast.success('Category updated successfully');
-          }
+        if (currentCategory?.slug) {
+          await updateCategory({
+            name,
+            slug: currentCategory.slug,
+            intent: 'update',
+          });
+          form.reset();
+          router.refresh();
+          setIsCreateCategoryModalOpen(false);
+          toast.success('Category updated successfully');
         }
+        break;
       }
-
       default:
         console.error('Invalid intent');
     }
@@ -125,7 +100,7 @@ const CategoriesPageComponent: FC<Props> = ({ categories }) => {
   return (
     <main className='grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8'>
       <div className='flex items-center my-10'>
-      <h1 className='text-2xl font-bold'>Categories Management</h1>
+        <h1 className='text-2xl font-bold'>Categories Management</h1>
         <div className='ml-auto flex items-center gap-2'>
           <Dialog
             open={isCreateCategoryModalOpen}
@@ -171,9 +146,6 @@ const CategoriesPageComponent: FC<Props> = ({ categories }) => {
           <Table className='min-w-[600px]'>
             <TableHeader>
               <TableRow>
-                <TableHead className='w-[100px] sm:table-cell'>
-                  <span className='sr-only'>Image</span>
-                </TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead className='md:table-cell'>Created at</TableHead>
                 <TableHead className='md:table-cell'>Products</TableHead>

@@ -56,8 +56,6 @@ export const ProductForm = ({
         category: '',
         price: '',
         maxQuantity: '',
-        heroImage: undefined,
-        images: undefined,
       });
     }
   }, [defaultValues, form]);
@@ -159,49 +157,6 @@ export const ProductForm = ({
                         type='number'
                         className='col-span-3'
                         {...field}
-                        disabled={isSubmitting}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='heroImage'
-                render={({ field }) => (
-                  <FormItem className='flex flex-col'>
-                    <FormLabel>Hero Image</FormLabel>
-                    <FormControl className='col-span-3'>
-                      <Input
-                        type='file'
-                        accept='image/*'
-                        {...form.register('heroImage')}
-                        onChange={event => {
-                          field.onChange(event.target.files?.[0]);
-                        }}
-                        disabled={isSubmitting}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='images'
-                render={({ field }) => (
-                  <FormItem className='flex flex-col'>
-                    <FormLabel>Product Images</FormLabel>
-                    <FormControl className='col-span-3'>
-                      <Input
-                        type='file'
-                        accept='image/*'
-                        multiple
-                        {...form.register('images')}
-                        onChange={event => {
-                          field.onChange(event.target.files);
-                        }}
                         disabled={isSubmitting}
                       />
                     </FormControl>

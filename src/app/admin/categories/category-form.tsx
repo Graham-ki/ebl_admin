@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
+  FormDescription,
   FormMessage,
 } from '@/components/ui/form';
 import { CreateCategorySchema } from '@/app/admin/categories/create-category.schema';
@@ -19,7 +19,7 @@ export const CategoryForm = ({
   onSubmit,
   defaultValues,
 }: {
-  form: UseFormReturn<CreateCategorySchema>; // Specify the correct type here
+  form: UseFormReturn<CreateCategorySchema>;
   onSubmit: SubmitHandler<CreateCategorySchema>;
   defaultValues: CreateCategorySchema | null;
 }) => {
@@ -29,7 +29,7 @@ export const CategoryForm = ({
     if (defaultValues) {
       form.reset(defaultValues);
     } else {
-      form.reset({ name: '', image: undefined });
+      form.reset({ name: '' });
     }
   }, [defaultValues, form]);
 
@@ -43,37 +43,16 @@ export const CategoryForm = ({
             <FormItem>
               <FormLabel>Name</FormLabel>
               <FormControl>
-                <Input disabled={isSubmitting} placeholder='Name' {...field} />
+                <Input disabled={isSubmitting} placeholder='Category Name' {...field} />
               </FormControl>
-              <FormDescription>Category Name</FormDescription>
+              <FormDescription>Enter the name of the category</FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name='image'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Image</FormLabel>
-              <FormControl>
-                <Input
-                  type='file'
-                  accept='image/*'
-                  {...form.register('image')}
-                  onChange={event => {
-                    field.onChange(event.target.files?.[0]);
-                  }}
-                  disabled={isSubmitting}
-                />
-              </FormControl>
-              <FormDescription>Category Image</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+
         <Button disabled={isSubmitting} type='submit' variant='outline'>
-          Submit
+          {defaultValues ? 'Update Category' : 'Create Category'}
         </Button>
       </form>
     </Form>

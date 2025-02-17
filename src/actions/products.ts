@@ -28,8 +28,6 @@ export const getProductsWithCategories =
 
 export const createProduct = async ({
   category,
-  heroImage,
-  images,
   maxQuantity,
   price,
   title,
@@ -39,8 +37,6 @@ export const createProduct = async ({
 
   const { data, error } = await (await supabase).from('product').insert({
     category,
-    heroImage,
-    imagesUrl: images,
     maxQuantity,
     price,
     slug,
@@ -58,8 +54,6 @@ export const createProduct = async ({
 
 export const updateProduct = async ({
   category,
-  heroImage,
-  imagesUrl,
   maxQuantity,
   price,
   slug,
@@ -70,8 +64,6 @@ export const updateProduct = async ({
     .from('product')
     .update({
       category,
-      heroImage,
-      imagesUrl,
       maxQuantity,
       price,
       title,

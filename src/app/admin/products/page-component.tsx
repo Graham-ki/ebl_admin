@@ -29,7 +29,6 @@ import {
   createOrUpdateProductSchema,
   CreateOrUpdateProductSchema,
 } from '@/app/admin/products/schema';
-import { imageUploadHandler } from '@/actions/categories';
 import {
   createProduct,
   deleteProduct,
@@ -59,8 +58,6 @@ export const ProductPageComponent: FC<Props> = ({
       category: undefined,
       price: undefined,
       maxQuantity: undefined,
-      heroImage: undefined,
-      images: [],
       intent: 'create',
     },
   });
@@ -72,75 +69,31 @@ export const ProductPageComponent: FC<Props> = ({
   ) => {
     const {
       category,
-      images,
       maxQuantity,
       price,
       title,
-      heroImage,
       slug,
       intent = 'create',
     } = data;
 
-    const uploadFile = async (file: File) => {
-      const uniqueId = uuid();
-      const fileName = `product/product-${uniqueId}-${file.name}`;
-      const formData = new FormData();
-      formData.append('file', file, fileName);
-      return imageUploadHandler(formData);
-    };
-
-    let heroImageUrl: string | undefined;
-    let imageUrls: string[] = [];
-
-    if (heroImage) {
-      const imagePromise = Array.from(heroImage).map(file =>
-        uploadFile(file as File)
-      );
-      try {
-        [heroImageUrl] = await Promise.all(imagePromise);
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        toast.error('Error uploading image');
-        return;
-      }
-    }
-
-    if (images.length > 0) {
-      const imagesPromises = Array.from(images).map(file => uploadFile(file));
-
-      try {
-        imageUrls = (await Promise.all(imagesPromises)) as string[];
-      } catch (error) {
-        console.error('Error uploading images:', error);
-        toast.error('Error uploading images');
-        return;
-      }
-    }
-
     switch (intent) {
       case 'create': {
-        if (heroImageUrl && imageUrls.length > 0) {
-          await createProduct({
-            category: Number(category),
-            images: imageUrls,
-            heroImage: heroImageUrl,
-            maxQuantity: Number(maxQuantity),
-            price: Number(price),
-            title,
-          });
-          form.reset();
-          router.refresh();
-          setIsProductModalOpen(false);
-          toast.success('Product created successfully');
-        }
+        await createProduct({
+          category: Number(category),
+          maxQuantity: Number(maxQuantity),
+          price: Number(price),
+          title,
+        });
+        form.reset();
+        router.refresh();
+        setIsProductModalOpen(false);
+        toast.success('Product created successfully');
         break;
       }
       case 'update': {
-        if (heroImageUrl && imageUrls.length > 0 && slug) {
+        if (slug) {
           await updateProduct({
             category: Number(category),
-            heroImage: heroImageUrl!,
-            imagesUrl: imageUrls,
             maxQuantity: Number(maxQuantity),
             price: Number(price),
             title,
@@ -190,9 +143,7 @@ export const ProductPageComponent: FC<Props> = ({
               <TableHead>Title</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Price</TableHead>
-              <TableHead>Max Quantity</TableHead>
-              <TableHead>Hero Image</TableHead>
-              <TableHead>Product Images</TableHead>
+              <TableHead>Available Quantity</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>

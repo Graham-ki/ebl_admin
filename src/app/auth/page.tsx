@@ -41,10 +41,16 @@ export default function Auth() {
     setIsAuthenticating(true);
 
     try {
-      await authenticate(email, password);
-      router.push('/admin');
+      // Authenticate user and check role
+      const user = await authenticate(email, password);
+
+      // Redirect to the admin dashboard if user is an admin
+      if (user?.type === 'ADMIN') {
+        router.push('/admin');
+      }
     } catch (error) {
-      throw new Error('Something went wrong,' + error.message)
+      console.log('Error during authentication', error);
+      // Handle errors (e.g., show an error message)
     } finally {
       setIsAuthenticating(false);
     }
@@ -89,7 +95,7 @@ export default function Auth() {
                       type='password'
                       {...field}
                     />
-                  </FormControl>{' '}
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

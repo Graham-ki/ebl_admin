@@ -1,6 +1,5 @@
 import { Dispatch, SetStateAction } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
-import Image from 'next/image';
 
 import { Button } from '@/components/ui/button';
 import { TableRow, TableCell } from '@/components/ui/table';
@@ -10,9 +9,7 @@ import { CreateOrUpdateProductSchema } from '@/app/admin/products/schema';
 type Props = {
   product: ProductWithCategory;
   setIsProductModalOpen: Dispatch<SetStateAction<boolean>>;
-  setCurrentProduct: Dispatch<
-    SetStateAction<CreateOrUpdateProductSchema | null>
-  >;
+  setCurrentProduct: Dispatch<SetStateAction<CreateOrUpdateProductSchema | null>>;
   setIsDeleteModalOpen: Dispatch<SetStateAction<boolean>>;
 };
 
@@ -28,8 +25,6 @@ export const ProductTableRow = ({
       category: product.category,
       price: product.price,
       maxQuantity: product.maxQuantity,
-      heroImage: product.heroImage,
-      images: product.images,
       slug: product.slug,
       intent: 'update',
     });
@@ -43,27 +38,10 @@ export const ProductTableRow = ({
       <TableCell>UGX {product.price}</TableCell>
       <TableCell>{product.maxQuantity}</TableCell>
       <TableCell>
-        {product.heroImage && (
-          <Image
-            width={40}
-            height={40}
-            src={product.heroImage}
-            alt='Hero'
-            className='w-10 h-10 object-cover'
-          />
-        )}
+        {/* Removed image display logic */}
       </TableCell>
       <TableCell>
-        {product.imagesUrl.map((url, index) => (
-          <Image
-            width={40}
-            height={40}
-            key={index}
-            src={url}
-            alt={`Product ${index + 1}`}
-            className='w-10 h-10 object-cover inline-block mr-1'
-          />
-        ))}
+        {/* Removed product images display logic */}
       </TableCell>
       <TableCell>
         <Button
@@ -75,7 +53,6 @@ export const ProductTableRow = ({
               category: product.category.id.toString(),
               price: product.price?.toString() ?? '',
               maxQuantity: product.maxQuantity.toString(),
-              images: [],
               slug: product.slug,
               intent: 'update',
             })
@@ -92,7 +69,6 @@ export const ProductTableRow = ({
               category: product.category.id.toString(),
               price: product.price?.toString() ?? '',
               maxQuantity: product.maxQuantity.toString(),
-              images: [],
               slug: product.slug,
               intent: 'update',
             })

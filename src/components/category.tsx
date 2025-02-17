@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import { format } from 'date-fns';
 import { useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
@@ -42,7 +41,6 @@ export const CategoryTableRow = ({
   const handleEditClick = (category: CreateCategorySchema) => {
     setCurrentCategory({
       name: category.name,
-      image: new File([], ''),
       intent: 'update',
       slug: category.slug,
     });
@@ -57,15 +55,6 @@ export const CategoryTableRow = ({
   return (
     <>
       <TableRow>
-        <TableCell className='sm:table-cell'>
-          <Image
-            alt='Product image'
-            className='aspect-square rounded-md object-cover'
-            height='64'
-            src={category.imageUrl}
-            width='64'
-          />
-        </TableCell>
         <TableCell className='font-medium'>{category.name}</TableCell>
         <TableCell className='md:table-cell'>
           {format(new Date(category.created_at), 'yyyy-MM-dd')}
@@ -85,28 +74,22 @@ export const CategoryTableRow = ({
                 </DialogTitle>
                 <h2>Products</h2>
                 <ScrollArea className='h-[400px] rounded-md p-4'>
-                  {category.products.map(product => (
-                    <Card key={product.id} className='cursor-pointer'>
-                      <div className='grid grid-cols-[100px,1fr] items-center gap-4'>
-                        <Image
-                          alt='Product image'
-                          className='aspect-square rounded-md object-cover'
-                          height='100'
-                          src={product.heroImage}
-                          width='100'
-                        />
-                        <div className='flex flex-col space-y-1'>
-                          <h3 className='font-medium leading-none'>
-                            {product.title}
-                          </h3>
-                          <p className='text-sm text-muted-foreground'>
-                            {product.maxQuantity} in stock
-                          </p>
-                        </div>
+                {category.products.map(product => (
+                  <Card key={product.id} className='cursor-pointer mb-4'> {/* Added margin-bottom */}
+                    <div className='grid grid-cols-[100px,1fr] items-center gap-4'>
+                      <div className='flex items-center space-x-2'>
+                        <h3 className='font-medium leading-none'>
+                          {product.title} 
+                        </h3>
+                        <p className='text-sm text-muted-foreground flex-shrink-0 truncate'>
+                          : {product.maxQuantity} in stock
+                        </p>
                       </div>
-                    </Card>
-                  ))}
-                </ScrollArea>
+                    </div>
+                  </Card>
+                ))}
+              </ScrollArea>
+
               </DialogContent>
             </Dialog>
           ) : (
