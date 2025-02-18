@@ -5,7 +5,6 @@ export type ProductWithCategory = {
     id:number;
     imagesUrl: string;
     maxQuantity: number;
-    price: number | null;
     slug:string;
     title:string;
     category:Category

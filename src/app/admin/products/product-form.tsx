@@ -54,7 +54,6 @@ export const ProductForm = ({
       form.reset({
         title: '',
         category: '',
-        price: '',
         maxQuantity: '',
       });
     }
@@ -128,29 +127,10 @@ export const ProductForm = ({
               />
               <FormField
                 control={form.control}
-                name='price'
-                render={({ field }) => (
-                  <FormItem className='flex flex-col'>
-                    <FormLabel>Price</FormLabel>
-                    <FormControl>
-                      <Input
-                        id='price'
-                        type='number'
-                        className='col-span-3'
-                        {...field}
-                        disabled={isSubmitting}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
                 name='maxQuantity'
                 render={({ field }) => (
                   <FormItem className='flex flex-col'>
-                    <FormLabel>Max Quantity</FormLabel>
+                    <FormLabel>Quantity</FormLabel>
                     <FormControl>
                       <Input
                         id='maxQuantity'

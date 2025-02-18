@@ -29,7 +29,6 @@ export const getProductsWithCategories =
 export const createProduct = async ({
   category,
   maxQuantity,
-  price,
   title,
 }: CreateProductSchemaServer) => {
   const supabase =  createClient();
@@ -38,7 +37,6 @@ export const createProduct = async ({
   const { data, error } = await (await supabase).from('product').insert({
     category,
     maxQuantity,
-    price,
     slug,
     title,
   });
@@ -55,7 +53,6 @@ export const createProduct = async ({
 export const updateProduct = async ({
   category,
   maxQuantity,
-  price,
   slug,
   title,
 }: UpdateProductSchema) => {
@@ -65,7 +62,6 @@ export const updateProduct = async ({
     .update({
       category,
       maxQuantity,
-      price,
       title,
     })
     .match({ slug });

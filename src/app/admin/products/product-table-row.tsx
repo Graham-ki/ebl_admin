@@ -23,7 +23,6 @@ export const ProductTableRow = ({
     setCurrentProduct({
       title: product.title,
       category: product.category,
-      price: product.price,
       maxQuantity: product.maxQuantity,
       slug: product.slug,
       intent: 'update',
@@ -35,14 +34,7 @@ export const ProductTableRow = ({
     <TableRow key={product.id}>
       <TableCell>{product.title}</TableCell>
       <TableCell>{product.category.name}</TableCell>
-      <TableCell>UGX {product.price}</TableCell>
       <TableCell>{product.maxQuantity}</TableCell>
-      <TableCell>
-        {/* Removed image display logic */}
-      </TableCell>
-      <TableCell>
-        {/* Removed product images display logic */}
-      </TableCell>
       <TableCell>
         <Button
           variant='ghost'
@@ -51,7 +43,6 @@ export const ProductTableRow = ({
             handleEditClick({
               title: product.title,
               category: product.category.id.toString(),
-              price: product.price?.toString() ?? '',
               maxQuantity: product.maxQuantity.toString(),
               slug: product.slug,
               intent: 'update',
@@ -67,7 +58,6 @@ export const ProductTableRow = ({
             setCurrentProduct({
               title: product.title,
               category: product.category.id.toString(),
-              price: product.price?.toString() ?? '',
               maxQuantity: product.maxQuantity.toString(),
               slug: product.slug,
               intent: 'update',

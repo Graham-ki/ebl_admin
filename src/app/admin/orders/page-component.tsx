@@ -43,7 +43,7 @@ type Props = {
 
 export default function PageComponent({ ordersWithProducts }: Props) {
   const [selectedProducts, setSelectedProducts] = useState<
-    { order_id: number; product: any }[]
+    { order_id: number; product: any;quantity:number }[]
   >([]);
   const [proofs, setProofs] = useState<{ id: number; file_url: string }[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
@@ -78,15 +78,13 @@ export default function PageComponent({ ordersWithProducts }: Props) {
   const handleDeleteOrder = async (orderId: number) => {
     try {
       const { error } = await supabase
-        .from('order') // Replace 'orders' with your actual table name
+        .from('order')
         .delete()
-        .eq('id', orderId); // Delete the order with the matching ID
+        .eq('id', orderId); 
 
       if (error) throw error;
-
-      // Optionally, refresh the orders list or remove the deleted order from the state
       alert('Order deleted successfully!');
-      window.location.reload(); // Refresh the page to reflect changes
+      window.location.reload();
     } catch (error) {
       console.error('Error deleting order:', error);
       alert('Failed to delete order. Please try again.');
@@ -100,13 +98,12 @@ export default function PageComponent({ ordersWithProducts }: Props) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
               <TableHead>Order Date</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Reception Status</TableHead>
+              <TableHead>Delivery Status</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>User</TableHead>
               <TableHead>Order ID</TableHead>
-              <TableHead>Total Price</TableHead>
               <TableHead>Products</TableHead>
               <TableHead>Payments</TableHead>
               <TableHead colSpan={2}>Actions</TableHead>
@@ -115,8 +112,8 @@ export default function PageComponent({ ordersWithProducts }: Props) {
           <TableBody>
             {ordersWithProducts.map(order => (
               <TableRow key={order.id}>
-                <TableCell>{order.id}</TableCell>
                 <TableCell>{format(new Date(order.created_at), 'MMM dd, yyyy')}</TableCell>
+                <TableCell>{order.receiption_status}</TableCell>
                 <TableCell>
                   <Select
                     onValueChange={value => handleStatusChange(order.id, value)}
@@ -137,7 +134,6 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                 <TableCell>{order.description || 'No Description'}</TableCell>
                 <TableCell>{(order.user as { email?: string })?.email || 'N/A'}</TableCell>
                 <TableCell>{order.slug}</TableCell>
-                <TableCell>UGX {order.totalPrice.toFixed(1)}</TableCell>
                 <TableCell>
                   {order.order_items.length} item
                   {order.order_items.length > 1 ? 's' : ''}
@@ -194,6 +190,7 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                           setSelectedProducts(order.order_items.map(item => ({
                             order_id: order.id,
                             product: item.product,
+                            quantity: item.quantity,
                           })))
                         }
                       >
@@ -205,12 +202,11 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                         <DialogTitle>Order Products</DialogTitle>
                       </DialogHeader>
                       <div className="mt-4">
-                        {selectedProducts.map(({ product }, index) => (
+                        {selectedProducts.map(({ product,quantity }, index) => (
                           <div key={index} className="mr-2 mb-2 flex items-center space-x-2">
                             <div className="flex flex-col">
                               <span className="font-semibold">{product.title}</span>
-                              <span className="text-gray-600">UGX {product.price.toFixed(1)}</span>
-                              <span className="text-sm text-gray-500">Available Quantity: {product.maxQuantity}</span>
+                              <span className="text-sm text-gray-500">Boxes ordered: {quantity}</span>
                             </div>
                           </div>
                         ))}
@@ -222,9 +218,9 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                 {/* DELETE BUTTON */}
                 <TableCell>
                   <Button
-                    variant="destructive" // Use a destructive style for delete actions
+                    variant="destructive" 
                     size="sm"
-                    onClick={() => handleDeleteOrder(order.id)} // Pass the order ID to the function
+                    onClick={() => handleDeleteOrder(order.id)} 
                   >
                     Delete
                   </Button>

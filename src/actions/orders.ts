@@ -16,25 +16,30 @@ export const getOrdersWithProducts = async () => {
   return data;
 };
 
+//update order status
 export const updateOrderStatus = async (orderId: number, status: string) => {
-  const supabase = createClient();
-  const { error } = await (await supabase)
+  const supabase = await createClient();
+
+  // Update the order status
+  const { error } = await supabase
     .from('order')
     .update({ status })
     .eq('id', orderId);
 
   if (error) throw new Error(error.message);
 
-  const {
-    data: { session },
-  } = await (await supabase).auth.getSession();
-
+  console.log(`Order status updated to: ${status}`);
+  
+  // Notify the user (assuming sendNotification is defined elsewhere)
+  const { data: { session } } = await supabase.auth.getSession();
   const userId = session?.user?.id ?? null;
-
   await sendNotification(userId, status + ' 🚀');
 
+  // Revalidate the orders page
   revalidatePath('/admin/orders');
 };
+
+//update order status
 
 export const getMonthlyOrders = async () => {
   const supabase =  createClient();
@@ -75,4 +80,59 @@ export const getMonthlyOrders = async () => {
     name: month,
     orders: ordersByMonth[month],
   }));
+};
+
+//check status
+export const checkApprovedOrdersAndDecrementStock = async () => {
+  const supabase = await createClient();
+
+  // Fetch orders with 'Approved' status (you can add a timestamp or other logic to only check recent updates)
+  const { data: orders, error: fetchError } = await supabase
+    .from('order')
+    .select('id, status')
+    .eq('status', 'Approved')  // Only check orders with 'Approved' status
+    .eq('processed', false);  // Flag to ensure we don’t process already processed orders
+
+  if (fetchError) {
+    console.error('Error fetching orders:', fetchError);
+    return;
+  }
+
+  for (const order of orders) {
+    console.log(`Processing order ${order.id} with status ${order.status}`);
+
+    // Fetch order items for each order
+    const { data: orderItems, error: fetchOrderItemsError } = await supabase
+      .from('order_item')
+      .select('product, quantity')
+      .eq('order', order.id);
+
+    if (fetchOrderItemsError) {
+      console.error('Error fetching order items for order:', order.id);
+      continue;
+    }
+
+    // Decrement the stock for each order item
+    for (const item of orderItems) {
+      const { error: decrementError } = await supabase.rpc('decrement_product_quantity', {
+        product_id: item.product,
+        quantity: item.quantity,
+      });
+
+      if (decrementError) {
+        console.error('Error decrementing stock for product:', item.product);
+        continue;
+      }
+    }
+
+    // Mark the order as processed to avoid re-processing
+    const { error: updateError } = await supabase
+      .from('order')
+      .update({ processed: true })  // Set the 'processed' column to true
+      .eq('id', order.id);
+
+    if (updateError) {
+      console.error('Error marking order as processed:', updateError);
+    }
+  }
 };

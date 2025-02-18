@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-
 const DashboardPage = () => {
   return (
     <div className="flex flex-col justify-center items-center min-h-screen bg-gray-100 p-6">

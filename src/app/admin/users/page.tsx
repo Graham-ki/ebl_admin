@@ -369,7 +369,6 @@ const UsersPage = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>OrderID</TableHead>
-                      <TableHead>Total Price</TableHead>
                       <TableHead>Order date</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
@@ -379,7 +378,6 @@ const UsersPage = () => {
                       userOrders.map((order) => (
                         <TableRow key={order.id}>
                           <TableCell>{order.slug}</TableCell>
-                          <TableCell>UGX {order.totalPrice}</TableCell>
                           <TableCell>{formatDateToEAT(order.created_at)}</TableCell>
                           <TableCell>{order.status}</TableCell>
                         </TableRow>

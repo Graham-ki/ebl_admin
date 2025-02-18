@@ -2,7 +2,6 @@
 
 import { FC, useState } from 'react';
 import { PlusIcon } from 'lucide-react';
-import { v4 as uuid } from 'uuid';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
@@ -56,7 +55,6 @@ export const ProductPageComponent: FC<Props> = ({
     defaultValues: {
       title: '',
       category: undefined,
-      price: undefined,
       maxQuantity: undefined,
       intent: 'create',
     },
@@ -70,7 +68,6 @@ export const ProductPageComponent: FC<Props> = ({
     const {
       category,
       maxQuantity,
-      price,
       title,
       slug,
       intent = 'create',
@@ -81,7 +78,6 @@ export const ProductPageComponent: FC<Props> = ({
         await createProduct({
           category: Number(category),
           maxQuantity: Number(maxQuantity),
-          price: Number(price),
           title,
         });
         form.reset();
@@ -95,7 +91,6 @@ export const ProductPageComponent: FC<Props> = ({
           await updateProduct({
             category: Number(category),
             maxQuantity: Number(maxQuantity),
-            price: Number(price),
             title,
             slug,
           });
@@ -142,8 +137,7 @@ export const ProductPageComponent: FC<Props> = ({
             <TableRow>
               <TableHead>Title</TableHead>
               <TableHead>Category</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Available Quantity</TableHead>
+              <TableHead>Available Boxes</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>

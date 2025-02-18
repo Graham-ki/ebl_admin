@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 export const createOrUpdateProductSchema = z.object({
   title: z.string().min(1, { message: 'Title is required' }),
-  price: z.string().min(1, { message: 'Price is required' }), 
   maxQuantity: z.string().min(1, { message: 'Max Quantity is required' }), 
   category: z.string().min(1, { message: 'Category is required' }),
   intent: z
@@ -19,7 +18,6 @@ export type CreateOrUpdateProductSchema = z.infer<
 
 export const createProductSchemaServer = z.object({
   title: z.string().min(1, { message: 'Title is required' }),
-  price: z.number().positive({ message: 'Price must be a positive number' }),
   maxQuantity: z.number().positive({ message: 'Max Quantity must be a positive number' }),
   category: z.number().positive({ message: 'Category is required' }),
 });
