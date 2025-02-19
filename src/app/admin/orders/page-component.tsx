@@ -93,33 +93,33 @@ export default function PageComponent({ ordersWithProducts }: Props) {
 
   return (
     <div className="container mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6 text-center">Orders Management Dashboard</h1>
+      <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-white dark:bg-gray-800 dark:text-white'>Orders Management Dashboard</h1>
       <div className="overflow-x-auto">
-        <Table>
+        <Table className="transition-shadow duration-300 hover:shadow-lg">
           <TableHeader>
             <TableRow>
-              <TableHead>Order Date</TableHead>
-              <TableHead>Reception Status</TableHead>
-              <TableHead>Delivery Status</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Order ID</TableHead>
-              <TableHead>Products</TableHead>
-              <TableHead>Payments</TableHead>
-              <TableHead colSpan={2}>Actions</TableHead>
+              <TableHead className="shadow-md">Order Date</TableHead>
+              <TableHead className="shadow-md">Reception Status</TableHead>
+              <TableHead className="shadow-md">Delivery Status</TableHead>
+              <TableHead className="shadow-md">Description</TableHead>
+              <TableHead className="shadow-md">User</TableHead>
+              <TableHead className="shadow-md">Order ID</TableHead>
+              <TableHead className="shadow-md">Products</TableHead>
+              <TableHead className="shadow-md">Payments</TableHead>
+              <TableHead colSpan={2} className="shadow-md">Actions</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody className="transition-shadow duration-300 hover:shadow-lg">
             {ordersWithProducts.map(order => (
-              <TableRow key={order.id}>
-                <TableCell>{format(new Date(order.created_at), 'MMM dd, yyyy')}</TableCell>
-                <TableCell>{order.receiption_status}</TableCell>
-                <TableCell>
+              <TableRow key={order.id} className="hover:bg-gray-100 transition-colors duration-200">
+                <TableCell className="border-2 border-gray-200">{format(new Date(order.created_at), 'MMM dd, yyyy')}</TableCell>
+                <TableCell className="border-2 border-gray-200">{order.receiption_status}</TableCell>
+                <TableCell className="border-2 border-gray-200">
                   <Select
                     onValueChange={value => handleStatusChange(order.id, value)}
                     defaultValue={order.status}
                   >
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[120px] shadow-sm">
                       <SelectValue>{order.status}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -131,27 +131,28 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell>{order.description || 'No Description'}</TableCell>
-                <TableCell>{(order.user as { email?: string })?.email || 'N/A'}</TableCell>
-                <TableCell>{order.slug}</TableCell>
-                <TableCell>
+                <TableCell className="border-2 border-gray-200">{order.description || 'No Description'}</TableCell>
+                <TableCell className="border-2 border-gray-200">{(order.user as { email?: string })?.email || 'N/A'}</TableCell>
+                <TableCell className="border-2 border-gray-200">{order.slug}</TableCell>
+                <TableCell className="border-2 border-gray-200">
                   {order.order_items.length} item
                   {order.order_items.length > 1 ? 's' : ''}
                 </TableCell>
 
                 {/* VIEW PROOFS BUTTON */}
-                <TableCell>
+                <TableCell className="border-2 border-gray-200">
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleViewProofs(order.id)}
+                        className="transition-all duration-200"
                       >
                         View
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="max-w-2xl rounded-lg shadow-xl transition-all duration-200">
                       <DialogHeader>
                         <DialogTitle>Payment receipts</DialogTitle>
                       </DialogHeader>
@@ -180,7 +181,7 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                 </TableCell>
 
                 {/* VIEW PRODUCTS BUTTON */}
-                <TableCell>
+                <TableCell className="border-2 border-gray-200">
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button
@@ -197,7 +198,7 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                         View Products
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="rounded-lg shadow-xl transition-all duration-200">
                       <DialogHeader>
                         <DialogTitle>Order Products</DialogTitle>
                       </DialogHeader>
@@ -216,11 +217,12 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                 </TableCell>
 
                 {/* DELETE BUTTON */}
-                <TableCell>
+                <TableCell className="border-2 border-gray-200">
                   <Button
-                    variant="destructive" 
+                    variant="destructive"
                     size="sm"
-                    onClick={() => handleDeleteOrder(order.id)} 
+                    onClick={() => handleDeleteOrder(order.id)}
+                    className="transition-all duration-200"
                   >
                     Delete
                   </Button>

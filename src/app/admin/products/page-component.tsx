@@ -121,38 +121,49 @@ export const ProductPageComponent: FC<Props> = ({
     <main className='grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8'>
       <div className='container mx-auto p-4'>
         <div className='flex justify-between items-center mb-4'>
-          <h1 className='text-2xl font-bold'>Products Management</h1>
+          <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-white dark:bg-gray-800 dark:text-white'>Products Management</h1>
           <Button
             onClick={() => {
               setCurrentProduct(null);
               setIsProductModalOpen(true);
             }}
+            className='shadow-lg hover:shadow-xl transition-all'
           >
             <PlusIcon className='mr-2 h-4 w-4' /> Add Product
           </Button>
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Available Boxes</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {productsWithCategories.map(product => (
-              <ProductTableRow
-                setIsProductModalOpen={setIsProductModalOpen}
-                key={product.id}
-                product={product}
-                setCurrentProduct={setCurrentProduct}
-                setIsDeleteModalOpen={setIsDeleteModalOpen}
-              />
-            ))}
-          </TableBody>
-        </Table>
+        <div className='rounded-lg shadow-lg p-4 bg-white'>
+          <Table>
+            <TableHeader className='bg-gray-100 shadow-md'>
+              <TableRow>
+                <TableHead className='p-4 text-lg font-semibold text-gray-700'>
+                  Title
+                </TableHead>
+                <TableHead className='p-4 text-lg font-semibold text-gray-700'>
+                  Category
+                </TableHead>
+                <TableHead className='p-4 text-lg font-semibold text-gray-700'>
+                  Available Boxes
+                </TableHead>
+                <TableHead className='p-4 text-lg font-semibold text-gray-700'>
+                  Actions
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {productsWithCategories.map(product => (
+                <ProductTableRow
+                  setIsProductModalOpen={setIsProductModalOpen}
+                  key={product.id}
+                  product={product}
+                  setCurrentProduct={setCurrentProduct}
+                  setIsDeleteModalOpen={setIsDeleteModalOpen}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
 
         {/* Product Modal */}
         <ProductForm
@@ -165,14 +176,25 @@ export const ProductPageComponent: FC<Props> = ({
         />
 
         {/* Delete Product Modal */}
-        <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-          <DialogContent>
+        <Dialog
+          open={isDeleteModalOpen}
+          onOpenChange={setIsDeleteModalOpen}
+        >
+          <DialogContent className='p-6'>
             <DialogHeader>
-              <DialogTitle>Delete Product</DialogTitle>
+              <DialogTitle className='font-semibold text-lg'>
+                Delete Product
+              </DialogTitle>
             </DialogHeader>
-            <p>Are you sure you want to delete {currentProduct?.title}</p>
-            <DialogFooter>
-              <Button variant='destructive' onClick={deleteProductHandler}>
+            <p className='text-gray-600'>
+              Are you sure you want to delete {currentProduct?.title}?
+            </p>
+            <DialogFooter className='mt-4'>
+              <Button
+                variant='destructive'
+                onClick={deleteProductHandler}
+                className='px-6 py-2 bg-red-600 text-white rounded-lg shadow-md hover:shadow-lg'
+              >
                 Delete
               </Button>
             </DialogFooter>

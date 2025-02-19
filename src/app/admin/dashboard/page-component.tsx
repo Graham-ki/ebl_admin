@@ -52,11 +52,13 @@ const PageComponent = ({
 }) => {
   return (
     <div className='flex-1 p-8 overflow-auto'>
-      <h1 className='text-3xl font-bold mb-6'>Dashboard Overview</h1>
+      <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-white dark:bg-gray-800 dark:text-white'>
+        Dashboard Overview
+      </h1>
 
       <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
         {/* Orders Chart */}
-        <Card>
+        <Card className='shadow-xl hover:shadow-2xl transition-shadow duration-300'>
           <CardHeader>
             <CardTitle>Orders Over Time</CardTitle>
           </CardHeader>
@@ -75,7 +77,7 @@ const PageComponent = ({
         </Card>
 
         {/* Products Chart */}
-        <Card>
+        <Card className='shadow-xl hover:shadow-2xl transition-shadow duration-300'>
           <CardHeader>
             <CardTitle>Product Distribution</CardTitle>
           </CardHeader>
@@ -107,8 +109,8 @@ const PageComponent = ({
           </CardContent>
         </Card>
 
-        {/* Category To products Chart */}
-        <Card>
+        {/* Category to Products Chart */}
+        <Card className='shadow-xl hover:shadow-2xl transition-shadow duration-300'>
           <CardHeader>
             <CardTitle>Products per Category</CardTitle>
           </CardHeader>
@@ -127,7 +129,7 @@ const PageComponent = ({
         </Card>
 
         {/* Latest Users */}
-        <Card>
+        <Card className='shadow-xl hover:shadow-2xl transition-shadow duration-300'>
           <CardHeader>
             <CardTitle>Latest Users</CardTitle>
           </CardHeader>

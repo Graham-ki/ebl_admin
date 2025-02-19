@@ -1,5 +1,4 @@
-'use client';
-
+'use client'
 import { FC, useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { PlusCircle } from 'lucide-react';
@@ -100,7 +99,7 @@ const CategoriesPageComponent: FC<Props> = ({ categories }) => {
   return (
     <main className='grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8'>
       <div className='flex items-center my-10'>
-        <h1 className='text-2xl font-bold'>Categories Management</h1>
+        <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-white dark:bg-gray-800 dark:text-white'>Categories Management</h1>
         <div className='ml-auto flex items-center gap-2'>
           <Dialog
             open={isCreateCategoryModalOpen}
@@ -123,7 +122,7 @@ const CategoriesPageComponent: FC<Props> = ({ categories }) => {
                 </span>
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className='dialog'>
               <DialogHeader>
                 <DialogTitle>Create Category</DialogTitle>
               </DialogHeader>
@@ -137,7 +136,7 @@ const CategoriesPageComponent: FC<Props> = ({ categories }) => {
         </div>
       </div>
 
-      <Card className='overflow-x-auto'>
+      <Card className='overflow-x-auto card'>
         <CardHeader>
           <CardTitle>Categories</CardTitle>
         </CardHeader>
@@ -146,10 +145,10 @@ const CategoriesPageComponent: FC<Props> = ({ categories }) => {
           <Table className='min-w-[600px]'>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className='md:table-cell'>Created at</TableHead>
-                <TableHead className='md:table-cell'>Products</TableHead>
-                <TableHead>
+                <TableHead className='shadow-lg'>Name</TableHead>
+                <TableHead className='md:table-cell shadow-lg'>Created at</TableHead>
+                <TableHead className='md:table-cell shadow-lg'>Products</TableHead>
+                <TableHead className='shadow-lg'>
                   <span className='sr-only'>Actions</span>
                 </TableHead>
               </TableRow>

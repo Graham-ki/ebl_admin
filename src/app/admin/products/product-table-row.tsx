@@ -49,7 +49,7 @@ export const ProductTableRow = ({
             })
           }
         >
-          <Pencil className='h-4 w-4' />
+          <Pencil className='h-4 w-4' color='darkgreen'/>
         </Button>
         <Button
           variant='ghost'
@@ -65,6 +65,7 @@ export const ProductTableRow = ({
           }
         >
           <Trash2
+          color='red'
             className='h-4 w-4'
             onClick={() => setIsDeleteModalOpen(true)}
           />

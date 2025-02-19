@@ -191,7 +191,7 @@ const UsersPage = () => {
 
   return (
     <div className="container mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">User Management</h1>
+      <h1 className="'text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-white dark:bg-gray-800 dark:text-white'">User Management</h1>
 
       <Button variant="default" onClick={() => setIsAdding(true)} className="mb-4">
         Add User
