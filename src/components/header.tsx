@@ -21,10 +21,12 @@ import { createClient } from '@/supabase/client';
 
 const NAV_LINKS = [
   { href: '/admin/dashboard', label: 'Dashboard' },
-  { href: '/admin/orders', label: 'Orders' },
+  { href: '/admin/materials', label: 'Materials' },
   { href: '/admin/products', label: 'Products' },
   { href: '/admin/categories', label: 'Categories' },
   { href: '/admin/users', label: 'Users' },
+  { href: '/admin/orders', label: 'Orders' },
+  { href: '/admin/ledgers', label: 'Ledgers' },
 ];
 
 export const Header = () => {
@@ -108,7 +110,7 @@ export const Header = () => {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search products..."
+              placeholder="Search items..."
               className="pl-8 sm:w-[300px] md:w-[200px] lg:w-[300px]"
             />
           </div>

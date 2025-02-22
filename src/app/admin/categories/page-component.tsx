@@ -99,7 +99,7 @@ const CategoriesPageComponent: FC<Props> = ({ categories }) => {
   return (
     <main className='grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8'>
       <div className='flex items-center my-10'>
-        <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-white dark:bg-gray-800 dark:text-white'>Categories Management</h1>
+        <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white'>Categories Management</h1>
         <div className='ml-auto flex items-center gap-2'>
           <Dialog
             open={isCreateCategoryModalOpen}

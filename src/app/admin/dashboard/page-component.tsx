@@ -52,7 +52,7 @@ const PageComponent = ({
 }) => {
   return (
     <div className='flex-1 p-8 overflow-auto'>
-      <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-white dark:bg-gray-800 dark:text-white'>
+      <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white'>
         Dashboard Overview
       </h1>
 

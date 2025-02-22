@@ -121,7 +121,7 @@ export const ProductPageComponent: FC<Props> = ({
     <main className='grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8'>
       <div className='container mx-auto p-4'>
         <div className='flex justify-between items-center mb-4'>
-          <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-white dark:bg-gray-800 dark:text-white'>Products Management</h1>
+          <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white'>Products Management</h1>
           <Button
             onClick={() => {
               setCurrentProduct(null);
