@@ -111,28 +111,6 @@ export const checkApprovedOrdersAndDecrementStock = async () => {
       console.error('Error fetching order items for order:', order.id);
       continue;
     }
-
-    // Decrement the stock for each order item
-    for (const item of orderItems) {
-      const { error: decrementError } = await supabase.rpc('decrement_product_quantity', {
-        product_id: item.product,
-        quantity: item.quantity,
-      });
-
-      if (decrementError) {
-        console.error('Error decrementing stock for product:', item.product);
-        continue;
-      }
-    }
-
-    // Mark the order as processed to avoid re-processing
-    const { error: updateError } = await supabase
-      .from('order')
-      .update({ processed: true })  // Set the 'processed' column to true
-      .eq('id', order.id);
-
-    if (updateError) {
-      console.error('Error marking order as processed:', updateError);
-    }
+    
   }
 };
