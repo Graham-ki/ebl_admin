@@ -22,8 +22,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 import { TableCell, TableRow } from '@/components/ui/table';
-import { CreateCategorySchema } from '@/app/admin/categories/create-category.schema';
-import { CategoryWithProducts } from '@/app/admin/categories/categories.types';
+import { CreateCategorySchema } from '@/app/admin/stock/categories/create-category.schema';
+import { CategoryWithProducts } from '@/app/admin/stock/categories/categories.types';
 
 export const CategoryTableRow = ({
   category,

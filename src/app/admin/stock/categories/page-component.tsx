@@ -29,9 +29,9 @@ import { CategoryTableRow } from '@/components/category';
 import {
   createCategorySchema,
   CreateCategorySchema,
-} from '@/app/admin/categories/create-category.schema';
-import { CategoriesWithProductsResponse } from '@/app/admin/categories/categories.types';
-import { CategoryForm } from '@/app/admin/categories/category-form';
+} from '@/app/admin/stock/categories/create-category.schema';
+import { CategoriesWithProductsResponse } from '@/app/admin/stock/categories/categories.types';
+import { CategoryForm } from '@/app/admin/stock/categories/category-form';
 import {
   createCategory,
   deleteCategory,

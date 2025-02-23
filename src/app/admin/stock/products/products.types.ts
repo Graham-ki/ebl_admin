@@ -1,4 +1,4 @@
-import { Category } from '@/app/admin/categories/categories.types';
+import { Category } from '@/app/admin/stock/categories/categories.types';
 
 export type ProductWithCategory = {
   category: Category;

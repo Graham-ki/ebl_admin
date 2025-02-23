@@ -12,7 +12,7 @@ import {
   FormDescription,
   FormMessage,
 } from '@/components/ui/form';
-import { CreateCategorySchema } from '@/app/admin/categories/create-category.schema';
+import { CreateCategorySchema } from '@/app/admin/stock/categories/create-category.schema';
 
 export const CategoryForm = ({
   form,

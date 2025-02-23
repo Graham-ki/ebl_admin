@@ -3,8 +3,8 @@ import { Pencil, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { TableRow, TableCell } from '@/components/ui/table';
-import { ProductWithCategory } from '@/app/admin/products/products.types';
-import { CreateOrUpdateProductSchema } from '@/app/admin/products/schema';
+import { ProductWithCategory } from '@/app/admin/stock/products/products.types';
+import { CreateOrUpdateProductSchema } from '@/app/admin/stock/products/schema';
 
 type Props = {
   product: ProductWithCategory;

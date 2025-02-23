@@ -21,9 +21,7 @@ import { createClient } from '@/supabase/client';
 
 const NAV_LINKS = [
   { href: '/admin/dashboard', label: 'Dashboard' },
-  { href: '/admin/materials', label: 'Materials' },
-  { href: '/admin/products', label: 'Products' },
-  { href: '/admin/categories', label: 'Categories' },
+  { href: '/admin/stock', label: 'Stock' },
   { href: '/admin/users', label: 'Marketers' },
   { href: '/admin/orders', label: 'Orders' },
   { href: '/admin/ledgers', label: 'Finances' },

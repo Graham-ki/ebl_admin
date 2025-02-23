@@ -6,8 +6,8 @@ import { createClient } from '@/supabase/server';
 import {
   ProductsWithCategoriesResponse,
   UpdateProductSchema,
-} from '@/app/admin/products/products.types';
-import { CreateProductSchemaServer } from '@/app/admin/products/schema';
+} from '@/app/admin/stock/products/products.types';
+import { CreateProductSchemaServer } from '@/app/admin/stock/products/schema';
 import { revalidatePath } from 'next/cache';
 
 export const getProductsWithCategories =

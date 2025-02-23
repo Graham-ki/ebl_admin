@@ -23,9 +23,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { CreateOrUpdateProductSchema } from '@/app/admin/products/schema';
+import { CreateOrUpdateProductSchema } from '@/app/admin/stock/products/schema';
 import { Input } from '@/components/ui/input';
-import { Category } from '@/app/admin/categories/categories.types';
+import { Category } from '@/app/admin/stock/categories/categories.types';
 import { Button } from '@/components/ui/button';
 
 type Props = {
