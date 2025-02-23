@@ -1,4 +1,4 @@
-import { ProductWithCategory } from '@/app/admin/products/products.types';
+import { ProductWithCategory } from '@/app/admin/stock/products/products.types';
 
 export type Category = {
   created_at: string;
