@@ -191,10 +191,10 @@ const UsersPage = () => {
 
   return (
     <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white">User Management</h1>
+      <h1 className="text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white">System Users Management</h1>
 
       <Button variant="default" onClick={() => setIsAdding(true)} className="mb-4">
-        Add User
+        Add new
       </Button>
 
       {loading ? (
@@ -248,7 +248,7 @@ const UsersPage = () => {
       <Dialog open={isAdding} onOpenChange={setIsAdding}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New User</DialogTitle>
+            <DialogTitle>Add New Marketer</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <label>
@@ -292,7 +292,7 @@ const UsersPage = () => {
           <DialogFooter className="flex gap-2">
             <Button onClick={() => setIsAdding(false)}>Cancel</Button>
             <Button variant="secondary" onClick={handleAddUser}>
-              Add User
+              Submit
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -302,7 +302,7 @@ const UsersPage = () => {
       <Dialog open={isEditing} onOpenChange={setIsEditing}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>Edit Marketer</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <label>
@@ -354,7 +354,7 @@ const UsersPage = () => {
           <DialogFooter className="flex gap-2">
             <Button onClick={() => setIsEditing(false)}>Cancel</Button>
             <Button variant="secondary" onClick={handleUpdateUser}>
-              Update User
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
