@@ -26,7 +26,7 @@ const NAV_LINKS = [
   { href: '/admin/categories', label: 'Categories' },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/orders', label: 'Orders' },
-  { href: '/admin/ledgers', label: 'Ledgers' },
+  { href: '/admin/ledgers', label: 'Finances' },
 ];
 
 export const Header = () => {
