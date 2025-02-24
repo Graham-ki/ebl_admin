@@ -49,6 +49,17 @@ export default function LedgerPage() {
             <p>Track company expenses like on materials, wages, and other costs.</p>
           </CardContent>
         </Card>
+        <Card 
+          className="cursor-pointer bg-gray-50 hover:bg-gray-100 shadow-md hover:shadow-lg transition-all duration-200"
+          onClick={() => router.push('/admin/ledgers/accounts')}
+        >
+          <CardHeader>
+            <CardTitle>Accounts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>Track amount received via various company accounts.</p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

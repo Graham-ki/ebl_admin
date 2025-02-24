@@ -89,13 +89,23 @@ export default function ExpensesLedgerPage() {
 
     const total = data.reduce((sum, entry) => sum + (entry.amount_paid || 0), 0);
     setTotalIncome(total);
+    calculateBalanceForward(total, totalExpenses); // Recalculate balance forward
   };
 
   // Calculate total expenses
   const calculateTotalExpenses = (data: any[]) => {
     const total = data.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
     setTotalExpenses(total);
-    setBalanceForward(totalIncome - total);
+    calculateBalanceForward(totalIncome, total); // Recalculate balance forward
+  };
+
+  // Calculate balance forward
+  const calculateBalanceForward = (income: number, expenses: number) => {
+    if (expenses === 0) {
+      setBalanceForward(income); // If no expenses, balance forward = total income
+    } else {
+      setBalanceForward(income - expenses); // Otherwise, balance forward = total income - total expenses
+    }
   };
 
   // Handle form input changes
