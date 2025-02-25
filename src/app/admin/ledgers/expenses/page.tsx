@@ -22,10 +22,16 @@ export default function ExpensesLedgerPage() {
   });
   const [editExpense, setEditExpense] = useState<any>(null); // For editing expenses
 
+  // Fetch expenses and total income on component mount and when filter changes
   useEffect(() => {
     fetchExpenses(filter);
     fetchTotalIncome();
   }, [filter]);
+
+  // Recalculate balance forward whenever totalIncome or totalExpenses changes
+  useEffect(() => {
+    setBalanceForward(totalIncome - totalExpenses);
+  }, [totalIncome, totalExpenses]);
 
   // Fetch expenses based on filter
   const fetchExpenses = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
@@ -76,7 +82,7 @@ export default function ExpensesLedgerPage() {
     setLoading(false);
   };
 
-  // Fetch total income from user_ledger table
+  // Fetch total income from finance table
   const fetchTotalIncome = async () => {
     const { data, error } = await supabase
       .from("finance")
@@ -89,23 +95,12 @@ export default function ExpensesLedgerPage() {
 
     const total = data.reduce((sum, entry) => sum + (entry.amount_paid || 0), 0);
     setTotalIncome(total);
-    calculateBalanceForward(total, totalExpenses); // Recalculate balance forward
   };
 
   // Calculate total expenses
   const calculateTotalExpenses = (data: any[]) => {
     const total = data.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
     setTotalExpenses(total);
-    calculateBalanceForward(totalIncome, total); // Recalculate balance forward
-  };
-
-  // Calculate balance forward
-  const calculateBalanceForward = (income: number, expenses: number) => {
-    if (expenses === 0) {
-      setBalanceForward(income); // If no expenses, balance forward = total income
-    } else {
-      setBalanceForward(income - expenses); // Otherwise, balance forward = total income - total expenses
-    }
   };
 
   // Handle form input changes
