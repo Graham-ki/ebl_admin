@@ -60,7 +60,7 @@ export default function GeneralLedgerPage() {
         users (
           name
         )
-      `);
+      `).not("order_id", "is", null);
 
     // Apply date filter if applicable
     if (startDate && endDate) {

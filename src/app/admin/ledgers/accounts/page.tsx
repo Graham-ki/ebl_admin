@@ -12,6 +12,15 @@ const supabase = createClient(
 export default function FinancialSummaryPage() {
   const [ledger, setLedger] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Deposit form state
+  const [amountPaid, setAmountPaid] = useState<number | "">("");
+  const [modeOfPayment, setModeOfPayment] = useState("");
+  const [modeOfMobileMoney, setModeOfMobileMoney] = useState("");
+  const [bankName, setBankName] = useState("");
+
+  // Financial summary state
   const [financialSummary, setFinancialSummary] = useState<any>({
     cash: 0,
     bank: 0,
@@ -70,6 +79,36 @@ export default function FinancialSummaryPage() {
     setFinancialSummary(summary);
   };
 
+  // Handle deposit submission
+  const handleDepositSubmit = async () => {
+    if (!amountPaid || !modeOfPayment) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+
+    const depositData: any = {
+      amount_paid: amountPaid,
+      mode_of_payment: modeOfPayment,
+    };
+
+    if (modeOfPayment === "Mobile Money") {
+      depositData.mode_of_mobilemoney = modeOfMobileMoney;
+    } else if (modeOfPayment === "Bank") {
+      depositData.bank_name = bankName;
+    }
+
+    const { error } = await supabase.from("finance").insert([depositData]);
+
+    if (error) {
+      alert("Error making deposit: " + error.message);
+      return;
+    }
+
+    alert("Deposit successfully recorded!");
+    setIsModalOpen(false);
+    fetchAllLedgerEntries();
+  };
+
   // Fetch ledger entries on component mount
   useEffect(() => {
     fetchAllLedgerEntries();
@@ -80,9 +119,6 @@ export default function FinancialSummaryPage() {
       <h1 className="text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white">
         Accounts Summary
       </h1>
-
-      {/* Loading State */}
-      {loading && <p className="text-center">Loading...</p>}
 
       {/* Major Payment Modes */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -121,6 +157,64 @@ export default function FinancialSummaryPage() {
           </div>
         ))}
       </div>
+
+      {/* Make Deposit Button */}
+      <button
+        onClick={() => setIsModalOpen(true)}
+        className="bg-blue-500 text-white p-2 rounded mt-4"
+      >
+        Make Deposit
+      </button>
+
+      {/* Deposit Records Table */}
+      <h2 className="text-2xl font-semibold mt-6 mb-4">Deposit Records</h2>
+      <table className="w-full border-collapse border mt-4">
+        <thead>
+          <tr>
+            <th className="border p-2">Amount</th>
+            <th className="border p-2">Mode</th>
+            <th className="border p-2">Service Provider</th>
+            <th className="border p-2">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ledger.map((entry) => (
+            <tr key={entry.id}>
+              <td className="border p-2">UGX {entry.amount_paid}</td>
+              <td className="border p-2">{entry.mode_of_payment}</td>
+              <td className="border p-2">{entry.mode_of_mobilemoney || entry.bank_name || "-"}</td>
+                <td className="border p-2">{new Date(entry.created_at).toLocaleDateString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Deposit Form Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg w-96">
+            <h2 className="text-xl font-semibold mb-4">Make a Deposit</h2>
+            <input type="number" placeholder="Amount" value={amountPaid} onChange={(e) => setAmountPaid(parseFloat(e.target.value))} className="border p-2 rounded w-full mb-2" />
+            <select value={modeOfPayment} onChange={(e) => setModeOfPayment(e.target.value)} className="border p-2 rounded w-full mb-2">
+              <option value="">Select Mode</option>
+              <option value="Cash">Cash</option>
+              <option value="Bank">Bank</option>
+              <option value="Mobile Money">Mobile Money</option>
+            </select>
+            {modeOfPayment === "Mobile Money" && (
+              <select value={modeOfMobileMoney} onChange={(e) => setModeOfMobileMoney(e.target.value)} className="border p-2 rounded w-full mb-2">
+                <option value="">Select Provider</option>
+                <option value="MTN">MTN</option>
+                <option value="Airtel">Airtel</option>
+              </select>
+            )}
+            {modeOfPayment === "Bank" && (
+              <input type="text" placeholder="Bank Name" value={bankName} onChange={(e) => setBankName(e.target.value)} className="border p-2 rounded w-full mb-2" />
+            )}
+            <button onClick={handleDepositSubmit} className="bg-green-500 text-white p-2 rounded w-full">Submit Deposit</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
