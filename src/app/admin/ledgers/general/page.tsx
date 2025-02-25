@@ -49,7 +49,7 @@ export default function GeneralLedgerPage() {
 
     // Build the query
     let query = supabase
-      .from("user_ledger")
+      .from("finance")
       .select(`
         id,
         order_id,

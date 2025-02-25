@@ -79,7 +79,7 @@ export default function ExpensesLedgerPage() {
   // Fetch total income from user_ledger table
   const fetchTotalIncome = async () => {
     const { data, error } = await supabase
-      .from("user_ledger")
+      .from("finance")
       .select("amount_paid");
 
     if (error) {

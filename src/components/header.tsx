@@ -37,9 +37,11 @@ export const Header = () => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
+  // Handle search input change
+  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    performSearch(query); // Trigger debounced search
   };
 
   // Debounced search function
@@ -78,6 +80,10 @@ export const Header = () => {
           .from('users')
           .select('*')
           .ilike('name', `%${query}%`), // Search in users table
+        supabase
+          .from('finance')
+          .select('*')
+          .or(`mode_of_payment.ilike.%${query}%,mode_of_mobilemoney.ilike.%${query}%,bank_name.ilike.%${query}%`), // Search in user_ledger table
       ];
 
       try {
@@ -90,6 +96,7 @@ export const Header = () => {
             'materials',
             'expenses',
             'users',
+            'finance',
           ];
           return (result.data || []).map((item) => ({
             ...item,
@@ -106,18 +113,22 @@ export const Header = () => {
     [supabase]
   );
 
-  // Handle search input change
-  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const query = e.target.value;
-    setSearchQuery(query);
-    performSearch(query); // Trigger debounced search
-  };
-
   // Handle result click
   const handleResultClick = (result: any) => {
-    router.push(`/admin/search/${result.table}/${result.id}`);
+    if (result.table === 'user_ledger') {
+      // Navigate to the user_ledger details page
+      router.push(`/admin/search/user_ledger/${result.id}`);
+    } else {
+      // Navigate to the search result page for other tables
+      router.push(`/admin/search/${result.table}/${result.id}`);
+    }
     setSearchQuery(''); // Clear search query
     setSearchResults([]); // Clear search results
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/');
   };
 
   return (
@@ -204,11 +215,23 @@ export const Header = () => {
                     onClick={() => handleResultClick(result)}
                   >
                     <p className="text-black dark:text-white">
-                      {result.title || result.material_name || result.slug || result.name || result.item || result.email}
+                      {result.title || result.material_name || result.slug || result.name || result.item || result.email || result.mode_of_payment || result.mode_of_mobilemoney || result.bank_name}
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {result.table}
                     </p>
+                    {result.table === 'finance' && (
+                      <>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Amount: UGX {result.amount_paid}
+                        </p>
+                        {result.mode_of_payment === 'Bank' && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Bank Name: {result.bank_name}
+                          </p>
+                        )}
+                      </>
+                    )}
                   </div>
                 ))
               ) : (

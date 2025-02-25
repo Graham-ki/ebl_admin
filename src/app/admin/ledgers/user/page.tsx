@@ -80,7 +80,7 @@ export default function UserLedgerPage() {
 
     setLoading(true);
     const { data, error } = await supabase
-      .from("user_ledger")
+      .from("finance")
       .select("*")
       .eq("user_id", userId);
 
@@ -133,7 +133,7 @@ export default function UserLedgerPage() {
     }
     const balance = totalAmount - amountPaid;
     const { data, error } = await supabase
-      .from("user_ledger")
+      .from("finance")
       .upsert(
         {
           user_id: userId,
@@ -176,7 +176,7 @@ export default function UserLedgerPage() {
   const handleDelete = async (entryId: string) => {
     if (window.confirm("Are you sure you want to delete this entry?")) {
       const { error } = await supabase
-        .from("user_ledger")
+        .from("finance")
         .delete()
         .eq("id", entryId);
 
