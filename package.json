@@ -24,7 +24,7 @@
     "date-fns": "^3.6.0",
     "debounce": "^2.2.0",
     "file-saver": "^2.0.5",
-    "framer-motion": "^11.5.4",
+    "framer-motion": "^11.18.2",
     "lodash": "^4.17.21",
     "lucide-react": "^0.427.0",
     "next": "^15.1.6",
