@@ -30,10 +30,10 @@ export default function LedgerPage() {
           onClick={() => router.push('/admin/stock/categories')}
         >
           <CardHeader>
-            <CardTitle>Product categories</CardTitle>
+            <CardTitle>Beverage categories</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>Track product categories available for sale.</p>
+            <p>Track beverage categories available for sale.</p>
           </CardContent>
         </Card>
 
@@ -43,10 +43,10 @@ export default function LedgerPage() {
           onClick={() => router.push('/admin/stock/products')}
         >
           <CardHeader>
-            <CardTitle>Products</CardTitle>
+            <CardTitle>Beverages</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>Track products available in stock.</p>
+            <p>Track beverages available in stock.</p>
           </CardContent>
         </Card>
         <Card 
@@ -54,10 +54,10 @@ export default function LedgerPage() {
           onClick={() => router.push('/admin/stock/specifications')}
         >
           <CardHeader>
-            <CardTitle> Product specifications</CardTitle>
+            <CardTitle> Beverage specifications</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>Track product specifications. Contents and dimensions</p>
+            <p>Track beverage specifications. Contents and dimensions</p>
           </CardContent>
         </Card>
       </div>
