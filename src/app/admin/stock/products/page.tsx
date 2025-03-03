@@ -1,5 +1,5 @@
 'use client';
-
+import slugify from 'slugify';
 import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
@@ -215,27 +215,43 @@ export default function SummaryPage() {
   }, []);
 
   // Handle Add Product
-  const handleAddProduct = async () => {
-    if (!title || !selectedCategory) {
-      alert('Please enter product title and select a category.');
-      return;
-    }
 
-    setLoading(true);
+const handleAddProduct = async () => {
+  // Generate slug from the title
+  const slug = slugify(title, { lower: true, strict: true }); // Ensure slug is URL-friendly
 
-    const { error } = await supabase.from('product').insert([{ title, category: selectedCategory, maxQuantity: 0 }]);
+  if (!title || !selectedCategory) {
+    alert('Please enter product title and select a category.');
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    // Insert the product into the database, including the slug
+    const { error } = await supabase
+      .from('product')
+      .insert([{ 
+        title, 
+        category: selectedCategory, 
+        maxQuantity: 0, 
+        slug, // Include the slug in the insert
+      }]);
 
     if (error) {
       console.error('Error adding product:', error);
       alert('Failed to add product.');
     } else {
       alert('Product added successfully!');
-      window.location.reload();
+      window.location.reload(); // Reload the page to reflect the changes
     }
-
-    setLoading(false);
-  };
-
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    alert('An unexpected error occurred.');
+  } finally {
+    setLoading(false); // Ensure loading is reset even if an error occurs
+  }
+};
   // Fetch Combined Data for a Specific Product
   const fetchCombinedData = async (productId: number) => {
     // Fetch Entries for the Product
@@ -399,8 +415,8 @@ export default function SummaryPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Quantity</TableHead>
+                        <TableHead>Transaction</TableHead>
+                        <TableHead>Boxes</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Created By</TableHead>
                       </TableRow>
@@ -458,8 +474,8 @@ export default function SummaryPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Quantity</TableHead>
+                      <TableHead>Beverage</TableHead>
+                      <TableHead>Boxes sold</TableHead>
                       <TableHead>Date</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -485,7 +501,7 @@ export default function SummaryPage() {
           {/* Most Selling Products Bar Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Most Selling Products</CardTitle>
+              <CardTitle>Most Selling beverages</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -523,7 +539,7 @@ export default function SummaryPage() {
           {/* Pie Chart for Most Selling Products */}
           <Card>
             <CardHeader>
-              <CardTitle>Product Sales Distribution</CardTitle>
+              <CardTitle>Beverage Sales Distribution</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>

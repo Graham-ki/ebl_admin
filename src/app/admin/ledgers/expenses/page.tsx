@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { saveAs } from "file-saver"; // For CSV export
+import { sub } from "date-fns";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,19 +20,76 @@ export default function ExpensesLedgerPage() {
     item: "",
     amount_spent: 0,
     department: "",
+    mode_of_payment: "",
+    account: "",
   });
   const [editExpense, setEditExpense] = useState<any>(null); // For editing expenses
+  const [modes, setModes] = useState<string[]>([]); // For storing modes of payment from finance table
+  const [subModes, setSubModes] = useState<string[]>([]); // For storing submodes/accounts based on selected mode
 
-  // Fetch expenses and total income on component mount and when filter changes
+  // Fetch expenses, total income, and modes on component mount and when filter changes
   useEffect(() => {
     fetchExpenses(filter);
     fetchTotalIncome();
+    fetchModes();
+    fetchBalanceForward(); // Fetch balance forward from amount_available
   }, [filter]);
 
-  // Recalculate balance forward whenever totalIncome or totalExpenses changes
-  useEffect(() => {
-    setBalanceForward(totalIncome - totalExpenses);
-  }, [totalIncome, totalExpenses]);
+  // Fetch balance forward (total sum of amount_available from finance table)
+  const fetchBalanceForward = async () => {
+    const { data, error } = await supabase
+      .from("finance")
+      .select("amount_available");
+
+    if (error) {
+      alert("Error fetching balance forward: " + error.message);
+      return;
+    }
+
+    const total = data.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
+    setBalanceForward(total);
+  };
+
+  // Fetch modes of payment from finance table
+  const fetchModes = async () => {
+    const { data, error } = await supabase
+      .from("finance")
+      .select("mode_of_payment");
+
+    if (error) {
+      alert("Error fetching modes of payment: " + error.message);
+      return;
+    }
+
+    // Extract unique modes of payment
+    const uniqueModes = Array.from(new Set(data.map((entry) => entry.mode_of_payment)));
+    setModes(uniqueModes);
+  };
+
+  // Fetch submodes/accounts based on the selected mode of payment
+  const fetchSubModes = async (mode: string) => {
+    if (mode === "cash") {
+      setSubModes([]); // No submodes for cash
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("finance")
+      .select(mode === "Bank" ? "bank_name" : "mode_of_mobilemoney")
+      .eq("mode_of_payment", mode) as { data: { bank_name?: string; mode_of_mobilemoney?: string }[], error: any };
+
+    if (error) {
+      alert("Error fetching submodes: " + error.message);
+      return;
+    }
+
+    // Extract unique submodes/accounts
+    const uniqueSubModes = Array.from(
+      new Set(data.map((entry) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney)))
+    ).filter((subMode): subMode is string => !!subMode); // Filter out null/undefined values
+
+    setSubModes(uniqueSubModes);
+  };
 
   // Fetch expenses based on filter
   const fetchExpenses = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
@@ -104,24 +162,40 @@ export default function ExpensesLedgerPage() {
   };
 
   // Handle form input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
+
+    if (name === "mode_of_payment") {
+      fetchSubModes(value); // Fetch submodes when mode changes
+      setFormData((prev) => ({ ...prev, account: "" })); // Reset account when mode changes
+    }
   };
 
   // Submit expense (add or update)
   const submitExpense = async () => {
-    if (!formData.item || !formData.amount_spent || !formData.department) {
+    if (!formData.item || !formData.amount_spent || !formData.department || !formData.mode_of_payment) {
       alert("Please fill in all fields.");
       return;
     }
 
+    // Prepare the expense data to be inserted/updated
+    const expenseData = {
+      item: formData.item,
+      amount_spent: formData.amount_spent,
+      department: formData.department,
+      mode_of_payment: formData.mode_of_payment,
+      account: formData.account, // Include the account (bank name or mobile money mode)
+      submittedby: "You", // Hardcoded for now
+    };
+
+    // Submit the expense
     const { data, error } = editExpense
       ? await supabase
           .from("expenses")
-          .update({ ...formData })
+          .update(expenseData)
           .eq("id", editExpense.id)
-      : await supabase.from("expenses").insert([formData]);
+      : await supabase.from("expenses").insert([expenseData]);
 
     if (error) {
       alert("Error submitting expense: " + error.message);
@@ -129,8 +203,42 @@ export default function ExpensesLedgerPage() {
     }
 
     alert("Expense successfully submitted!");
+
+    // Deduct the amount from the total amount_available for the selected mode
+    const { data: financeData, error: financeError } = await supabase
+      .from("finance")
+      .select("amount_available")
+      .eq("mode_of_payment", formData.mode_of_payment);
+
+    if (financeError) {
+      alert("Error fetching finance data: " + financeError.message);
+      return;
+    }
+
+    if (financeData.length === 0) {
+      alert("No finance data found for the selected mode.");
+      return;
+    }
+
+    // Calculate the total amount_available for the selected mode
+    const totalAmountAvailable = financeData.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
+    const updatedAmountAvailable = totalAmountAvailable - formData.amount_spent;
+
+    // Update all entries for the selected mode with the new total amount_available
+    const { error: updateError } = await supabase
+      .from("finance")
+      .update({ amount_available: updatedAmountAvailable })
+      .eq("mode_of_payment", formData.mode_of_payment);
+
+    if (updateError) {
+      alert("Error updating finance data: " + updateError.message);
+      return;
+    }
+
+    // Refresh data
     fetchExpenses(filter);
-    setFormData({ item: "", amount_spent: 0, department: "" });
+    fetchBalanceForward(); // Update balance forward
+    setFormData({ item: "", amount_spent: 0, department: "", mode_of_payment: "", account: "" });
     setEditExpense(null);
   };
 
@@ -141,7 +249,10 @@ export default function ExpensesLedgerPage() {
       item: expense.item,
       amount_spent: expense.amount_spent,
       department: expense.department,
+      mode_of_payment: expense.mode_of_payment,
+      account: expense.account,
     });
+    fetchSubModes(expense.mode_of_payment); // Fetch submodes for the edited expense's mode
   };
 
   // Handle delete action
@@ -165,6 +276,9 @@ export default function ExpensesLedgerPage() {
       Item: expense.item,
       "Amount Spent": expense.amount_spent,
       Department: expense.department,
+      "Mode of Payment": expense.mode_of_payment,
+      Account: expense.account,
+      Createdby: expense.submittedby,
       Date: new Date(expense.date).toLocaleDateString(),
     }));
 
@@ -265,6 +379,35 @@ export default function ExpensesLedgerPage() {
             onChange={handleInputChange}
             className="border p-2 rounded"
           />
+          <select
+            name="mode_of_payment"
+            value={formData.mode_of_payment}
+            onChange={handleInputChange}
+            className="border p-2 rounded"
+          >
+            <option value="">Select Account</option>
+            {modes.map((mode, index) => (
+              <option key={index} value={mode}>
+                {mode}
+              </option>
+            ))}
+          </select>
+          {formData.mode_of_payment !== "Cash" && (
+            <select
+              name="account"
+              value={formData.account}
+              onChange={handleInputChange}
+              className="border p-2 rounded"
+              disabled={!formData.mode_of_payment}
+            >
+              <option value="">Provider</option>
+              {subModes.map((subMode, index) => (
+                <option key={index} value={subMode}>
+                  {subMode}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <button
           onClick={submitExpense}
@@ -284,6 +427,9 @@ export default function ExpensesLedgerPage() {
               <th className="border p-2">Item</th>
               <th className="border p-2">Amount Spent</th>
               <th className="border p-2">Department</th>
+              <th className="border p-2">Account</th>
+              <th className="border p-2">Provider</th>
+              <th className="border p-2">Added by</th>
               <th className="border p-2">Date</th>
               <th className="border p-2">Actions</th>
             </tr>
@@ -294,6 +440,9 @@ export default function ExpensesLedgerPage() {
                 <td className="border p-2">{expense.item}</td>
                 <td className="border p-2">UGX {expense.amount_spent}</td>
                 <td className="border p-2">{expense.department}</td>
+                <td className="border p-2">{expense.mode_of_payment}</td>
+                <td className="border p-2">{expense.account}</td>
+                <td className="border p-2">{expense.submittedby}</td>
                 <td className="border p-2">{new Date(expense.date).toLocaleDateString()}</td>
                 <td className="border p-2">
                   <button

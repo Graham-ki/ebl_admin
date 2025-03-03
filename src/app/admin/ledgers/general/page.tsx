@@ -55,6 +55,7 @@ export default function GeneralLedgerPage() {
         order_id,
         total_amount,
         amount_paid,
+        amount_available,
         balance,
         created_at,
         users (
