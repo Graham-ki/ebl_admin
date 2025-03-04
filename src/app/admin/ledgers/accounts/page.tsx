@@ -89,6 +89,8 @@ export default function FinancialSummaryPage() {
     const depositData: any = {
       amount_paid: amountPaid,
       mode_of_payment: modeOfPayment,
+      amount_available: amountPaid,
+      submittedby: "You", // Hardcoded for now, should be dynamic  
     };
 
     if (modeOfPayment === "Mobile Money") {
@@ -113,6 +115,23 @@ export default function FinancialSummaryPage() {
   useEffect(() => {
     fetchAllLedgerEntries();
   }, []);
+
+  //delete ledger
+  const deleteFinanceEntry = async (entryId: number) => {
+    const { error } = await supabase
+      .from('finance')
+      .delete()
+      .eq('id', entryId); // Delete entry by ID
+  
+    if (error) {
+      console.error('Error deleting finance entry:', error);
+      alert('Failed to delete entry.');
+    } else {
+      alert('Entry deleted successfully.');
+      // Refresh the list after deletion
+      fetchAllLedgerEntries(); 
+    }
+  };
 
   return (
     <div className="p-6">
@@ -174,7 +193,9 @@ export default function FinancialSummaryPage() {
             <th className="border p-2">Amount</th>
             <th className="border p-2">Mode</th>
             <th className="border p-2">Service Provider</th>
+            <th className="border p-2">Deposited by</th>
             <th className="border p-2">Date</th>
+            <th className="border p-2">Action</th>
           </tr>
         </thead>
         <tbody>
@@ -183,7 +204,14 @@ export default function FinancialSummaryPage() {
               <td className="border p-2">UGX {entry.amount_paid}</td>
               <td className="border p-2">{entry.mode_of_payment}</td>
               <td className="border p-2">{entry.mode_of_mobilemoney || entry.bank_name || "-"}</td>
+              <td className="border p-2">{entry.submittedby}</td>
                 <td className="border p-2">{new Date(entry.created_at).toLocaleDateString()}</td>
+                <td><button
+                className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-700"
+                onClick={() => deleteFinanceEntry(entry.id)}
+                >
+                Delete
+              </button></td>
             </tr>
           ))}
         </tbody>
