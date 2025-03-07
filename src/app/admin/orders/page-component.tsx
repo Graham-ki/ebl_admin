@@ -32,7 +32,7 @@ import 'react-calendar/dist/Calendar.css'; // Import the default CSS for the cal
 import { OrdersWithProducts } from '@/app/admin/orders/types';
 import { updateOrderStatus } from '@/actions/orders';
 import { createClient } from '@supabase/supabase-js';
-
+import { Alert } from 'react-native'; // Import Alert for visible alerts
 const supabaseUrl = 'https://kxnrfzcurobahklqefjs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4bnJmemN1cm9iYWhrbHFlZmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc5NTk1MzUsImV4cCI6MjA1MzUzNTUzNX0.pHrrAPHV1ln1OHugnB93DTUY5TL9K8dYREhz1o0GkjE';
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -80,21 +80,68 @@ export default function PageComponent({ ordersWithProducts }: Props) {
     await fetchProofs(orderId);
   };
 
-  const handleDeleteOrder = async (orderId: number) => {
-    try {
-      const { error } = await supabase
-        .from('order')
-        .delete()
-        .eq('id', orderId);
+const handleDeleteOrder = async (orderId: number) => {
+  try {
+    // Step 1: Fetch all proofs related to the order
+    const { data: proofs, error: fetchProofsError } = await supabase
+      .from('proof_of_payment')
+      .select('id, file_url')
+      .eq('order_id', orderId); // Assuming 'order_id' is the foreign key in proof_of_payment
 
-      if (error) throw error;
-      alert('Order deleted successfully!');
-      window.location.reload();
-    } catch (error) {
-      console.error('Error deleting order:', error);
-      alert('Failed to delete order. Please try again.');
+    if (fetchProofsError) {
+      throw new Error('Failed to fetch proofs for the order.');
     }
-  };
+
+    // Step 2: Delete each proof file from the storage bucket
+    for (const proof of proofs) {
+      const fileUrl = proof.file_url;
+      const filePath = fileUrl.split('/storage/v1/object/public/app-images/')[1]; // Extract the file path
+
+      if (!filePath) {
+        Alert.alert('Error', `Invalid file URL for proof ID ${proof.id}.`);
+        continue; // Skip to the next proof
+      }
+
+      const { error: deleteStorageError } = await supabase
+        .storage
+        .from('app-images') // Replace with your bucket name
+        .remove([filePath]);
+
+      if (deleteStorageError) {
+        Alert.alert('Error', `Failed to delete file for proof ID ${proof.id}.`);
+        continue; // Skip to the next proof
+      }
+
+      // Step 3: Delete the proof from the proof_of_payment table
+      const { error: deleteProofError } = await supabase
+        .from('proof_of_payment')
+        .delete()
+        .eq('id', proof.id);
+
+      if (deleteProofError) {
+        Alert.alert('Error', `Failed to delete proof ID ${proof.id} from the database.`);
+        continue; // Skip to the next proof
+      }
+    }
+
+    // Step 4: Delete the order from the order table
+    const { error: deleteOrderError } = await supabase
+      .from('order')
+      .delete()
+      .eq('id', orderId);
+
+    if (deleteOrderError) {
+      throw new Error('Failed to delete the order from the database.');
+    }
+
+    // Step 5: Show success message and reload the page
+    Alert.alert('Success', 'Order and all associated proofs deleted successfully!');
+    window.location.reload(); // Reload the page to reflect the changes
+  } catch (error) {
+    console.error('Error deleting order:', error);
+    Alert.alert('Error', 'Failed to delete order. Please try again.');
+  }
+};
 
   const filterOrders = (orders: OrdersWithProducts) => {
     const now = new Date();
