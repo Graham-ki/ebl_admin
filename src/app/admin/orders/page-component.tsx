@@ -136,7 +136,7 @@ const handleDeleteOrder = async (orderId: number) => {
     }
 
     // Step 5: Show success message and reload the page
-    alert('Success: Order and all associated proofs deleted successfully!');
+    alert('Success: Order deleted successfully!');
     window.location.reload(); // Reload the page to reflect the changes
   } catch (error) {
     console.error('Error deleting order:', error);
