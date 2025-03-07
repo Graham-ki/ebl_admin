@@ -53,7 +53,7 @@ export default function PageComponent({ ordersWithProducts }: Props) {
   const [filter, setFilter] = useState<'all' | 'daily' | 'monthly' | 'yearly' | 'custom'>('all');
   const [customDate, setCustomDate] = useState<Date | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
-
+  const [showWarning, setShowWarning] = useState(true);
   const handleStatusChange = async (orderId: number, status: string) => {
     try {
       await updateOrderStatus(orderId, status);
@@ -176,6 +176,19 @@ const handleDeleteOrder = async (orderId: number) => {
       <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-white dark:bg-gray-800 dark:text-white'>
         Orders Management Dashboard
       </h1>
+      {/* Dismissible Warning Message */}
+      {showWarning && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4 relative">
+          <p>All proofs of payment shall be automatically deleted after 7 days!</p>
+          <p className="mt-2">Please endeavour to delete completed orders after 7 days</p>
+          <button
+            onClick={() => setShowWarning(false)}
+            className="absolute top-2 right-2 text-yellow-700 hover:text-yellow-900"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="flex space-x-4 mb-6">
         <Select onValueChange={(value: 'all' | 'daily' | 'monthly' | 'yearly' | 'custom') => setFilter(value)}>
           <SelectTrigger className="w-[120px]">
