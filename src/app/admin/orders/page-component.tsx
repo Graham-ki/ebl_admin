@@ -32,7 +32,8 @@ import 'react-calendar/dist/Calendar.css'; // Import the default CSS for the cal
 import { OrdersWithProducts } from '@/app/admin/orders/types';
 import { updateOrderStatus } from '@/actions/orders';
 import { createClient } from '@supabase/supabase-js';
-import { Alert } from 'react-native'; // Import Alert for visible alerts
+//import { Alert } from 'react-native';
+// Use browser's alert function for visible alerts
 const supabaseUrl = 'https://kxnrfzcurobahklqefjs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4bnJmemN1cm9iYWhrbHFlZmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc5NTk1MzUsImV4cCI6MjA1MzUzNTUzNX0.pHrrAPHV1ln1OHugnB93DTUY5TL9K8dYREhz1o0GkjE';
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -98,7 +99,7 @@ const handleDeleteOrder = async (orderId: number) => {
       const filePath = fileUrl.split('/storage/v1/object/public/app-images/')[1]; // Extract the file path
 
       if (!filePath) {
-        Alert.alert('Error', `Invalid file URL for proof ID ${proof.id}.`);
+        alert(`Error: Invalid file URL for proof ID ${proof.id}.`);
         continue; // Skip to the next proof
       }
 
@@ -108,7 +109,7 @@ const handleDeleteOrder = async (orderId: number) => {
         .remove([filePath]);
 
       if (deleteStorageError) {
-        Alert.alert('Error', `Failed to delete file for proof ID ${proof.id}.`);
+        alert(`Error: Failed to delete file for proof ID ${proof.id}.`);
         continue; // Skip to the next proof
       }
 
@@ -119,7 +120,7 @@ const handleDeleteOrder = async (orderId: number) => {
         .eq('id', proof.id);
 
       if (deleteProofError) {
-        Alert.alert('Error', `Failed to delete proof ID ${proof.id} from the database.`);
+        alert(`Error: Failed to delete proof ID ${proof.id} from the database.`);
         continue; // Skip to the next proof
       }
     }
@@ -135,11 +136,11 @@ const handleDeleteOrder = async (orderId: number) => {
     }
 
     // Step 5: Show success message and reload the page
-    Alert.alert('Success', 'Order and all associated proofs deleted successfully!');
+    alert('Success: Order and all associated proofs deleted successfully!');
     window.location.reload(); // Reload the page to reflect the changes
   } catch (error) {
     console.error('Error deleting order:', error);
-    Alert.alert('Error', 'Failed to delete order. Please try again.');
+    alert('Error: Failed to delete order. Please try again.');
   }
 };
 
