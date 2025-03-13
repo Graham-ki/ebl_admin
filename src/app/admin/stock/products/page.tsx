@@ -54,6 +54,7 @@ type ProductEntry = {
   quantity: number;
   created_at: string;
   Created_by: string;
+  status: string; // Add status field
 };
 
 type SoldProduct = {
@@ -108,7 +109,6 @@ export default function SummaryPage() {
   // Fetch Sold Products (from approved orders only)
   const fetchSoldProducts = async () => {
     try {
-      // Step 1: Fetch order IDs from the order_items table
       const { data: orderItems, error: orderItemsError } = await supabase
         .from('order_item')
         .select('order');
@@ -123,17 +123,13 @@ export default function SummaryPage() {
         return;
       }
 
-      console.log('Fetched order items:', orderItems);
-
-      // Extract unique order IDs
       const orderIds = [...new Set(orderItems.map((item) => item.order))];
 
-      // Step 2: Check the 'order' table for approved orders
       const { data: approvedOrders, error: approvedOrdersError } = await supabase
         .from('order')
         .select('id')
-        .in('id', orderIds) // Filter by order IDs from order_items
-        .eq('status', 'Approved'); // Only include orders with status 'Approved'
+        .in('id', orderIds)
+        .eq('status', 'Approved');
 
       if (approvedOrdersError) {
         console.error('Error fetching approved orders:', approvedOrdersError);
@@ -145,24 +141,12 @@ export default function SummaryPage() {
         return;
       }
 
-      console.log('Approved orders:', approvedOrders);
-
-      // Extract approved order IDs
       const approvedOrderIds = approvedOrders.map((order) => order.id);
 
-      // Step 3: Fetch order_items for approved orders
-      if (approvedOrderIds.length === 0) {
-        console.log('No approved order IDs to fetch.');
-        return;
-      }
-
-      console.log('Fetching order_items for approved order IDs:', approvedOrderIds);
-
-      // Use .or() instead of .in()
       const { data: validOrderItems, error: validOrderItemsError } = await supabase
         .from('order_item')
         .select('product, quantity, created_at')
-        .or(approvedOrderIds.map((id) => `order.eq.${id}`).join(',')); // Use .or() with multiple .eq() conditions
+        .or(approvedOrderIds.map((id) => `order.eq.${id}`).join(','));
 
       if (validOrderItemsError) {
         console.error('Error fetching valid order items:', validOrderItemsError);
@@ -174,36 +158,30 @@ export default function SummaryPage() {
         return;
       }
 
-      console.log('Fetched valid order items:', validOrderItems);
-
-      // Step 4: Fetch product details for each valid product ID
       const productIds = [...new Set(validOrderItems.map((item) => item.product))];
       const { data: products, error: productsError } = await supabase
         .from('product')
         .select('id, title')
-        .in('id', productIds); // Fetch products with matching IDs
+        .in('id', productIds);
 
       if (productsError) {
         console.error('Error fetching product data:', productsError);
         return;
       }
 
-      // Create a map of product IDs to product titles
       const productMap = products.reduce((acc, product) => {
         acc[product.id] = product.title;
         return acc;
       }, {});
 
-      // Step 5: Map order items to sold products
       const soldProductsArray = validOrderItems.map((orderItem) => ({
         product_name: productMap[orderItem.product] || 'Unknown Product',
         quantity: orderItem.quantity,
         created_at: orderItem.created_at,
       }));
 
-      // Set the sold products in state
       setSoldProducts(soldProductsArray);
-      setFilteredSales(soldProductsArray); // Initialize filtered sales with all sold products
+      setFilteredSales(soldProductsArray);
     } catch (error) {
       console.error('Error in fetching sold products:', error);
     }
@@ -215,46 +193,38 @@ export default function SummaryPage() {
   }, []);
 
   // Handle Add Product
+  const handleAddProduct = async () => {
+    const slug = slugify(title, { lower: true, strict: true });
 
-const handleAddProduct = async () => {
-  // Generate slug from the title
-  const slug = slugify(title, { lower: true, strict: true }); // Ensure slug is URL-friendly
-
-  if (!title || !selectedCategory) {
-    alert('Please enter product title and select a category.');
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    // Insert the product into the database, including the slug
-    const { error } = await supabase
-      .from('product')
-      .insert([{ 
-        title, 
-        category: selectedCategory, 
-        maxQuantity: 0, 
-        slug, // Include the slug in the insert
-      }]);
-
-    if (error) {
-      console.error('Error adding product:', error);
-      alert('Failed to add product.');
-    } else {
-      alert('Product added successfully!');
-      window.location.reload(); // Reload the page to reflect the changes
+    if (!title || !selectedCategory) {
+      alert('Please enter product title and select a category.');
+      return;
     }
-  } catch (error) {
-    console.error('Unexpected error:', error);
-    alert('An unexpected error occurred.');
-  } finally {
-    setLoading(false); // Ensure loading is reset even if an error occurs
-  }
-};
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('product')
+        .insert([{ title, category: selectedCategory, maxQuantity: 0, slug }]);
+
+      if (error) {
+        console.error('Error adding product:', error);
+        alert('Failed to add product.');
+      } else {
+        alert('Product added successfully!');
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      alert('An unexpected error occurred.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch Combined Data for a Specific Product
   const fetchCombinedData = async (productId: number) => {
-    // Fetch Entries for the Product
     const { data: entries, error: entriesError } = await supabase
       .from('product_entries')
       .select('*')
@@ -265,7 +235,6 @@ const handleAddProduct = async () => {
       return;
     }
 
-    // Fetch Sold Products for the Product
     const { data: soldItems, error: soldItemsError } = await supabase
       .from('order_item')
       .select('product, quantity, created_at')
@@ -276,7 +245,6 @@ const handleAddProduct = async () => {
       return;
     }
 
-    // Combine Entries and Sold Products
     const combined = [
       ...(entries?.map((entry) => ({ type: 'Entry', data: entry })) || []),
       ...(soldItems?.map((soldItem) => ({ type: 'Sold', data: soldItem })) || []),
@@ -295,7 +263,6 @@ const handleAddProduct = async () => {
   const handleDateRangeChange = (value: [Date, Date]) => {
     setDateRange(value);
 
-    // Filter sold products by date range
     const filtered = soldProducts.filter((sale) => {
       const saleDate = new Date(sale.created_at);
       return saleDate >= value[0] && saleDate <= value[1];
@@ -345,6 +312,25 @@ const handleAddProduct = async () => {
 
   // Pie Chart Colors
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
+
+  // Handle Approve Entry
+  const handleApproveEntry = async (entryId: number) => {
+    const { error } = await supabase
+      .from('product_entries')
+      .update({ status: 'Approved' })
+      .eq('id', entryId);
+
+    if (error) {
+      console.error('Error approving entry:', error);
+      alert('Failed to approve entry.');
+    } else {
+      alert('Entry approved successfully!');
+      // Refresh the combined data
+      if (selectedProductId) {
+        await fetchCombinedData(selectedProductId);
+      }
+    }
+  };
 
   return (
     <div className="container mx-auto p-6">
@@ -419,6 +405,7 @@ const handleAddProduct = async () => {
                         <TableHead>Boxes</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Created By</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -431,6 +418,20 @@ const handleAddProduct = async () => {
                           </TableCell>
                           <TableCell>
                             {item.type === 'Entry' ? item.data.Created_by : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {item.type === 'Entry' && item.data.status === 'Pending' ? (
+                              <Button
+                                variant="outline"
+                                onClick={() => handleApproveEntry(item.data.id)}
+                              >
+                                Approve
+                              </Button>
+                            ) : item.type === 'Entry' && item.data.status === 'Approved' ? (
+                              <span className="text-green-500">Approved</span>
+                            ) : (
+                              '-'
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
