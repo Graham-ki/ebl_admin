@@ -29,16 +29,31 @@ export default function GeneralLedgerPage() {
   }, [filter]);
 
   const fetchAmountAvailable = async () => {
-    const { data, error } = await supabase
-      .from("finance")
-      .select("amount_available")
-      .order("created_at", { ascending: false })
-      .limit(1);
+  const { data, error } = await supabase
+    .from("finance")
+    .select("amount_available, created_at")
+    .order("created_at", { ascending: false });
 
-    if (!error && data && data.length > 0) {
+  if (!error && data) {
+    // If you want to set the latest amount available (same as before)
+    if (data.length > 0) {
       setAmountAvailable(data[0].amount_available || 0);
     }
-  };
+    
+    // If you want to store all amount_available values for some purpose
+    const allAmountsAvailable = data.map(item => item.amount_available);
+    console.log("All amount_available values:", allAmountsAvailable);
+    
+    // Or if you want the complete entries with timestamps
+    const completeEntries = data.map(item => ({
+      amount: item.amount_available,
+      date: item.created_at
+    }));
+    console.log("Complete entries:", completeEntries);
+  } else if (error) {
+    console.error("Error fetching amount_available:", error);
+  }
+};
 
   const fetchGeneralLedger = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
     setLoading(true);
