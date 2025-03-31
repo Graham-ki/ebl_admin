@@ -261,22 +261,24 @@ export default function GeneralLedgerPage() {
         <div className="p-4 bg-green-500 rounded-lg">
           <h2 className="text-xl font-semibold">Total Revenue</h2>
           <p className="text-2xl">UGX {totalRevenue.toLocaleString()}</p>
-          <h6 className="text-small text-black">Total sum of all orders made</h6>
+          <h6 className="text-sm font-medium text-gray-700 italic">Total sum of all orders made</h6>
         </div>
         <div className="p-4 bg-blue-500 rounded-lg">
           <h2 className="text-xl font-semibold">Total Payments</h2>
           <p className="text-2xl">UGX {totalPayments.toLocaleString()}</p>
-          <h6 className="text-small text-black">Total payments made so far</h6>
+          <h6 className="text-sm font-medium text-gray-700 italic">Total payments made so far</h6>
         </div>
         <div className="p-4 bg-red-500 rounded-lg">
           <h2 className="text-xl font-semibold">Outstanding Balance</h2>
           <p className="text-2xl">UGX {outstandingBalance.toLocaleString()}</p>
-          <h6 className="text-small text-black">Amount not submitted</h6>
+          <h6 className="text-sm font-medium text-gray-700 italic">Amount not submitted</h6>
         </div>
         <div className="p-4 bg-purple-500 rounded-lg">
           <h2 className="text-xl font-semibold">Total Amount Available</h2>
           <p className="text-2xl">UGX {amountAvailable.toLocaleString()}</p>
-          <h6 className="text-small text-black">Including order payments and all other deposits</h6>
+          <h6 className="text-sm font-medium text-gray-700 italic">
+          Includes order payments and all other deposits (Acounts receivable)
+        </h6>
         </div>
       </div>
 
