@@ -159,7 +159,7 @@ export default function GeneralLedgerPage() {
 
     const { data: incomeData, error: incomeError } = await supabase
       .from("finance")
-      .select("amount_paid, created_at, mode_of_payment, submittedby")
+      .select("amount_paid, created_at, mode_of_payment, submittedby,amount_available")
       .gte("created_at", startDate.toISOString())
       .lte("created_at", endDate.toISOString());
 
@@ -186,15 +186,19 @@ export default function GeneralLedgerPage() {
     setLoading(false);
   };
 
-  const calculateProfitLoss = () => {
-    const totalIncome = incomeData.reduce((sum, item) => sum + (item.amount_paid || 0), 0);
-    const totalExpenses = expenseData.reduce((sum, item) => sum + (item.amount_spent || 0), 0);
-    
-    const profit = amountAvailable - totalExpenses;
-    const loss = (totalRevenue - totalIncome) + totalExpenses;
-
-    return { profit, loss, totalIncome, totalExpenses };
+ const calculateProfitLoss = () => {
+  const totalIncome = incomeData.reduce((sum, item) => sum + (item.amount_available || 0), 0);
+  const totalExpenses = expenseData.reduce((sum, item) => sum + (item.amount_spent || 0), 0);
+  
+  const netProfit = totalIncome - totalExpenses;
+  
+  return { 
+    profit: netProfit > 0 ? netProfit : 0, 
+    loss: netProfit < 0 ? Math.abs(netProfit) : 0,
+    totalIncome,
+    totalExpenses
   };
+};
 
   const exportIncomeStatementToCSV = () => {
     const { profit, loss, totalIncome, totalExpenses } = calculateProfitLoss();
