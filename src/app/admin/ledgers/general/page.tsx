@@ -15,6 +15,7 @@ export default function GeneralLedgerPage() {
   const [totalPayments, setTotalPayments] = useState(0);
   const [outstandingBalance, setOutstandingBalance] = useState(0);
   const [amountAvailable, setAmountAvailable] = useState(0);
+  const [allAmountsAvailable, setAllAmountsAvailable] = useState<any[]>([]);
   const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all">("all");
   const [showIncomeStatement, setShowIncomeStatement] = useState(false);
   const [incomeData, setIncomeData] = useState<any[]>([]);
@@ -29,31 +30,20 @@ export default function GeneralLedgerPage() {
   }, [filter]);
 
   const fetchAmountAvailable = async () => {
-  const { data, error } = await supabase
-    .from("finance")
-    .select("amount_available, created_at")
-    .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("finance")
+      .select("amount_available, created_at")
+      .order("created_at", { ascending: false });
 
-  if (!error && data) {
-    // If you want to set the latest amount available (same as before)
-    if (data.length > 0) {
-      setAmountAvailable(data[0].amount_available || 0);
+    if (!error && data) {
+      setAllAmountsAvailable(data);
+      if (data.length > 0) {
+        setAmountAvailable(data[0].amount_available || 0);
+      }
+    } else if (error) {
+      console.error("Error fetching amount_available:", error);
     }
-    
-    // If you want to store all amount_available values for some purpose
-    const allAmountsAvailable = data.map(item => item.amount_available);
-    console.log("All amount_available values:", allAmountsAvailable);
-    
-    // Or if you want the complete entries with timestamps
-    const completeEntries = data.map(item => ({
-      amount: item.amount_available,
-      date: item.created_at
-    }));
-    console.log("Complete entries:", completeEntries);
-  } else if (error) {
-    console.error("Error fetching amount_available:", error);
-  }
-};
+  };
 
   const fetchGeneralLedger = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
     setLoading(true);
@@ -131,7 +121,6 @@ export default function GeneralLedgerPage() {
   const fetchIncomeStatementData = async () => {
     setLoading(true);
     
-    // Calculate date range based on filter
     const now = new Date();
     let startDate: Date;
     let endDate: Date;
@@ -167,7 +156,6 @@ export default function GeneralLedgerPage() {
         endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     }
 
-    // Fetch income data
     const { data: incomeData, error: incomeError } = await supabase
       .from("finance")
       .select("amount_paid, created_at, mode_of_payment, submittedby")
@@ -180,7 +168,6 @@ export default function GeneralLedgerPage() {
       return;
     }
 
-    // Fetch expense data
     const { data: expenseData, error: expenseError } = await supabase
       .from("expenses")
       .select("item, amount_spent, date, department")
@@ -222,7 +209,7 @@ export default function GeneralLedgerPage() {
     const expenseRows = expenseData.map((item) => ({
       "Type": "Expense",
       "Description": item.item,
-      "Amount": -item.amount_spent, // Negative for expenses
+      "Amount": -item.amount_spent,
       "Date": new Date(item.date).toLocaleDateString(),
       "Department": item.department
     }));
@@ -264,7 +251,6 @@ export default function GeneralLedgerPage() {
         General Ledger
       </h1>
 
-      {/* Financial Summary - Now with 4 cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-white text-center mb-6">
         <div className="p-4 bg-green-500 rounded-lg">
           <h2 className="text-xl font-semibold">Total Revenue</h2>
@@ -284,7 +270,35 @@ export default function GeneralLedgerPage() {
         </div>
       </div>
 
-      {/* Filters and Export Buttons */}
+      {allAmountsAvailable.length > 0 && (
+        <div className="mb-6 bg-gray-50 p-4 rounded-lg shadow">
+          <h3 className="text-lg font-semibold mb-3">Amount Available History</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-200">
+                  <th className="p-3 text-left">Date</th>
+                  <th className="p-3 text-right">Amount (UGX)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allAmountsAvailable.map((entry, index) => (
+                  <tr 
+                    key={`amount-${index}`} 
+                    className={`border-b ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                  >
+                    <td className="p-3">{new Date(entry.created_at).toLocaleDateString()}</td>
+                    <td className="p-3 text-right font-mono">
+                      {entry.amount_available?.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
         <div className="flex gap-2 flex-wrap">
           <button
@@ -329,42 +343,51 @@ export default function GeneralLedgerPage() {
         </button>
       </div>
 
-      {/* Ledger Table */}
       {loading ? (
-        <p>Loading...</p>
+        <div className="flex justify-center items-center h-32">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
       ) : (
-        <table className="w-full border-collapse border mt-4">
-          <thead>
-            <tr>
-              <th className="border p-2">Marketer Name</th>
-              <th className="border p-2">Total Order Amount</th>
-              <th className="border p-2">Amount Paid</th>
-              <th className="border p-2">Balance</th>
-              <th className="border p-2">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ledger.map((entry) => (
-              <tr key={entry.id}>
-                <td className="border p-2">{entry.users?.name || "Unknown"}</td>
-                <td className="border p-2">UGX {entry.total_amount?.toLocaleString()}</td>
-                <td className="border p-2">UGX {entry.amount_paid?.toLocaleString()}</td>
-                <td className="border p-2">UGX {entry.balance?.toLocaleString()}</td>
-                <td className="border p-2">{new Date(entry.created_at).toLocaleDateString()}</td>
+        <div className="overflow-x-auto shadow-lg rounded-lg">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="p-3 text-left">Marketer Name</th>
+                <th className="p-3 text-right">Total Amount</th>
+                <th className="p-3 text-right">Amount Paid</th>
+                <th className="p-3 text-right">Balance</th>
+                <th className="p-3 text-left">Date</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {ledger.map((entry) => (
+                <tr key={entry.id} className="border-b hover:bg-gray-50">
+                  <td className="p-3">{entry.users?.name || "Unknown"}</td>
+                  <td className="p-3 text-right font-mono">UGX {entry.total_amount?.toLocaleString()}</td>
+                  <td className="p-3 text-right font-mono">UGX {entry.amount_paid?.toLocaleString()}</td>
+                  <td className="p-3 text-right font-mono">UGX {entry.balance?.toLocaleString()}</td>
+                  <td className="p-3">{new Date(entry.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      {/* Income Statement Dialog */}
       {showIncomeStatement && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-auto">
-            <h2 className="text-2xl font-bold mb-4">Income Statement</h2>
+          <div className="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[90vh] overflow-auto shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Income Statement</h2>
+              <button
+                onClick={() => setShowIncomeStatement(false)}
+                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
+              >
+                Close
+              </button>
+            </div>
             
-            {/* Income Statement Filters */}
-            <div className="flex flex-wrap gap-4 mb-4 items-center">
+            <div className="flex flex-wrap gap-4 mb-6 items-center">
               <select
                 value={statementFilter}
                 onChange={(e) => setStatementFilter(e.target.value as any)}
@@ -378,7 +401,7 @@ export default function GeneralLedgerPage() {
               </select>
 
               {statementFilter === "custom" && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   <input
                     type="date"
                     value={customStartDate}
@@ -397,36 +420,41 @@ export default function GeneralLedgerPage() {
 
               <button
                 onClick={fetchIncomeStatementData}
-                className="bg-blue-500 text-white p-2 rounded"
+                className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
               >
                 Apply Filter
               </button>
 
               <button
                 onClick={exportIncomeStatementToCSV}
-                className="bg-green-500 text-white p-2 rounded ml-auto"
+                className="bg-green-500 text-white p-2 rounded hover:bg-green-600 ml-auto"
               >
                 Download Statement
               </button>
             </div>
 
-            {/* Income Statement Summary */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <h3 className="font-semibold">Total Income</h3>
-                <p className="text-xl">UGX {calculateProfitLoss().totalIncome.toLocaleString()}</p>
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                <h3 className="font-semibold text-blue-800">Total Income</h3>
+                <p className="text-xl font-mono">UGX {calculateProfitLoss().totalIncome.toLocaleString()}</p>
               </div>
-              <div className="p-3 bg-red-100 rounded-lg">
-                <h3 className="font-semibold">Total Expenses</h3>
-                <p className="text-xl">UGX {calculateProfitLoss().totalExpenses.toLocaleString()}</p>
+              <div className="p-4 bg-red-50 rounded-lg border border-red-100">
+                <h3 className="font-semibold text-red-800">Total Expenses</h3>
+                <p className="text-xl font-mono">UGX {calculateProfitLoss().totalExpenses.toLocaleString()}</p>
               </div>
-              <div className={`p-3 rounded-lg ${
-                calculateProfitLoss().profit > 0 ? "bg-green-100" : "bg-red-100"
+              <div className={`p-4 rounded-lg border ${
+                calculateProfitLoss().profit > 0 
+                  ? "bg-green-50 border-green-100" 
+                  : "bg-red-50 border-red-100"
               }`}>
                 <h3 className="font-semibold">
-                  {calculateProfitLoss().profit > 0 ? "Profit" : "Loss"}
+                  {calculateProfitLoss().profit > 0 ? (
+                    <span className="text-green-800">Profit</span>
+                  ) : (
+                    <span className="text-red-800">Loss</span>
+                  )}
                 </h3>
-                <p className="text-xl">
+                <p className="text-xl font-mono">
                   UGX {Math.abs(
                     calculateProfitLoss().profit > 0 
                       ? calculateProfitLoss().profit 
@@ -436,61 +464,59 @@ export default function GeneralLedgerPage() {
               </div>
             </div>
 
-            {/* Income Statement Tables */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-2">Income</h3>
-              <table className="w-full border-collapse border mb-4">
-                <thead>
-                  <tr>
-                    <th className="border p-2">Date</th>
-                    <th className="border p-2">Payment Mode</th>
-                    <th className="border p-2">Amount</th>
-                    <th className="border p-2">Submitted By</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {incomeData.map((item, index) => (
-                    <tr key={`income-${index}`}>
-                      <td className="border p-2">{new Date(item.created_at).toLocaleDateString()}</td>
-                      <td className="border p-2">{item.mode_of_payment}</td>
-                      <td className="border p-2">UGX {item.amount_paid?.toLocaleString()}</td>
-                      <td className="border p-2">{item.submittedby}</td>
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold mb-3 text-blue-700">Income</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-blue-100">
+                      <th className="p-3 text-left">Date</th>
+                      <th className="p-3 text-left">Payment Mode</th>
+                      <th className="p-3 text-right">Amount</th>
+                      <th className="p-3 text-left">Submitted By</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {incomeData.map((item, index) => (
+                      <tr key={`income-${index}`} className="border-b hover:bg-blue-50">
+                        <td className="p-3">{new Date(item.created_at).toLocaleDateString()}</td>
+                        <td className="p-3">{item.mode_of_payment}</td>
+                        <td className="p-3 text-right font-mono">UGX {item.amount_paid?.toLocaleString()}</td>
+                        <td className="p-3">{item.submittedby}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-2">Expenses</h3>
-              <table className="w-full border-collapse border">
-                <thead>
-                  <tr>
-                    <th className="border p-2">Date</th>
-                    <th className="border p-2">Item</th>
-                    <th className="border p-2">Amount</th>
-                    <th className="border p-2">Department</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expenseData.map((item, index) => (
-                    <tr key={`expense-${index}`}>
-                      <td className="border p-2">{new Date(item.date).toLocaleDateString()}</td>
-                      <td className="border p-2">{item.item}</td>
-                      <td className="border p-2">UGX {item.amount_spent?.toLocaleString()}</td>
-                      <td className="border p-2">{item.department}</td>
+              <h3 className="text-lg font-semibold mb-3 text-red-700">Expenses</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-red-100">
+                      <th className="p-3 text-left">Date</th>
+                      <th className="p-3 text-left">Item</th>
+                      <th className="p-3 text-right">Amount</th>
+                      <th className="p-3 text-left">Department</th>
+                      <th className="p-3 text-left">Issued By</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {expenseData.map((item, index) => (
+                      <tr key={`expense-${index}`} className="border-b hover:bg-red-50">
+                        <td className="p-3">{new Date(item.date).toLocaleDateString()}</td>
+                        <td className="p-3">{item.item}</td>
+                        <td className="p-3 text-right font-mono">UGX {item.amount_spent?.toLocaleString()}</td>
+                        <td className="p-3">{item.department}</td>
+                        <td className="p-3">{item.submittedby}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-
-            <button
-              onClick={() => setShowIncomeStatement(false)}
-              className="bg-red-500 text-white p-2 rounded float-right"
-            >
-              Close
-            </button>
           </div>
         </div>
       )}
