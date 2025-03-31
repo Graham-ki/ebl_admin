@@ -23,6 +23,7 @@ export default function GeneralLedgerPage() {
   const [statementFilter, setStatementFilter] = useState<"daily" | "weekly" | "monthly" | "yearly" | "custom">("monthly");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+  const [showFullAmountHistory, setShowFullAmountHistory] = useState(false);
 
   useEffect(() => {
     fetchGeneralLedger(filter);
@@ -37,9 +38,9 @@ export default function GeneralLedgerPage() {
 
     if (!error && data) {
       setAllAmountsAvailable(data);
-      if (data.length > 0) {
-        setAmountAvailable(data[0].amount_available || 0);
-      }
+      // Calculate total sum of all amount_available entries
+      const totalAmount = data.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
+      setAmountAvailable(totalAmount);
     } else if (error) {
       console.error("Error fetching amount_available:", error);
     }
@@ -170,7 +171,7 @@ export default function GeneralLedgerPage() {
 
     const { data: expenseData, error: expenseError } = await supabase
       .from("expenses")
-      .select("item, amount_spent, date, department")
+      .select("item, amount_spent, date, department,submittedby")
       .gte("date", startDate.toISOString())
       .lte("date", endDate.toISOString());
 
@@ -211,7 +212,8 @@ export default function GeneralLedgerPage() {
       "Description": item.item,
       "Amount": -item.amount_spent,
       "Date": new Date(item.date).toLocaleDateString(),
-      "Department": item.department
+      "Department": item.department,
+      "Issued By" : item.submittedby
     }));
 
     const summaryRows = [
@@ -265,14 +267,24 @@ export default function GeneralLedgerPage() {
           <p className="text-2xl">UGX {outstandingBalance.toLocaleString()}</p>
         </div>
         <div className="p-4 bg-purple-500 rounded-lg">
-          <h2 className="text-xl font-semibold">Amount Available</h2>
+          <h2 className="text-xl font-semibold">Total Amount Available</h2>
           <p className="text-2xl">UGX {amountAvailable.toLocaleString()}</p>
         </div>
       </div>
 
       {allAmountsAvailable.length > 0 && (
         <div className="mb-6 bg-gray-50 p-4 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-3">Amount Available History</h3>
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-lg font-semibold">Amount Available History</h3>
+            {allAmountsAvailable.length > 3 && (
+              <button 
+                onClick={() => setShowFullAmountHistory(true)}
+                className="text-blue-500 hover:underline"
+              >
+                View More
+              </button>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
@@ -282,7 +294,7 @@ export default function GeneralLedgerPage() {
                 </tr>
               </thead>
               <tbody>
-                {allAmountsAvailable.map((entry, index) => (
+                {allAmountsAvailable.slice(0, 3).map((entry, index) => (
                   <tr 
                     key={`amount-${index}`} 
                     className={`border-b ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
@@ -516,6 +528,46 @@ export default function GeneralLedgerPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFullAmountHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Full Amount Available History</h2>
+              <button
+                onClick={() => setShowFullAmountHistory(false)}
+                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
+              >
+                Close
+              </button>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="p-3 text-left">Date</th>
+                    <th className="p-3 text-right">Amount (UGX)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allAmountsAvailable.map((entry, index) => (
+                    <tr 
+                      key={`full-amount-${index}`} 
+                      className={`border-b ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                    >
+                      <td className="p-3">{new Date(entry.created_at).toLocaleDateString()}</td>
+                      <td className="p-3 text-right font-mono">
+                        {entry.amount_available?.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
