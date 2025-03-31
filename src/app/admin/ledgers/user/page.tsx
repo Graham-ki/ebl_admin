@@ -204,15 +204,15 @@ export default function UserLedgerPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="bg-white p-6 rounded-lg shadow-md">
             <h3 className="text-xl font-semibold">Cash</h3>
-            <p className="text-gray-600 text-lg">UGX {financialSummary.cash}</p>
+            <p className="text-gray-600 text-lg font-mono">UGX {financialSummary.cash}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow-md">
             <h3 className="text-xl font-semibold">Bank</h3>
-            <p className="text-gray-600 text-lg">UGX {financialSummary.bank}</p>
+            <p className="text-gray-600 text-lg font-mono">UGX {financialSummary.bank}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow-md">
             <h3 className="text-xl font-semibold">Mobile Money</h3>
-            <p className="text-gray-600 text-lg">UGX {financialSummary.mobileMoney}</p>
+            <p className="text-gray-600 text-lg font-mono">UGX {financialSummary.mobileMoney}</p>
           </div>
         </div>
 
@@ -221,19 +221,19 @@ export default function UserLedgerPage() {
           {financialSummary.mtn > 0 && (
             <div className="bg-white p-4 rounded-lg shadow-md">
               <h3 className="text-lg font-semibold">MTN</h3>
-              <p className="text-gray-600">UGX {financialSummary.mtn}</p>
+              <p className="text-gray-600 font-mono">UGX {financialSummary.mtn}</p>
             </div>
           )}
           {financialSummary.airtel > 0 && (
             <div className="bg-white p-4 rounded-lg shadow-md">
               <h3 className="text-lg font-semibold">Airtel</h3>
-              <p className="text-gray-600">UGX {financialSummary.airtel}</p>
+              <p className="text-gray-600 font-mono">UGX {financialSummary.airtel}</p>
             </div>
           )}
           {Object.entries(financialSummary.bankNames).map(([bankName, amount]) => (
             <div key={bankName} className="bg-white p-4 rounded-lg shadow-md">
               <h3 className="text-lg font-semibold">{bankName}</h3>
-              <p className="text-gray-600">UGX {amount as number}</p>
+              <p className="text-gray-600 font-mono">UGX {amount as number}</p>
             </div>
           ))}
         </div>
@@ -299,9 +299,9 @@ export default function UserLedgerPage() {
                 {ledger.map((entry) => (
                   <tr key={entry.id}>
                     <td className="border p-2">{entry.order_id}</td>
-                    <td className="border p-2">UGX {entry.total_amount}</td>
-                    <td className="border p-2">UGX {entry.amount_paid}</td>
-                    <td className="border p-2">UGX {entry.balance}</td>
+                    <td className="border p-2 font-mono">UGX {entry.total_amount}</td>
+                    <td className="border p-2 font-mono">UGX {entry.amount_paid}</td>
+                    <td className="border p-2 font-mono">UGX {entry.balance}</td>
                     <td className="border p-2">{entry.mode_of_payment}</td>
                     {entry.mode_of_payment === "Mobile Money" && (
                       <td className="border p-2">{entry.mode_of_mobilemoney}</td>
