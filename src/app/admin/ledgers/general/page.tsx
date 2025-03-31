@@ -494,12 +494,6 @@ export default function GeneralLedgerPage() {
                   </tbody>
                 </table>
               </div>
-               <button
-                onClick={() => setShowIncomeStatement(false)}
-                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
-              >
-                Close
-              </button>
             </div>
 
             <div className="mb-6">
@@ -529,6 +523,13 @@ export default function GeneralLedgerPage() {
                 </table>
               </div>
             </div>
+            
+               <button
+                onClick={() => setShowIncomeStatement(false)}
+                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
+              >
+                Close
+              </button>
           </div>
         </div>
       )}
