@@ -391,12 +391,6 @@ export default function GeneralLedgerPage() {
           <div className="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[90vh] overflow-auto shadow-2xl">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">Income Statement</h2>
-              <button
-                onClick={() => setShowIncomeStatement(false)}
-                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
-              >
-                Close
-              </button>
             </div>
             
             <div className="flex flex-wrap gap-4 mb-6 items-center">
@@ -500,6 +494,12 @@ export default function GeneralLedgerPage() {
                   </tbody>
                 </table>
               </div>
+               <button
+                onClick={() => setShowIncomeStatement(false)}
+                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
+              >
+                Close
+              </button>
             </div>
 
             <div className="mb-6">
