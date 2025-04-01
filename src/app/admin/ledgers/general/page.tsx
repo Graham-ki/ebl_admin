@@ -266,7 +266,7 @@ export default function GeneralLedgerPage() {
       { "Type": "SUMMARY", "Description": "Total Profit (Amount Available)", "Amount": totalProfit, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Total Expenses", "Amount": -totalExpenses, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Total Potential Loss", "Amount": -totalPotentialLoss, "Date": "", "Department": "" },
-      { "Type": "SUMMARY", "Description": "Net Profit", "Amount": netProfit > 0 ? netProfit : "", "Date": "", "Department": "" },
+      { "Type": "SUMMARY", "Description": "Net Profit", "Amount": totalProfit > 0 ? totalProfit : "", "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Net Loss", "Amount": netLoss > 0 ? -netLoss : "", "Date": "", "Department": "" }
     ];
 
@@ -516,8 +516,8 @@ export default function GeneralLedgerPage() {
               }`}>
                 <h3 className="font-semibold text-green-800">Net Profit</h3>
                 <p className="text-xl font-mono">
-                  {calculateProfitLoss().netProfit > 0 
-                    ? `UGX ${calculateProfitLoss().netProfit.toLocaleString()}`
+                  {calculateProfitLoss().totalProfit > 0 
+                    ? `UGX ${calculateProfitLoss().totalProfit.toLocaleString()}`
                     : "N/A"}
                 </p>
               </div>
@@ -541,7 +541,7 @@ export default function GeneralLedgerPage() {
                 <h3 className="font-semibold text-orange-800 mb-2">Potential Loss (Unpaid Balances)</h3>
                 <p className="text-xl font-mono">UGX {calculateProfitLoss().totalPotentialLoss.toLocaleString()}</p>
                 <p className="text-sm text-orange-600 mt-1">
-                  This represents unpaid balances where total amount {'>'}  amount paid
+                  This represents unpaid balances from orders taken!
                 </p>
               </div>
             )}
