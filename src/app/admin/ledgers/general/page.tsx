@@ -541,7 +541,7 @@ export default function GeneralLedgerPage() {
                 <h3 className="font-semibold text-orange-800 mb-2">Potential Loss (Unpaid Balances)</h3>
                 <p className="text-xl font-mono">UGX {calculateProfitLoss().totalPotentialLoss.toLocaleString()}</p>
                 <p className="text-sm text-orange-600 mt-1">
-                  This represents unpaid balances where total amount > amount paid
+                  This represents unpaid balances where total amount {'>'}  amount paid
                 </p>
               </div>
             )}
