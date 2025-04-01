@@ -192,23 +192,28 @@ export default function GeneralLedgerPage() {
     // Calculate total profit as sum of all amount_available entries
     const totalProfit = incomeData.reduce((sum, item) => sum + (item.amount_available || 0), 0);
     
-    // Calculate total expenses
+    // Calculate total expenses directly from expenseData
     const totalExpenses = expenseData.reduce((sum, item) => sum + (item.amount_spent || 0), 0);
     
-    // Calculate loss only for entries with total_amount (ignore null/undefined)
-    const lossEntries = ledger.filter(entry => entry.total_amount !== null && entry.total_amount !== undefined);
-    const totalLoss = lossEntries.reduce((sum, entry) => {
-      const difference = (entry.total_amount || 0) - (entry.amount_paid || 0);
-      return difference > 0 ? sum + difference : sum;
+    // Calculate potential loss (only where total_amount exists and is greater than amount_paid)
+    const lossEntries = ledger.filter(entry => 
+      entry.total_amount !== null && 
+      entry.total_amount !== undefined &&
+      (entry.total_amount || 0) > (entry.amount_paid || 0)
+    );
+    
+    const totalPotentialLoss = lossEntries.reduce((sum, entry) => {
+      return sum + ((entry.total_amount || 0) - (entry.amount_paid || 0));
     }, 0);
     
-    const netProfit = totalProfit - totalExpenses - totalLoss;
+    // Net profit calculation (amount_available minus expenses)
+    const netProfit = totalProfit - totalExpenses;
     
     return { 
       totalIncome,
       totalProfit,
       totalExpenses,
-      totalLoss,
+      totalPotentialLoss,
       netProfit: netProfit > 0 ? netProfit : 0,
       netLoss: netProfit < 0 ? Math.abs(netProfit) : 0
     };
@@ -219,7 +224,7 @@ export default function GeneralLedgerPage() {
       totalIncome, 
       totalProfit, 
       totalExpenses, 
-      totalLoss,
+      totalPotentialLoss,
       netProfit,
       netLoss 
     } = calculateProfitLoss();
@@ -243,7 +248,11 @@ export default function GeneralLedgerPage() {
     }));
 
     const lossRows = ledger
-      .filter(entry => entry.total_amount !== null && entry.total_amount !== undefined)
+      .filter(entry => 
+        entry.total_amount !== null && 
+        entry.total_amount !== undefined &&
+        (entry.total_amount || 0) > (entry.amount_paid || 0)
+      )
       .map(entry => ({
         "Type": "Potential Loss",
         "Description": `Order ${entry.order_id}`,
@@ -256,7 +265,7 @@ export default function GeneralLedgerPage() {
       { "Type": "SUMMARY", "Description": "Total Income (Amount Paid)", "Amount": totalIncome, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Total Profit (Amount Available)", "Amount": totalProfit, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Total Expenses", "Amount": -totalExpenses, "Date": "", "Department": "" },
-      { "Type": "SUMMARY", "Description": "Total Potential Loss", "Amount": -totalLoss, "Date": "", "Department": "" },
+      { "Type": "SUMMARY", "Description": "Total Potential Loss", "Amount": -totalPotentialLoss, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Net Profit", "Amount": netProfit > 0 ? netProfit : "", "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Net Loss", "Amount": netLoss > 0 ? -netLoss : "", "Date": "", "Department": "" }
     ];
@@ -435,12 +444,14 @@ export default function GeneralLedgerPage() {
           <div className="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[90vh] overflow-auto shadow-2xl">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">Income Statement</h2>
-              <button
-                onClick={() => setShowIncomeStatement(false)}
-                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
-              >
-                Close
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={exportIncomeStatementToCSV}
+                  className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
+                >
+                  Download Statement
+                </button>
+              </div>
             </div>
             
             <div className="flex flex-wrap gap-4 mb-6 items-center">
@@ -480,16 +491,9 @@ export default function GeneralLedgerPage() {
               >
                 Apply Filter
               </button>
-
-              <button
-                onClick={exportIncomeStatementToCSV}
-                className="bg-green-500 text-white p-2 rounded hover:bg-green-600 ml-auto"
-              >
-                Download Statement
-              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
                 <h3 className="font-semibold text-blue-800">Total Income (Amount Paid)</h3>
                 <p className="text-xl font-mono">UGX {calculateProfitLoss().totalIncome.toLocaleString()}</p>
@@ -501,10 +505,6 @@ export default function GeneralLedgerPage() {
               <div className="p-4 bg-red-50 rounded-lg border border-red-100">
                 <h3 className="font-semibold text-red-800">Total Expenses</h3>
                 <p className="text-xl font-mono">UGX {calculateProfitLoss().totalExpenses.toLocaleString()}</p>
-              </div>
-              <div className="p-4 bg-orange-50 rounded-lg border border-orange-100">
-                <h3 className="font-semibold text-orange-800">Total Potential Loss</h3>
-                <p className="text-xl font-mono">UGX {calculateProfitLoss().totalLoss.toLocaleString()}</p>
               </div>
             </div>
 
@@ -534,6 +534,17 @@ export default function GeneralLedgerPage() {
                 </p>
               </div>
             </div>
+
+            {/* Potential Loss Section */}
+            {calculateProfitLoss().totalPotentialLoss > 0 && (
+              <div className="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-100">
+                <h3 className="font-semibold text-orange-800 mb-2">Potential Loss (Unpaid Balances)</h3>
+                <p className="text-xl font-mono">UGX {calculateProfitLoss().totalPotentialLoss.toLocaleString()}</p>
+                <p className="text-sm text-orange-600 mt-1">
+                  This represents unpaid balances where total amount > amount paid
+                </p>
+              </div>
+            )}
 
             <div className="mb-8">
               <h3 className="text-lg font-semibold mb-3 text-blue-700">Income</h3>
@@ -591,41 +602,13 @@ export default function GeneralLedgerPage() {
               </div>
             </div>
 
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-3 text-orange-700">Potential Loss</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-orange-100">
-                      <th className="p-3 text-left">Date</th>
-                      <th className="p-3 text-left">Order ID</th>
-                      <th className="p-3 text-right">Total Amount</th>
-                      <th className="p-3 text-right">Amount Paid</th>
-                      <th className="p-3 text-right">Potential Loss</th>
-                      <th className="p-3 text-left">Marketer</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ledger
-                      .filter(entry => entry.total_amount !== null && entry.total_amount !== undefined)
-                      .map((entry, index) => {
-                        const potentialLoss = (entry.total_amount || 0) - (entry.amount_paid || 0);
-                        return potentialLoss > 0 ? (
-                          <tr key={`loss-${index}`} className="border-b hover:bg-orange-50">
-                            <td className="p-3">{new Date(entry.created_at).toLocaleDateString()}</td>
-                            <td className="p-3">{entry.order_id}</td>
-                            <td className="p-3 text-right font-mono">UGX {entry.total_amount?.toLocaleString()}</td>
-                            <td className="p-3 text-right font-mono">UGX {entry.amount_paid?.toLocaleString()}</td>
-                            <td className="p-3 text-right font-mono text-red-600">
-                              UGX {potentialLoss.toLocaleString()}
-                            </td>
-                            <td className="p-3">{entry.users?.name || "Unknown"}</td>
-                          </tr>
-                        ) : null;
-                      })}
-                  </tbody>
-                </table>
-              </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowIncomeStatement(false)}
+                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
