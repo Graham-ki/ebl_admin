@@ -187,7 +187,7 @@ export default function GeneralLedgerPage() {
 
   const calculateProfitLoss = () => {
     // Calculate total income as sum of all amount_paid entries
-    const totalIncome = incomeData.reduce((sum, item) => sum + (item.amount_paid || 0), 0);
+    const totalIncome = incomeData.reduce((sum, item) => sum + (item.total_amount || 0), 0);
     
     // Calculate total profit as sum of all amount_available entries
     const totalProfit = incomeData.reduce((sum, item) => sum + (item.amount_available || 0), 0);
@@ -449,7 +449,7 @@ export default function GeneralLedgerPage() {
                   onClick={exportIncomeStatementToCSV}
                   className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
                 >
-                  Download Statement
+                  Download
                 </button>
               </div>
             </div>
@@ -495,7 +495,7 @@ export default function GeneralLedgerPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <h3 className="font-semibold text-blue-800">Total Income (Amount Paid)</h3>
+                <h3 className="font-semibold text-blue-800">Total Income (Amount expected from orders made)</h3>
                 <p className="text-xl font-mono">UGX {calculateProfitLoss().totalIncome.toLocaleString()}</p>
               </div>
               <div className="p-4 bg-green-50 rounded-lg border border-green-100">
