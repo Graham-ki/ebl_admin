@@ -229,7 +229,8 @@ export default function ExpensesLedgerPage() {
     const { error: updateError } = await supabase
       .from("finance")
       .update({ amount_available: updatedAmountAvailable })
-      .eq("mode_of_payment", formData.mode_of_payment);
+      .eq("mode_of_payment", formData.mode_of_payment)
+      .eq("submittedby","You");
 
     if (updateError) {
       alert("Error updating finance data: " + updateError.message);
