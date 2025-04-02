@@ -208,6 +208,7 @@ export default function ExpensesLedgerPage() {
     const { data: financeData, error: financeError } = await supabase
       .from("finance")
       .select("amount_available")
+      .eq("submittedby","You")
       .eq("mode_of_payment", formData.mode_of_payment);
 
     if (financeError) {
