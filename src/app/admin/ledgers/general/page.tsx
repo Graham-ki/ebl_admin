@@ -158,7 +158,7 @@ export default function GeneralLedgerPage() {
 
     const { data: incomeData, error: incomeError } = await supabase
       .from("finance")
-      .select("amount_paid, amount_available, created_at, mode_of_payment, submittedby")
+      .select("amount_paid, amount_available, created_at, mode_of_payment, submittedby,total_amount")
       .gte("created_at", startDate.toISOString())
       .lte("created_at", endDate.toISOString());
 
