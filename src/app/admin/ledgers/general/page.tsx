@@ -262,7 +262,7 @@ export default function GeneralLedgerPage() {
       }));
 
     const summaryRows = [
-      { "Type": "SUMMARY", "Description": "Total Income (Amount Paid)", "Amount": totalIncome, "Date": "", "Department": "" },
+      { "Type": "SUMMARY", "Description": "Total Income (Amount expected from orders)", "Amount": totalIncome, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Total Profit (Amount Available)", "Amount": totalProfit, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Total Expenses", "Amount": -totalExpenses, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Total Potential Loss", "Amount": -totalPotentialLoss, "Date": "", "Department": "" },
