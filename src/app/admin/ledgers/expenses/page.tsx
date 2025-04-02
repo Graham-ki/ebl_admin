@@ -301,15 +301,15 @@ export default function ExpensesLedgerPage() {
       <div className="grid grid-cols-3 gap-4 text-white text-center mb-6">
         <div className="p-4 bg-green-500 rounded-lg">
           <h2 className="text-xl font-semibold">Total Income</h2>
-          <p className="text-2xl font-mono">UGX {totalIncome.toLocaleString()}</p>
+          <p className="text-2xl">UGX {totalIncome.toLocaleString()}</p>
         </div>
         <div className="p-4 bg-red-500 rounded-lg">
           <h2 className="text-xl font-semibold">Total Expenses</h2>
-          <p className="text-2xl font-mono">UGX {totalExpenses.toLocaleString()}</p>
+          <p className="text-2xl">UGX {totalExpenses.toLocaleString()}</p>
         </div>
         <div className="p-4 bg-blue-500 rounded-lg">
           <h2 className="text-xl font-semibold">Balance Forward</h2>
-          <p className="text-2xl font-mono">UGX {balanceForward.toLocaleString()}</p>
+          <p className="text-2xl">UGX {balanceForward.toLocaleString()}</p>
         </div>
       </div>
 
@@ -438,7 +438,7 @@ export default function ExpensesLedgerPage() {
             {expenses.map((expense) => (
               <tr key={expense.id}>
                 <td className="border p-2">{expense.item}</td>
-                <td className="border p-2 font-mono">UGX {expense.amount_spent}</td>
+                <td className="border p-2">UGX {expense.amount_spent}</td>
                 <td className="border p-2">{expense.department}</td>
                 <td className="border p-2">{expense.mode_of_payment}</td>
                 <td className="border p-2">{expense.account}</td>
