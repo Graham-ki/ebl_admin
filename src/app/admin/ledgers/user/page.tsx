@@ -2,8 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
-// Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -29,7 +35,7 @@ export default function UserLedgerPage() {
     mobileMoney: 0,
     mtn: 0,
     airtel: 0,
-    bankNames: {}, // Object to store bank names and their amounts
+    bankNames: {},
   });
 
   const fetchUserDetails = async (userId: string) => {
@@ -102,7 +108,7 @@ export default function UserLedgerPage() {
       mobileMoney: 0,
       mtn: 0,
       airtel: 0,
-      bankNames: {} as { [key: string]: number }, // Track bank names and their amounts
+      bankNames: {} as { [key: string]: number },
     };
 
     ledger.forEach((entry) => {
@@ -156,7 +162,7 @@ export default function UserLedgerPage() {
     }
 
     alert("Payment successfully submitted!");
-    fetchUserLedger(userId); // Refresh the ledger data
+    fetchUserLedger(userId);
     setEditEntry(null);
     setIsModalOpen(false);
     setModeOfPayment("");
@@ -188,322 +194,432 @@ export default function UserLedgerPage() {
       }
 
       alert("Entry successfully deleted!");
-      fetchUserLedger(userId); // Refresh the ledger data
+      fetchUserLedger(userId);
     }
   };
 
   const hasPaymentData = ledger.some((entry) => entry.order_id === orderId);
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'UGX',
+      minimumFractionDigits: 0
+    }).format(amount);
+  };
+
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white">Orders Ledger</h1>
-
-      {/* Financial Summary Cards */}
-      <div className="mb-6">
-        {/* Major Payment Modes */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-xl font-semibold">Cash</h3>
-            <p className="text-gray-600 text-lg font-mono">UGX {financialSummary.cash}</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-xl font-semibold">Bank</h3>
-            <p className="text-gray-600 text-lg font-mono">UGX {financialSummary.bank}</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-xl font-semibold">Mobile Money</h3>
-            <p className="text-gray-600 text-lg font-mono">UGX {financialSummary.mobileMoney}</p>
-          </div>
-        </div>
-
-        {/* Sub Payment Modes */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {financialSummary.mtn > 0 && (
-            <div className="bg-white p-4 rounded-lg shadow-md">
-              <h3 className="text-lg font-semibold">MTN</h3>
-              <p className="text-gray-600 font-mono">UGX {financialSummary.mtn}</p>
-            </div>
-          )}
-          {financialSummary.airtel > 0 && (
-            <div className="bg-white p-4 rounded-lg shadow-md">
-              <h3 className="text-lg font-semibold">Airtel</h3>
-              <p className="text-gray-600 font-mono">UGX {financialSummary.airtel}</p>
-            </div>
-          )}
-          {Object.entries(financialSummary.bankNames).map(([bankName, amount]) => (
-            <div key={bankName} className="bg-white p-4 rounded-lg shadow-md">
-              <h3 className="text-lg font-semibold">{bankName}</h3>
-              <p className="text-gray-600 font-mono">UGX {amount as number}</p>
-            </div>
-          ))}
+    <div className="container mx-auto p-4 md:p-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div className="flex items-center gap-3">
+          <span className="text-4xl">📊</span>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Payment Ledger System
+          </h1>
         </div>
       </div>
 
-      {/* Dismissible Warning Message */}
+      {/* Financial Summary Section */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <span>💰</span>
+          <span>Payment Summary</span>
+        </h2>
+        
+        {/* Primary Payment Methods */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <Card className="bg-blue-50 border-blue-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-600">
+                <span>💵</span>
+                <span>Cash Payments</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-mono font-bold">{formatCurrency(financialSummary.cash)}</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-green-50 border-green-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-green-600">
+                <span>🏦</span>
+                <span>Bank Transfers</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-mono font-bold">{formatCurrency(financialSummary.bank)}</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-purple-50 border-purple-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-purple-600">
+                <span>📱</span>
+                <span>Mobile Money</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-mono font-bold">{formatCurrency(financialSummary.mobileMoney)}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Secondary Payment Details */}
+        {(financialSummary.mtn > 0 || financialSummary.airtel > 0 || Object.keys(financialSummary.bankNames).length > 0) && (
+          <>
+            <h3 className="text-lg font-medium mb-3 text-gray-600">Detailed Breakdown</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {financialSummary.mtn > 0 && (
+                <Card className="bg-yellow-50 border-yellow-200">
+                  <CardHeader className="p-4">
+                    <CardTitle className="flex items-center gap-2 text-yellow-600 text-sm">
+                      <span>🟨</span>
+                      <span>MTN Mobile Money</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <p className="text-lg font-mono">{formatCurrency(financialSummary.mtn)}</p>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {financialSummary.airtel > 0 && (
+                <Card className="bg-red-50 border-red-200">
+                  <CardHeader className="p-4">
+                    <CardTitle className="flex items-center gap-2 text-red-600 text-sm">
+                      <span>🟥</span>
+                      <span>Airtel Money</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <p className="text-lg font-mono">{formatCurrency(financialSummary.airtel)}</p>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {Object.entries(financialSummary.bankNames).map(([bankName, amount]) => (
+                <Card key={bankName} className="bg-gray-50 border-gray-200">
+                  <CardHeader className="p-4">
+                    <CardTitle className="flex items-center gap-2 text-gray-600 text-sm">
+                      <span>🏛️</span>
+                      <span>{bankName}</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <p className="text-lg font-mono">{formatCurrency(amount as number)}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Warning Alert */}
       {showWarning && (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4 relative">
-          <p>Confirm proof of payment from the orders dashboard before adding payment!</p>
-          <button
-            onClick={() => setShowWarning(false)}
-            className="absolute top-2 right-2 text-yellow-700 hover:text-yellow-900"
-          >
-            ×
-          </button>
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-lg relative">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <span className="text-yellow-500">⚠️</span>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                Confirm proof of payment from the orders dashboard before adding payment!
+              </p>
+            </div>
+            <div className="ml-auto pl-3">
+              <button
+                onClick={() => setShowWarning(false)}
+                className="text-yellow-500 hover:text-yellow-700"
+              >
+                <span className="text-xl">&times;</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Input field for Order ID */}
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Tracking ID"
-          value={orderId}
-          onChange={(e) => setOrderId(e.target.value)}
-          className="border p-2 rounded"
-        />
-        <button
-          onClick={fetchOrderDetails}
-          className="bg-black hover:bg-gray-500 text-white p-2 rounded mt-2"
-        >
-          Submit
-        </button>
+      {/* Order Lookup Section */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <span>🔍</span>
+          <span>Order Lookup</span>
+        </h2>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Input
+            type="text"
+            placeholder="Enter Tracking ID"
+            value={orderId}
+            onChange={(e) => setOrderId(e.target.value)}
+            className="flex-1"
+          />
+          <Button 
+            onClick={fetchOrderDetails}
+            className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
+          >
+            <span>🔎</span>
+            <span>Search</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Show user name if fetched */}
+      {/* User and Ledger Section */}
       {userName && (
         <>
-          <h3 className="font-semibold">Marketer: {userName}</h3>
-
-          {/* Ledger Table */}
-          {loading ? (
-            <p>Loading...</p>
-          ) : (
-            <table className="w-full border-collapse border mt-4">
-              <thead>
-                <tr>
-                  <th className="border p-2">Track ID</th>
-                  <th className="border p-2">Total Order Amount</th>
-                  <th className="border p-2">Amount submitted</th>
-                  <th className="border p-2">Balance</th>
-                  <th className="border p-2">Mode of Payment</th>
-                  {ledger.some((entry) => entry.mode_of_payment === "Mobile Money") && (
-                    <th className="border p-2">Mobile Money Provider</th>
-                  )}
-                  {ledger.some((entry) => entry.mode_of_payment === "Bank") && (
-                    <th className="border p-2">Bank Name</th>
-                  )}
-                  <th className="border p-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ledger.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="border p-2">{entry.order_id}</td>
-                    <td className="border p-2 font-mono">UGX {entry.total_amount}</td>
-                    <td className="border p-2 font-mono">UGX {entry.amount_paid}</td>
-                    <td className="border p-2 font-mono">UGX {entry.balance}</td>
-                    <td className="border p-2">{entry.mode_of_payment}</td>
-                    {entry.mode_of_payment === "Mobile Money" && (
-                      <td className="border p-2">{entry.mode_of_mobilemoney}</td>
-                    )}
-                    {entry.mode_of_payment === "Bank" && (
-                      <td className="border p-2">{entry.bank_name}</td>
-                    )}
-                    <td className="border p-2">
-                      <button
-                        onClick={() => handleEdit(entry)}
-                        className="bg-gray-500 text-white p-1 rounded mr-2"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(entry.id)}
-                        className="bg-red-500 text-white p-1 rounded"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {/* Form for entering and updating payment details */}
-          {!hasPaymentData && (
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold">Add Payment</h2>
-
-              {/* Input for Total Amount */}
-              <div className="mb-4">
-                <label className="block mb-2">Total Order Amount (UGX):</label>
-                <input
-                  type="number"
-                  placeholder="Total Amount"
-                  value={totalAmount}
-                  onChange={(e) => setTotalAmount(parseFloat(e.target.value))}
-                  className="border p-2 rounded"
-                />
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
+              <span>👤</span>
+              <span>Marketer: {userName}</span>
+            </h2>
+            
+            {loading ? (
+              <div className="flex justify-center items-center h-32">
+                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
               </div>
-
-              {/* Input for Amount Paid */}
-              <div className="mb-4">
-                <label className="block mb-2">Amount submitted (UGX):</label>
-                <input
-                  type="number"
-                  placeholder="Amount Paid"
-                  value={amountPaid}
-                  onChange={(e) => setAmountPaid(parseFloat(e.target.value))}
-                  className="border p-2 rounded"
-                />
-              </div>
-
-              {/* Input for Mode of Payment */}
-              <div className="mb-4">
-                <label className="block mb-2">Mode of Payment:</label>
-                <select
-                  value={modeOfPayment}
-                  onChange={(e) => setModeOfPayment(e.target.value)}
-                  className="border p-2 rounded"
-                >
-                  <option value="">Select Mode</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Bank">Bank</option>
-                  <option value="Mobile Money">Mobile Money</option>
-                </select>
-              </div>
-
-              {/* Input for Mobile Money Provider */}
-              {modeOfPayment === "Mobile Money" && (
-                <div className="mb-4">
-                  <label className="block mb-2">Mobile Money Provider:</label>
-                  <select
-                    value={modeOfMobileMoney}
-                    onChange={(e) => setModeOfMobileMoney(e.target.value)}
-                    className="border p-2 rounded"
-                  >
-                    <option value="">Select Provider</option>
-                    <option value="MTN">MTN</option>
-                    <option value="Airtel">Airtel</option>
-                  </select>
+            ) : (
+              <>
+                {/* Ledger Table */}
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-gray-50">
+                      <TableRow>
+                        <TableHead className="font-semibold">Track ID</TableHead>
+                        <TableHead className="font-semibold">Total Amount</TableHead>
+                        <TableHead className="font-semibold">Amount Paid</TableHead>
+                        <TableHead className="font-semibold">Balance</TableHead>
+                        <TableHead className="font-semibold">Payment Method</TableHead>
+                        {ledger.some((entry) => entry.mode_of_payment === "Mobile Money") && (
+                          <TableHead className="font-semibold">Mobile Provider</TableHead>
+                        )}
+                        {ledger.some((entry) => entry.mode_of_payment === "Bank") && (
+                          <TableHead className="font-semibold">Bank Name</TableHead>
+                        )}
+                        <TableHead className="font-semibold text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ledger.length > 0 ? (
+                        ledger.map((entry) => (
+                          <TableRow key={entry.id} className="hover:bg-gray-50">
+                            <TableCell>{entry.order_id}</TableCell>
+                            <TableCell className="font-mono">{formatCurrency(entry.total_amount)}</TableCell>
+                            <TableCell className="font-mono">{formatCurrency(entry.amount_paid)}</TableCell>
+                            <TableCell className="font-mono">
+                              {entry.balance > 0 ? (
+                                <Badge variant="destructive">{formatCurrency(entry.balance)}</Badge>
+                              ) : (
+                                <Badge className="bg-green-500">{formatCurrency(entry.balance)}</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{entry.mode_of_payment}</Badge>
+                            </TableCell>
+                            {entry.mode_of_payment === "Mobile Money" && (
+                              <TableCell>
+                                <Badge variant="outline" className={entry.mode_of_mobilemoney === "MTN" ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}>
+                                  {entry.mode_of_mobilemoney}
+                                </Badge>
+                              </TableCell>
+                            )}
+                            {entry.mode_of_payment === "Bank" && (
+                              <TableCell>{entry.bank_name}</TableCell>
+                            )}
+                            <TableCell className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(entry)}
+                                className="border-blue-200 text-blue-600 hover:bg-blue-50"
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(entry.id)}
+                              >
+                                Delete
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                            No payment records found for this user
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
-              )}
 
-              {/* Input for Bank Name */}
-              {modeOfPayment === "Bank" && (
-                <div className="mb-4">
-                  <label className="block mb-2">Bank Name:</label>
-                  <input
-                    type="text"
-                    placeholder="Enter Bank Name"
-                    value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                    className="border p-2 rounded"
-                  />
-                </div>
-              )}
+                {/* Payment Form */}
+                {!hasPaymentData && (
+                  <div className="mt-8 p-6 bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                      <span>➕</span>
+                      <span>Add New Payment</span>
+                    </h2>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Total Order Amount</label>
+                        <Input
+                          type="number"
+                          placeholder="Total Amount"
+                          value={totalAmount}
+                          onChange={(e) => setTotalAmount(parseFloat(e.target.value))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount Paid</label>
+                        <Input
+                          type="number"
+                          placeholder="Amount Paid"
+                          value={amountPaid}
+                          onChange={(e) => setAmountPaid(parseFloat(e.target.value))}
+                        />
+                      </div>
+                    </div>
 
-              <button
-                className="bg-green-500 text-white p-2 rounded mt-2"
-                onClick={submitPayment}
-              >
-                {editEntry ? "Update Payment" : "Submit Payment"}
-              </button>
-            </div>
-          )}
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                      <Select onValueChange={setModeOfPayment} value={modeOfPayment}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select payment method" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Cash">Cash</SelectItem>
+                          <SelectItem value="Bank">Bank Transfer</SelectItem>
+                          <SelectItem value="Mobile Money">Mobile Money</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-          {/* Modal for Edit Form */}
-          {isModalOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-              <div className="bg-white p-6 rounded-lg w-96">
-                <h2 className="text-xl font-semibold mb-4">Edit Payment</h2>
+                    {modeOfPayment === "Mobile Money" && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Mobile Provider</label>
+                        <Select onValueChange={setModeOfMobileMoney} value={modeOfMobileMoney}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select provider" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="MTN">MTN</SelectItem>
+                            <SelectItem value="Airtel">Airtel</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
-                {/* Input for Total Amount */}
-                <div className="mb-4">
-                  <label className="block mb-2">Total Order Amount (UGX):</label>
-                  <input
+                    {modeOfPayment === "Bank" && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+                        <Input
+                          type="text"
+                          placeholder="Enter bank name"
+                          value={bankName}
+                          onChange={(e) => setBankName(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    <Button 
+                      onClick={submitPayment}
+                      className="w-full bg-blue-600 hover:bg-blue-700"
+                    >
+                      Submit Payment
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Edit Payment Modal */}
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <DialogContent className="rounded-lg max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <span>✏️</span>
+                  <span>Edit Payment Record</span>
+                </DialogTitle>
+                <DialogDescription>
+                  Update the payment details below
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Order Amount</label>
+                  <Input
                     type="number"
-                    placeholder="Total Amount"
                     value={totalAmount}
                     onChange={(e) => setTotalAmount(parseFloat(e.target.value))}
-                    className="border p-2 rounded w-full"
                   />
                 </div>
-
-                {/* Input for Amount Paid */}
-                <div className="mb-4">
-                  <label className="block mb-2">Amount submitted (UGX):</label>
-                  <input
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount Paid</label>
+                  <Input
                     type="number"
-                    placeholder="Amount Paid"
                     value={amountPaid}
                     onChange={(e) => setAmountPaid(parseFloat(e.target.value))}
-                    className="border p-2 rounded w-full"
                   />
                 </div>
-
-                {/* Input for Mode of Payment */}
-                <div className="mb-4">
-                  <label className="block mb-2">Mode of Payment:</label>
-                  <select
-                    value={modeOfPayment}
-                    onChange={(e) => setModeOfPayment(e.target.value)}
-                    className="border p-2 rounded w-full"
-                  >
-                    <option value="">Select Mode</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Bank">Bank</option>
-                    <option value="Mobile Money">Mobile Money</option>
-                  </select>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                  <Select onValueChange={setModeOfPayment} value={modeOfPayment}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Bank">Bank Transfer</SelectItem>
+                      <SelectItem value="Mobile Money">Mobile Money</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Input for Mobile Money Provider */}
                 {modeOfPayment === "Mobile Money" && (
-                  <div className="mb-4">
-                    <label className="block mb-2">Mobile Money Provider:</label>
-                    <select
-                      value={modeOfMobileMoney}
-                      onChange={(e) => setModeOfMobileMoney(e.target.value)}
-                      className="border p-2 rounded w-full"
-                    >
-                      <option value="">Select Provider</option>
-                      <option value="MTN">MTN</option>
-                      <option value="Airtel">Airtel</option>
-                    </select>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mobile Provider</label>
+                    <Select onValueChange={setModeOfMobileMoney} value={modeOfMobileMoney}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MTN">MTN</SelectItem>
+                        <SelectItem value="Airtel">Airtel</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
 
-                {/* Input for Bank Name */}
                 {modeOfPayment === "Bank" && (
-                  <div className="mb-4">
-                    <label className="block mb-2">Bank Name:</label>
-                    <input
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+                    <Input
                       type="text"
-                      placeholder="Enter Bank Name"
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
-                      className="border p-2 rounded w-full"
                     />
                   </div>
                 )}
-
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => setIsModalOpen(false)}
-                    className="bg-gray-500 text-white p-2 rounded"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={submitPayment}
-                    className="bg-blue-500 text-white p-2 rounded"
-                  >
-                    Save
-                  </button>
-                </div>
               </div>
-            </div>
-          )}
+              
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={submitPayment} className="bg-blue-600 hover:bg-blue-700">
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>
