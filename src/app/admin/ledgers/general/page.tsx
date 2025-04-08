@@ -2,6 +2,13 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { saveAs } from "file-saver";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -186,16 +193,10 @@ export default function GeneralLedgerPage() {
   };
 
   const calculateProfitLoss = () => {
-    // Calculate total income as sum of all amount_paid entries
     const totalIncome = incomeData.reduce((sum, item) => sum + (item.total_amount || 0), 0);
-    
-    // Calculate total profit as sum of all amount_available entries
     const totalProfit = incomeData.reduce((sum, item) => sum + (item.amount_available || 0), 0);
-    
-    // Calculate total expenses directly from expenseData
     const totalExpenses = expenseData.reduce((sum, item) => sum + (item.amount_spent || 0), 0);
     
-    // Calculate potential loss (only where total_amount exists and is greater than amount_paid)
     const lossEntries = ledger.filter(entry => 
       entry.total_amount !== null && 
       entry.total_amount !== undefined &&
@@ -206,7 +207,6 @@ export default function GeneralLedgerPage() {
       return sum + ((entry.total_amount || 0) - (entry.amount_paid || 0));
     }, 0);
     
-    // Net profit calculation (amount_available minus expenses)
     const netProfit = totalProfit - totalExpenses;
     
     return { 
@@ -217,6 +217,14 @@ export default function GeneralLedgerPage() {
       netProfit: netProfit > 0 ? netProfit : 0,
       netLoss: netProfit < 0 ? Math.abs(netProfit) : 0
     };
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'UGX',
+      minimumFractionDigits: 0
+    }).format(amount);
   };
 
   const exportIncomeStatementToCSV = () => {
@@ -295,364 +303,468 @@ export default function GeneralLedgerPage() {
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white">
-        General Ledger
-      </h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-white text-center mb-6">
-        <div className="p-4 bg-green-500 rounded-lg">
-          <h2 className="text-xl font-semibold">Total Revenue</h2>
-          <p className="text-2xl">UGX {totalRevenue.toLocaleString()}</p>
-          <h6 className="text-sm font-medium text-gray-700 italic">Total sum of all orders made</h6>
-        </div>
-        <div className="p-4 bg-blue-500 rounded-lg">
-          <h2 className="text-xl font-semibold">Total Payments</h2>
-          <p className="text-2xl">UGX {totalPayments.toLocaleString()}</p>
-          <h6 className="text-sm font-medium text-gray-700 italic">Total payments made so far</h6>
-        </div>
-        <div className="p-4 bg-red-500 rounded-lg">
-          <h2 className="text-xl font-semibold">Outstanding Balance</h2>
-          <p className="text-2xl">UGX {outstandingBalance.toLocaleString()}</p>
-          <h6 className="text-sm font-medium text-gray-700 italic">Amount not submitted</h6>
-        </div>
-        <div className="p-4 bg-purple-500 rounded-lg">
-          <h2 className="text-xl font-semibold">Total Amount Available</h2>
-          <p className="text-2xl">UGX {amountAvailable.toLocaleString()}</p>
-          <h6 className="text-sm font-medium text-gray-700 italic">
-            Includes order payments and all other deposits (Accounts receivable)
-          </h6>
+    <div className="container mx-auto p-4 md:p-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div className="flex items-center gap-3">
+          <span className="text-4xl">📒</span>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            General Ledger Dashboard
+          </h1>
         </div>
       </div>
 
+      {/* Financial Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <Card className="bg-green-50 border-green-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-green-600">
+              <span>💰</span>
+              <span>Total Revenue</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-mono font-bold">{formatCurrency(totalRevenue)}</p>
+            <p className="text-sm text-gray-500 mt-1">Total sum of all orders made</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-blue-50 border-blue-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-600">
+              <span>💳</span>
+              <span>Total Payments</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-mono font-bold">{formatCurrency(totalPayments)}</p>
+            <p className="text-sm text-gray-500 mt-1">Total payments made so far</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-red-50 border-red-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <span>⚠️</span>
+              <span>Outstanding Balance</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-mono font-bold">{formatCurrency(outstandingBalance)}</p>
+            <p className="text-sm text-gray-500 mt-1">Amount not submitted</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-purple-50 border-purple-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-purple-600">
+              <span>🏦</span>
+              <span>Amount Available</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-mono font-bold">{formatCurrency(amountAvailable)}</p>
+            <p className="text-sm text-gray-500 mt-1">Accounts receivable</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Amount Available History */}
       {allAmountsAvailable.length > 0 && (
-        <div className="mb-6 bg-gray-50 p-4 rounded-lg shadow">
+        <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200 shadow-sm">
           <div className="flex justify-between items-center mb-3">
-            <h3 className="text-lg font-semibold">Amount Available History</h3>
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <span>🔄</span>
+              <span>Amount Available History</span>
+            </h3>
             {allAmountsAvailable.length > 3 && (
-              <button 
+              <Button 
+                variant="ghost"
                 onClick={() => setShowFullAmountHistory(true)}
-                className="text-blue-500 hover:underline"
+                className="text-blue-600 hover:text-blue-800"
               >
-                View More
-              </button>
+                View Full History
+              </Button>
             )}
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-200">
-                  <th className="p-3 text-left">Date</th>
-                  <th className="p-3 text-right">Amount (UGX)</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader className="bg-gray-100">
+                <TableRow>
+                  <TableHead className="font-medium">Date</TableHead>
+                  <TableHead className="font-medium text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {allAmountsAvailable.slice(0, 3).map((entry, index) => (
-                  <tr 
-                    key={`amount-${index}`} 
-                    className={`border-b ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
-                  >
-                    <td className="p-3">{new Date(entry.created_at).toLocaleDateString()}</td>
-                    <td className="p-3 text-right font-mono">
-                      {entry.amount_available?.toLocaleString()}
-                    </td>
-                  </tr>
+                  <TableRow key={`amount-${index}`}>
+                    <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatCurrency(entry.amount_available)}
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}
 
-      <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
-        <div className="flex gap-2 flex-wrap">
-          <button
+      {/* Filter Controls */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={filter === "all" ? "default" : "outline"}
             onClick={() => setFilter("all")}
-            className={`p-2 rounded ${filter === "all" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
           >
-            All
-          </button>
-          <button
+            All Time
+          </Button>
+          <Button
+            variant={filter === "daily" ? "default" : "outline"}
             onClick={() => setFilter("daily")}
-            className={`p-2 rounded ${filter === "daily" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
           >
-            Daily
-          </button>
-          <button
+            Today
+          </Button>
+          <Button
+            variant={filter === "monthly" ? "default" : "outline"}
             onClick={() => setFilter("monthly")}
-            className={`p-2 rounded ${filter === "monthly" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
           >
-            Monthly
-          </button>
-          <button
+            This Month
+          </Button>
+          <Button
+            variant={filter === "yearly" ? "default" : "outline"}
             onClick={() => setFilter("yearly")}
-            className={`p-2 rounded ${filter === "yearly" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
           >
-            Yearly
-          </button>
-          <button
+            This Year
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => {
               setShowIncomeStatement(true);
               fetchIncomeStatementData();
             }}
-            className="bg-orange-500 text-white p-2 rounded ml-2"
+            className="flex items-center gap-2"
           >
-            Income Statement
-          </button>
+            <span>📊</span>
+            <span>Income Statement</span>
+          </Button>
         </div>
-        <button
+        <Button
           onClick={exportToCSV}
-          className="bg-green-500 text-white p-2 rounded"
+          variant="default"
+          className="flex items-center gap-2"
         >
-          Download Ledger
-        </button>
+          <span>📥</span>
+          <span>Download Ledger</span>
+        </Button>
       </div>
 
+      {/* Ledger Table */}
       {loading ? (
         <div className="flex justify-center items-center h-32">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
         </div>
       ) : (
-        <div className="overflow-x-auto shadow-lg rounded-lg">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="p-3 text-left">Marketer Name</th>
-                <th className="p-3 text-right">Total Amount</th>
-                <th className="p-3 text-right">Amount Paid</th>
-                <th className="p-3 text-right">Balance</th>
-                <th className="p-3 text-left">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ledger.map((entry) => (
-                <tr key={entry.id} className="border-b hover:bg-gray-50">
-                  <td className="p-3">{entry.users?.name || "Unknown"}</td>
-                  <td className="p-3 text-right font-mono">UGX {entry.total_amount?.toLocaleString()}</td>
-                  <td className="p-3 text-right font-mono">UGX {entry.amount_paid?.toLocaleString()}</td>
-                  <td className="p-3 text-right font-mono">UGX {entry.balance?.toLocaleString()}</td>
-                  <td className="p-3">{new Date(entry.created_at).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="border rounded-lg overflow-hidden shadow-sm">
+          <Table>
+            <TableHeader className="bg-gray-50">
+              <TableRow>
+                <TableHead className="font-medium">Marketer</TableHead>
+                <TableHead className="font-medium text-right">Total Amount</TableHead>
+                <TableHead className="font-medium text-right">Amount Paid</TableHead>
+                <TableHead className="font-medium text-right">Balance</TableHead>
+                <TableHead className="font-medium">Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ledger.length > 0 ? (
+                ledger.map((entry) => (
+                  <TableRow key={entry.id} className="hover:bg-gray-50">
+                    <TableCell>{entry.users?.name || "Unknown"}</TableCell>
+                    <TableCell className="text-right font-mono">{formatCurrency(entry.total_amount)}</TableCell>
+                    <TableCell className="text-right font-mono">{formatCurrency(entry.amount_paid)}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {entry.balance > 0 ? (
+                        <Badge variant="destructive">{formatCurrency(entry.balance)}</Badge>
+                      ) : (
+                        <Badge className="bg-green-500">{formatCurrency(entry.balance)}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                    No ledger entries found
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       )}
 
-      {showIncomeStatement && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[90vh] overflow-auto shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Income Statement</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={exportIncomeStatementToCSV}
-                  className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
-                >
-                  Download
-                </button>
-              </div>
-            </div>
-            
-            <div className="flex flex-wrap gap-4 mb-6 items-center">
-              <select
-                value={statementFilter}
-                onChange={(e) => setStatementFilter(e.target.value as any)}
-                className="p-2 border rounded"
-              >
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-                <option value="custom">Custom Range</option>
-              </select>
+      {/* Income Statement Dialog */}
+      <Dialog open={showIncomeStatement} onOpenChange={setShowIncomeStatement}>
+        <DialogContent className="rounded-lg max-w-6xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span>📊</span>
+              <span>Income Statement</span>
+            </DialogTitle>
+            <DialogDescription>
+              Financial overview for selected period
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex flex-wrap gap-4 mb-6 items-center">
+            <Select value={statementFilter} onValueChange={(value) => setStatementFilter(value as any)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="daily">Daily</SelectItem>
+                <SelectItem value="weekly">Weekly</SelectItem>
+                <SelectItem value="monthly">Monthly</SelectItem>
+                <SelectItem value="yearly">Yearly</SelectItem>
+                <SelectItem value="custom">Custom Range</SelectItem>
+              </SelectContent>
+            </Select>
 
-              {statementFilter === "custom" && (
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="date"
-                    value={customStartDate}
-                    onChange={(e) => setCustomStartDate(e.target.value)}
-                    className="p-2 border rounded"
-                  />
-                  <span>to</span>
-                  <input
-                    type="date"
-                    value={customEndDate}
-                    onChange={(e) => setCustomEndDate(e.target.value)}
-                    className="p-2 border rounded"
-                  />
-                </div>
-              )}
-
-              <button
-                onClick={fetchIncomeStatementData}
-                className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
-              >
-                Apply Filter
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <h3 className="font-semibold text-blue-800">Total Income (Amount expected from orders made)</h3>
-                <p className="text-xl font-mono">UGX {calculateProfitLoss().totalIncome.toLocaleString()}</p>
-              </div>
-              <div className="p-4 bg-green-50 rounded-lg border border-green-100">
-                <h3 className="font-semibold text-green-800">Total Profit (Amount Available)</h3>
-                <p className="text-xl font-mono">UGX {calculateProfitLoss().totalProfit.toLocaleString()}</p>
-              </div>
-              <div className="p-4 bg-red-50 rounded-lg border border-red-100">
-                <h3 className="font-semibold text-red-800">Total Expenses</h3>
-                <p className="text-xl font-mono">UGX {calculateProfitLoss().totalExpenses.toLocaleString()}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className={`p-4 rounded-lg border ${
-                calculateProfitLoss().netProfit > 0 
-                  ? "bg-green-50 border-green-100" 
-                  : "bg-gray-50 border-gray-100"
-              }`}>
-                <h3 className="font-semibold text-green-800">Net Profit</h3>
-                <p className="text-xl font-mono">
-                  {calculateProfitLoss().totalProfit > 0 
-                    ? `UGX ${calculateProfitLoss().totalProfit.toLocaleString()}`
-                    : "N/A"}
-                </p>
-              </div>
-              <div className={`p-4 rounded-lg border ${
-                calculateProfitLoss().netLoss > 0 
-                  ? "bg-red-50 border-red-100" 
-                  : "bg-gray-50 border-gray-100"
-              }`}>
-                <h3 className="font-semibold text-red-800">Net Loss</h3>
-                <p className="text-xl font-mono">
-                  {calculateProfitLoss().netLoss > 0 
-                    ? `UGX ${calculateProfitLoss().netLoss.toLocaleString()}`
-                    : "N/A"}
-                </p>
-              </div>
-            </div>
-
-            {/* Potential Loss Section */}
-            {calculateProfitLoss().totalPotentialLoss > 0 && (
-              <div className="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-100">
-                <h3 className="font-semibold text-orange-800 mb-2">Potential Loss (Unpaid Balances)</h3>
-                <p className="text-xl font-mono">UGX {calculateProfitLoss().totalPotentialLoss.toLocaleString()}</p>
-                <p className="text-sm text-orange-600 mt-1">
-                  This represents unpaid balances from orders taken!
-                </p>
+            {statementFilter === "custom" && (
+              <div className="flex gap-2 items-center">
+                <Input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                />
+                <span>to</span>
+                <Input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                />
               </div>
             )}
 
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold mb-3 text-blue-700">Income</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-blue-100">
-                      <th className="p-3 text-left">Date</th>
-                      <th className="p-3 text-left">Payment Mode</th>
-                      <th className="p-3 text-right">Amount Paid</th>
-                      <th className="p-3 text-right">Amount Available</th>
-                      <th className="p-3 text-left">Submitted By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {incomeData.map((item, index) => (
-                      <tr key={`income-${index}`} className="border-b hover:bg-blue-50">
-                        <td className="p-3">{new Date(item.created_at).toLocaleDateString()}</td>
-                        <td className="p-3">{item.mode_of_payment}</td>
-                        <td className="p-3 text-right font-mono">UGX {item.amount_paid?.toLocaleString()}</td>
-                        <td className="p-3 text-right font-mono">UGX {item.amount_available?.toLocaleString()}</td>
-                        <td className="p-3">{item.submittedby}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-3 text-red-700">Expenses</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-red-100">
-                      <th className="p-3 text-left">Date</th>
-                      <th className="p-3 text-left">Item</th>
-                      <th className="p-3 text-right">Amount</th>
-                      <th className="p-3 text-left">Department</th>
-                      <th className="p-3 text-left">Issued By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expenseData.map((item, index) => (
-                      <tr key={`expense-${index}`} className="border-b hover:bg-red-50">
-                        <td className="p-3">{new Date(item.date).toLocaleDateString()}</td>
-                        <td className="p-3">{item.item}</td>
-                        <td className="p-3 text-right font-mono">UGX {item.amount_spent?.toLocaleString()}</td>
-                        <td className="p-3">{item.department}</td>
-                        <td className="p-3">{item.submittedby}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={() => setShowIncomeStatement(false)}
-                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
-              >
-                Close
-              </button>
-            </div>
+            <Button
+              onClick={fetchIncomeStatementData}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Apply Filter
+            </Button>
           </div>
-        </div>
-      )}
 
-      {showFullAmountHistory && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Full Amount Available History</h2>
-              <button
-                onClick={() => setShowFullAmountHistory(false)}
-                className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
-              >
-                Close
-              </button>
-            </div>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card className="bg-blue-50 border-blue-200">
+              <CardHeader>
+                <CardTitle className="text-blue-600">Total Income</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xl font-mono font-bold">
+                  {formatCurrency(calculateProfitLoss().totalIncome)}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">Amount expected from orders</p>
+              </CardContent>
+            </Card>
             
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-200">
-                    <th className="p-3 text-left">Date</th>
-                    <th className="p-3 text-right">Amount (UGX)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allAmountsAvailable.map((entry, index) => (
-                    <tr 
-                      key={`full-amount-${index}`} 
-                      className={`border-b ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
-                    >
-                      <td className="p-3">{new Date(entry.created_at).toLocaleDateString()}</td>
-                      <td className="p-3 text-right font-mono">
-                        {entry.amount_available?.toLocaleString()}
-                      </td>
-                    </tr>
+            <Card className="bg-green-50 border-green-200">
+              <CardHeader>
+                <CardTitle className="text-green-600">Total Profit</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xl font-mono font-bold">
+                  {formatCurrency(calculateProfitLoss().totalProfit)}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">Amount Available</p>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-red-50 border-red-200">
+              <CardHeader>
+                <CardTitle className="text-red-600">Total Expenses</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xl font-mono font-bold">
+                  {formatCurrency(calculateProfitLoss().totalExpenses)}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Profit/Loss Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <Card className={`border ${
+              calculateProfitLoss().netProfit > 0 
+                ? "bg-green-50 border-green-200" 
+                : "bg-gray-50 border-gray-200"
+            }`}>
+              <CardHeader>
+                <CardTitle className="text-green-600">Net Profit</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xl font-mono font-bold">
+                  {calculateProfitLoss().netProfit > 0 
+                    ? formatCurrency(calculateProfitLoss().netProfit)
+                    : "N/A"}
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card className={`border ${
+              calculateProfitLoss().netLoss > 0 
+                ? "bg-red-50 border-red-200" 
+                : "bg-gray-50 border-gray-200"
+            }`}>
+              <CardHeader>
+                <CardTitle className="text-red-600">Net Loss</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xl font-mono font-bold">
+                  {calculateProfitLoss().netLoss > 0 
+                    ? formatCurrency(calculateProfitLoss().netLoss)
+                    : "N/A"}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Potential Loss Section */}
+          {calculateProfitLoss().totalPotentialLoss > 0 && (
+            <Card className="mb-6 bg-orange-50 border-orange-200">
+              <CardHeader>
+                <CardTitle className="text-orange-600">Potential Loss</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xl font-mono font-bold">
+                  {formatCurrency(calculateProfitLoss().totalPotentialLoss)}
+                </p>
+                <p className="text-sm text-orange-500 mt-1">
+                  Unpaid balances from orders
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Income Table */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-3 text-blue-600">Income</h3>
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader className="bg-blue-50">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Payment Mode</TableHead>
+                    <TableHead className="text-right">Amount Paid</TableHead>
+                    <TableHead className="text-right">Amount Available</TableHead>
+                    <TableHead>Submitted By</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {incomeData.map((item, index) => (
+                    <TableRow key={`income-${index}`} className="hover:bg-blue-50">
+                      <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{item.mode_of_payment}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(item.amount_paid)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(item.amount_available)}</TableCell>
+                      <TableCell>{item.submittedby}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
-        </div>
-      )}
+
+          {/* Expenses Table */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold mb-3 text-red-600">Expenses</h3>
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader className="bg-red-50">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Item</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Issued By</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expenseData.map((item, index) => (
+                    <TableRow key={`expense-${index}`} className="hover:bg-red-50">
+                      <TableCell>{new Date(item.date).toLocaleDateString()}</TableCell>
+                      <TableCell>{item.item}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(item.amount_spent)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{item.department}</Badge>
+                      </TableCell>
+                      <TableCell>{item.submittedby}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="secondary"
+              onClick={exportIncomeStatementToCSV}
+              className="mr-2"
+            >
+              Download CSV
+            </Button>
+            <Button 
+              onClick={() => setShowIncomeStatement(false)}
+              variant="destructive"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Full Amount History Dialog */}
+      <Dialog open={showFullAmountHistory} onOpenChange={setShowFullAmountHistory}>
+        <DialogContent className="rounded-lg max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span>🔄</span>
+              <span>Full Amount Available History</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allAmountsAvailable.map((entry, index) => (
+                  <TableRow key={`full-amount-${index}`}>
+                    <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatCurrency(entry.amount_available)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          
+          <DialogFooter>
+            <Button onClick={() => setShowFullAmountHistory(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
