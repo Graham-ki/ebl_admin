@@ -22,7 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
 
 type MonthlyOrderData = {
   name: string;
@@ -32,7 +31,6 @@ type MonthlyOrderData = {
 type CategoryData = {
   name: string;
   products: number;
-  fill?: string;
 };
 
 type LatestUser = {
@@ -44,73 +42,103 @@ type LatestUser = {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28DFF', '#FF6B6B'];
 
 const PageComponent = ({
-  monthlyOrders,
-  categoryData,
-  latestUsers,
+  monthlyOrders = [],
+  categoryData = [],
+  latestUsers = [],
 }: {
-  monthlyOrders: MonthlyOrderData[];
-  categoryData: CategoryData[];
-  latestUsers: LatestUser[];
+  monthlyOrders?: MonthlyOrderData[];
+  categoryData?: CategoryData[];
+  latestUsers?: LatestUser[];
 }) => {
-  // Enhance category data with colors
-  const enhancedCategoryData = categoryData.map((item, index) => ({
-    ...item,
-    fill: COLORS[index % COLORS.length],
-  }));
+  // Calculate totals for summary
+  const totalOrders = monthlyOrders.reduce((sum, item) => sum + item.orders, 0);
+  const totalProducts = categoryData.reduce((sum, item) => sum + item.products, 0);
+  const totalCategories = categoryData.length;
+  const totalUsers = latestUsers.length;
 
   return (
-    <div className="flex-1 p-4 md:p-8 overflow-auto">
-      {/* Modern header with gradient */}
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+    <div className='flex-1 p-4 md:p-8 overflow-auto'>
+      <div className='mb-8'>
+        <h1 className='text-3xl font-bold mb-4 text-center p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white'>
           Dashboard Overview
         </h1>
-        <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-          Key metrics and analytics at a glance
-        </p>
+        
+        {/* Summary Cards */}
+        <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6'>
+          <Card className='bg-blue-50 dark:bg-blue-900/30'>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-sm font-medium'>Total Orders</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>{totalOrders}</div>
+            </CardContent>
+          </Card>
+          
+          <Card className='bg-green-50 dark:bg-green-900/30'>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-sm font-medium'>Total Products</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>{totalProducts}</div>
+            </CardContent>
+          </Card>
+          
+          <Card className='bg-purple-50 dark:bg-purple-900/30'>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-sm font-medium'>Categories</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>{totalCategories}</div>
+            </CardContent>
+          </Card>
+          
+          <Card className='bg-orange-50 dark:bg-orange-900/30'>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-sm font-medium'>New Users</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>{totalUsers}</div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      {/* Dashboard Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Orders Over Time Chart */}
-        <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              Orders Over Time
+      <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+        {/* Orders Chart */}
+        <Card className='shadow-lg hover:shadow-xl transition-shadow duration-300 border border-gray-100 dark:border-gray-700'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              <span className='text-blue-500'>📈</span>
+              <span>Orders Over Time</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
+          <CardContent>
+            <div className='h-[300px]'>
+              <ResponsiveContainer width='100%' height='100%'>
                 <BarChart data={monthlyOrders}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <CartesianGrid strokeDasharray='3 3' stroke='#eee' strokeOpacity={0.5} />
                   <XAxis 
-                    dataKey="name" 
-                    tick={{ fill: '#6b7280' }} 
-                    axisLine={false}
+                    dataKey='name' 
+                    tick={{ fill: 'currentColor' }}
+                    stroke='currentColor'
                   />
                   <YAxis 
-                    tick={{ fill: '#6b7280' }} 
-                    axisLine={false}
-                    tickLine={false}
+                    tick={{ fill: 'currentColor' }}
+                    stroke='currentColor'
                   />
                   <Tooltip 
                     contentStyle={{
-                      backgroundColor: '#ffffff',
-                      border: 'none',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      backgroundColor: 'hsl(var(--background))',
+                      borderColor: 'hsl(var(--border))',
+                      borderRadius: 'var(--radius)',
                     }}
                   />
                   <Legend />
                   <Bar 
-                    dataKey="orders" 
-                    fill="#4f46e5" 
+                    dataKey='orders' 
+                    fill='#8884d8' 
                     radius={[4, 4, 0, 0]}
-                    animationDuration={1500}
+                    name='Monthly Orders'
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -118,49 +146,43 @@ const PageComponent = ({
           </CardContent>
         </Card>
 
-        {/* Product Distribution Pie Chart */}
-        <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
-              </svg>
-              Product Distribution
+        {/* Products Chart */}
+        <Card className='shadow-lg hover:shadow-xl transition-shadow duration-300 border border-gray-100 dark:border-gray-700'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              <span className='text-green-500'>🍕</span>
+              <span>Product Distribution</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
+          <CardContent>
+            <div className='h-[300px]'>
+              <ResponsiveContainer width='100%' height='100%'>
                 <PieChart>
                   <Pie
-                    data={enhancedCategoryData}
-                    dataKey="products"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
+                    data={categoryData}
+                    dataKey='products'
+                    cx='50%'
+                    cy='50%'
                     outerRadius={80}
-                    paddingAngle={2}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    fill='#8884d8'
                     labelLine={false}
+                    label={({ name, percent }) =>
+                      `${name} ${(percent * 100).toFixed(0)}%`
+                    }
                   >
-                    {enhancedCategoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    {categoryData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={COLORS[index % COLORS.length]}
+                      />
                     ))}
                   </Pie>
                   <Tooltip 
-                    formatter={(value) => [`${value} products`, 'Count']}
                     contentStyle={{
-                      backgroundColor: '#ffffff',
-                      border: 'none',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      backgroundColor: 'hsl(var(--background))',
+                      borderColor: 'hsl(var(--border))',
+                      borderRadius: 'var(--radius)',
                     }}
-                  />
-                  <Legend 
-                    layout="horizontal"
-                    verticalAlign="bottom"
-                    align="center"
-                    wrapperStyle={{ paddingTop: '20px' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -168,45 +190,41 @@ const PageComponent = ({
           </CardContent>
         </Card>
 
-        {/* Products per Category Bar Chart */}
-        <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              Products per Category
+        {/* Category to Products Chart */}
+        <Card className='shadow-lg hover:shadow-xl transition-shadow duration-300 border border-gray-100 dark:border-gray-700'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              <span className='text-purple-500'>🗂️</span>
+              <span>Products per Category</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={enhancedCategoryData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+          <CardContent>
+            <div className='h-[300px]'>
+              <ResponsiveContainer width='100%' height='100%'>
+                <BarChart data={categoryData}>
+                  <CartesianGrid strokeDasharray='3 3' stroke='#eee' strokeOpacity={0.5} />
                   <XAxis 
-                    dataKey="name" 
-                    tick={{ fill: '#6b7280' }} 
-                    axisLine={false}
+                    dataKey='name' 
+                    tick={{ fill: 'currentColor' }}
+                    stroke='currentColor'
                   />
                   <YAxis 
-                    tick={{ fill: '#6b7280' }} 
-                    axisLine={false}
-                    tickLine={false}
+                    tick={{ fill: 'currentColor' }}
+                    stroke='currentColor'
                   />
                   <Tooltip 
                     contentStyle={{
-                      backgroundColor: '#ffffff',
-                      border: 'none',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      backgroundColor: 'hsl(var(--background))',
+                      borderColor: 'hsl(var(--border))',
+                      borderRadius: 'var(--radius)',
                     }}
                   />
                   <Legend />
                   <Bar 
-                    dataKey="products" 
-                    fill="#8b5cf6" 
+                    dataKey='products' 
+                    fill='#82ca9d' 
                     radius={[4, 4, 0, 0]}
-                    animationDuration={1500}
+                    name='Products Count'
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -214,48 +232,38 @@ const PageComponent = ({
           </CardContent>
         </Card>
 
-        {/* Latest Users Table */}
-        <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-              Recent User Signups
+        {/* Latest Users */}
+        <Card className='shadow-lg hover:shadow-xl transition-shadow duration-300 border border-gray-100 dark:border-gray-700'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              <span className='text-orange-500'>👥</span>
+              <span>Latest Users</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div className="rounded-lg border overflow-hidden">
+          <CardContent>
+            <div className='max-h-[300px] overflow-y-auto'>
               <Table>
-                <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                <TableHeader className='sticky top-0 bg-background'>
                   <TableRow>
-                    <TableHead className="font-medium">User</TableHead>
-                    <TableHead className="font-medium text-right">Signup Date</TableHead>
+                    <TableHead className='w-[60%]'>Email</TableHead>
+                    <TableHead className='text-right'>Join Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {latestUsers.length > 0 ? (
-                    latestUsers.map((user) => (
-                      <TableRow key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                        <TableCell className="font-medium">
-                          <div className="flex items-center">
-                            <div className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 h-8 w-8 rounded-full flex items-center justify-center mr-3">
-                              {user.email.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-medium">{user.email}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right text-gray-500 dark:text-gray-400">
-                          {user.date ? new Date(user.date).toLocaleDateString() : 'N/A'}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
+                  {latestUsers.map(user => (
+                    <TableRow key={user.id} className='hover:bg-gray-50 dark:hover:bg-gray-800'>
+                      <TableCell className='font-medium truncate max-w-[200px]'>
+                        {user.email}
+                      </TableCell>
+                      <TableCell className='text-right'>
+                        {user.date || 'N/A'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {latestUsers.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={2} className="text-center py-8 text-gray-500">
-                        No recent users found
+                      <TableCell colSpan={2} className='text-center text-gray-500 py-4'>
+                        No users found
                       </TableCell>
                     </TableRow>
                   )}
