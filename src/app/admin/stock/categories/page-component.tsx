@@ -1,4 +1,5 @@
-'use client'
+'use client';
+
 import { FC, useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { PlusCircle } from 'lucide-react';
@@ -45,10 +46,8 @@ type Props = {
 };
 
 const CategoriesPageComponent: FC<Props> = ({ categories }) => {
-  const [isCreateCategoryModalOpen, setIsCreateCategoryModalOpen] =
-    useState(false);
-  const [currentCategory, setCurrentCategory] =
-    useState<CreateCategorySchema | null>(null);
+  const [isCreateCategoryModalOpen, setIsCreateCategoryModalOpen] = useState(false);
+  const [currentCategory, setCurrentCategory] = useState<CreateCategorySchema | null>(null);
 
   const form = useForm<CreateCategorySchema>({
     resolver: zodResolver(createCategorySchema),
@@ -97,74 +96,80 @@ const CategoriesPageComponent: FC<Props> = ({ categories }) => {
   };
 
   return (
-    <main className='grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8'>
-      <div className='flex items-center my-10'>
-        <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white'>Categories Management</h1>
-        <div className='ml-auto flex items-center gap-2'>
-          <Dialog
-            open={isCreateCategoryModalOpen}
-            onOpenChange={() =>
-              setIsCreateCategoryModalOpen(!isCreateCategoryModalOpen)
-            }
-          >
-            <DialogTrigger asChild>
-              <Button
-                size='sm'
-                className='h-8 gap-1'
-                onClick={() => {
-                  setCurrentCategory(null);
-                  setIsCreateCategoryModalOpen(true);
-                }}
-              >
-                <PlusCircle className='h-3.5 w-3.5' />
-                <span className='sr-only sm:not-sr-only sm:whitespace-nowrap'>
-                  Add Category
-                </span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className='dialog'>
-              <DialogHeader>
-                <DialogTitle>Create Category</DialogTitle>
-              </DialogHeader>
-              <CategoryForm
-                form={form}
-                onSubmit={submitCategoryHandler}
-                defaultValues={currentCategory}
-              />
-            </DialogContent>
-          </Dialog>
-        </div>
+    <main className='grid flex-1 gap-6 p-4 sm:px-6 md:gap-8 bg-gray-50 dark:bg-[#0c0c0c] rounded-xl'>
+      <div className='flex items-center justify-between py-4 px-2'>
+        <h1 className='text-3xl font-bold text-gray-800 dark:text-gray-100'>
+          Categories Management
+        </h1>
+        <Dialog
+          open={isCreateCategoryModalOpen}
+          onOpenChange={() => setIsCreateCategoryModalOpen(!isCreateCategoryModalOpen)}
+        >
+          <DialogTrigger asChild>
+            <Button
+              size='sm'
+              className='h-8 gap-1 rounded-full shadow-md bg-blue-600 hover:bg-blue-700 text-white'
+              onClick={() => {
+                setCurrentCategory(null);
+                setIsCreateCategoryModalOpen(true);
+              }}
+            >
+              <PlusCircle className='h-4 w-4' />
+              <span className='sr-only sm:not-sr-only sm:whitespace-nowrap'>
+                Add Category
+              </span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className='sm:max-w-md bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6'>
+            <DialogHeader>
+              <DialogTitle className='text-lg font-semibold'>Create Category</DialogTitle>
+            </DialogHeader>
+            <CategoryForm
+              form={form}
+              onSubmit={submitCategoryHandler}
+              defaultValues={currentCategory}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <Card className='overflow-x-auto card'>
-        <CardHeader>
-          <CardTitle>Categories</CardTitle>
+      <Card className='shadow-lg rounded-2xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800'>
+        <CardHeader className='bg-blue-100 dark:bg-gray-800 px-6 py-4'>
+          <CardTitle className='text-lg font-semibold text-gray-900 dark:text-white'>
+            Categories List
+          </CardTitle>
         </CardHeader>
 
-        <CardContent>
-          <Table className='min-w-[600px]'>
-            <TableHeader>
-              <TableRow>
-                <TableHead className='shadow-lg'>Name</TableHead>
-                <TableHead className='md:table-cell shadow-lg'>Created at</TableHead>
-                <TableHead className='md:table-cell shadow-lg'>Products</TableHead>
-                <TableHead className='shadow-lg'>
-                  <span className='sr-only'>Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categories.map(category => (
-                <CategoryTableRow
-                  key={category.id}
-                  category={category}
-                  setCurrentCategory={setCurrentCategory}
-                  setIsCreateCategoryModalOpen={setIsCreateCategoryModalOpen}
-                  deleteCategoryHandler={deleteCategoryHandler}
-                />
-              ))}
-            </TableBody>
-          </Table>
+        <CardContent className='px-4 py-2'>
+          <div className='w-full overflow-x-auto'>
+            <Table className='min-w-[600px] text-sm'>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className='font-medium text-gray-700 dark:text-gray-300'>Name</TableHead>
+                  <TableHead className='md:table-cell font-medium text-gray-700 dark:text-gray-300'>
+                    Created At
+                  </TableHead>
+                  <TableHead className='md:table-cell font-medium text-gray-700 dark:text-gray-300'>
+                    Products
+                  </TableHead>
+                  <TableHead>
+                    <span className='sr-only'>Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {categories.map(category => (
+                  <CategoryTableRow
+                    key={category.id}
+                    category={category}
+                    setCurrentCategory={setCurrentCategory}
+                    setIsCreateCategoryModalOpen={setIsCreateCategoryModalOpen}
+                    deleteCategoryHandler={deleteCategoryHandler}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </main>
