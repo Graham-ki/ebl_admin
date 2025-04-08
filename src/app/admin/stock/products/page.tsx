@@ -212,7 +212,7 @@ export default function SummaryPage() {
         console.error('Error adding product:', error);
         alert('Failed to add product.');
       } else {
-        alert('Product added successfully!');
+        alert('Beverage added successfully!');
         window.location.reload();
       }
     } catch (error) {
@@ -421,7 +421,7 @@ export default function SummaryPage() {
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-800">{product.title}</h2>
-                <p className="text-gray-600 text-sm mt-1">SKU: #{product.id.toString().padStart(4, '0')}</p>
+                <p className="text-gray-600 text-sm mt-1">EN: #{product.id.toString().padStart(4, '0')}</p>
               </div>
               <span className="text-2xl">📦</span>
             </div>
