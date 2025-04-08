@@ -247,7 +247,7 @@ export default function SummaryPage() {
 
     const combined = [
       ...(entries?.map((entry) => ({ type: 'Entry', data: entry })) || []),
-      ...(soldItems?.map((soldItem) => ({ type: 'Sold', data: soldItem })) || []),
+      ...(soldItems?.map((soldItem) => ({ type: 'Ordered', data: soldItem })) || []),
     ];
 
     setCombinedData(combined);
@@ -463,7 +463,7 @@ export default function SummaryPage() {
                         {combinedData.map((item, index) => (
                           <TableRow key={index} className="border-b border-gray-100 hover:bg-gray-50">
                             <TableCell className={item.type === 'Entry' ? 'text-blue-600' : 'text-green-600'}>
-                              {item.type === 'Entry' ? '📥 Inbound' : '📤 Sold'}
+                              {item.type === 'Entry' ? '📥 Inbound' : '📤 Ordered'}
                             </TableCell>
                             <TableCell>{item.data.quantity}</TableCell>
                             <TableCell>
