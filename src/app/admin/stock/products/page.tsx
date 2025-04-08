@@ -39,7 +39,7 @@ import {
 } from 'recharts';
 
 const supabaseUrl = 'https://kxnrfzcurobahklqefjs.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4bnJmemN1cm9iYWhrbHFlZmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc5NTk1MzUsImV4cCI6MjA1MzUzNTUzNX0.pHrrAPHV1ln1OHugnB93DTUY5TL9K8dYREhz1o0GkjE';
+const supabaseKey = 'ey...your_key_here...';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 type Product = {
@@ -54,7 +54,7 @@ type ProductEntry = {
   quantity: number;
   created_at: string;
   Created_by: string;
-  status: string; // Add status field
+  status: string;
 };
 
 type SoldProduct = {
@@ -80,297 +80,176 @@ export default function SummaryPage() {
   const [combinedData, setCombinedData] = useState<{ type: string; data: any }[]>([]);
   const [filteredSales, setFilteredSales] = useState<SoldProduct[]>([]);
   const [dateRange, setDateRange] = useState<[Date, Date]>([
-    new Date(new Date().setMonth(new Date().getMonth() - 1)), // Default: Last 1 month
+    new Date(new Date().setMonth(new Date().getMonth() - 1)),
     new Date(),
   ]);
 
-  // Fetch Products List
   useEffect(() => {
     const fetchProducts = async () => {
       const { data, error } = await supabase.from('product').select('id, title, maxQuantity');
-      if (error) console.error('Error fetching products:', error);
-      else setProducts(data || []);
+      if (!error) setProducts(data || []);
     };
-
     fetchProducts();
   }, []);
 
-  // Fetch Categories
   useEffect(() => {
     const fetchCategories = async () => {
       const { data, error } = await supabase.from('category').select('*');
-      if (error) console.error('Error fetching categories:', error);
-      else setCategories(data || []);
+      if (!error) setCategories(data || []);
     };
-
     fetchCategories();
   }, []);
 
-  // Fetch Sold Products (from approved orders only)
   const fetchSoldProducts = async () => {
-    try {
-      const { data: orderItems, error: orderItemsError } = await supabase
-        .from('order_item')
-        .select('order');
+    const { data: orderItems } = await supabase.from('order_item').select('order');
+    if (!orderItems?.length) return;
 
-      if (orderItemsError) {
-        console.error('Error fetching order items:', orderItemsError);
-        return;
-      }
+    const orderIds = [...new Set(orderItems.map((item) => item.order))];
+    const { data: approvedOrders } = await supabase
+      .from('order')
+      .select('id')
+      .in('id', orderIds)
+      .eq('status', 'Approved');
 
-      if (!orderItems || orderItems.length === 0) {
-        console.log('No order items found.');
-        return;
-      }
+    const approvedOrderIds = approvedOrders?.map((order) => order.id) || [];
+    const { data: validOrderItems } = await supabase
+      .from('order_item')
+      .select('product, quantity, created_at')
+      .or(approvedOrderIds.map((id) => `order.eq.${id}`).join(','));
 
-      const orderIds = [...new Set(orderItems.map((item) => item.order))];
+    const productIds = [...new Set(validOrderItems?.map((item) => item.product))];
+    const { data: products } = await supabase
+      .from('product')
+      .select('id, title')
+      .in('id', productIds);
 
-      const { data: approvedOrders, error: approvedOrdersError } = await supabase
-        .from('order')
-        .select('id')
-        .in('id', orderIds)
-        .eq('status', 'Approved');
+    const productMap = products?.reduce((acc, product) => {
+      acc[product.id] = product.title;
+      return acc;
+    }, {} as Record<number, string>);
 
-      if (approvedOrdersError) {
-        console.error('Error fetching approved orders:', approvedOrdersError);
-        return;
-      }
+    const soldProductsArray = validOrderItems?.map((orderItem) => ({
+      product_name: productMap?.[orderItem.product] || 'Unknown',
+      quantity: orderItem.quantity,
+      created_at: orderItem.created_at,
+    })) || [];
 
-      if (!approvedOrders || approvedOrders.length === 0) {
-        console.log('No approved orders found.');
-        return;
-      }
-
-      const approvedOrderIds = approvedOrders.map((order) => order.id);
-
-      const { data: validOrderItems, error: validOrderItemsError } = await supabase
-        .from('order_item')
-        .select('product, quantity, created_at')
-        .or(approvedOrderIds.map((id) => `order.eq.${id}`).join(','));
-
-      if (validOrderItemsError) {
-        console.error('Error fetching valid order items:', validOrderItemsError);
-        return;
-      }
-
-      if (!validOrderItems || validOrderItems.length === 0) {
-        console.log('No valid order items found.');
-        return;
-      }
-
-      const productIds = [...new Set(validOrderItems.map((item) => item.product))];
-      const { data: products, error: productsError } = await supabase
-        .from('product')
-        .select('id, title')
-        .in('id', productIds);
-
-      if (productsError) {
-        console.error('Error fetching product data:', productsError);
-        return;
-      }
-
-      const productMap = products.reduce((acc, product) => {
-        acc[product.id] = product.title;
-        return acc;
-      }, {});
-
-      const soldProductsArray = validOrderItems.map((orderItem) => ({
-        product_name: productMap[orderItem.product] || 'Unknown Product',
-        quantity: orderItem.quantity,
-        created_at: orderItem.created_at,
-      }));
-
-      setSoldProducts(soldProductsArray);
-      setFilteredSales(soldProductsArray);
-    } catch (error) {
-      console.error('Error in fetching sold products:', error);
-    }
+    setSoldProducts(soldProductsArray);
+    setFilteredSales(soldProductsArray);
   };
 
-  // Fetch Sold Products on Component Mount
   useEffect(() => {
     fetchSoldProducts();
   }, []);
 
-  // Handle Add Product
   const handleAddProduct = async () => {
-    const slug = slugify(title, { lower: true, strict: true });
-
     if (!title || !selectedCategory) {
-      alert('Please enter product title and select a category.');
+      alert('Please fill all fields');
       return;
     }
 
     setLoading(true);
+    const slug = slugify(title, { lower: true, strict: true });
 
-    try {
-      const { error } = await supabase
-        .from('product')
-        .insert([{ title, category: selectedCategory, maxQuantity: 0, slug }]);
+    const { error } = await supabase
+      .from('product')
+      .insert([{ title, category: selectedCategory, maxQuantity: 0, slug }]);
 
-      if (error) {
-        console.error('Error adding product:', error);
-        alert('Failed to add product.');
-      } else {
-        alert('Product added successfully!');
-        window.location.reload();
-      }
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      alert('An unexpected error occurred.');
-    } finally {
-      setLoading(false);
-    }
+    if (error) alert('Failed to add product');
+    else window.location.reload();
+    setLoading(false);
   };
 
-  // Fetch Combined Data for a Specific Product
   const fetchCombinedData = async (productId: number) => {
-    const { data: entries, error: entriesError } = await supabase
-      .from('product_entries')
-      .select('*')
-      .eq('product_id', productId);
-
-    if (entriesError) {
-      console.error('Error fetching product entries:', entriesError);
-      return;
-    }
-
-    const { data: soldItems, error: soldItemsError } = await supabase
-      .from('order_item')
-      .select('product, quantity, created_at')
-      .eq('product', productId);
-
-    if (soldItemsError) {
-      console.error('Error fetching sold products:', soldItemsError);
-      return;
-    }
-
+    const { data: entries } = await supabase.from('product_entries').select('*').eq('product_id', productId);
+    const { data: soldItems } = await supabase.from('order_item').select('*').eq('product', productId);
     const combined = [
-      ...(entries?.map((entry) => ({ type: 'Entry', data: entry })) || []),
-      ...(soldItems?.map((soldItem) => ({ type: 'Sold', data: soldItem })) || []),
+      ...(entries?.map((e) => ({ type: 'Entry', data: e })) || []),
+      ...(soldItems?.map((s) => ({ type: 'Sold', data: s })) || []),
     ];
-
     setCombinedData(combined);
   };
 
-  // Handle Product Click
   const handleProductClick = async (productId: number) => {
     setSelectedProductId(productId);
     await fetchCombinedData(productId);
   };
 
-  // Handle Date Range Change
   const handleDateRangeChange = (value: [Date, Date]) => {
     setDateRange(value);
-
     const filtered = soldProducts.filter((sale) => {
       const saleDate = new Date(sale.created_at);
       return saleDate >= value[0] && saleDate <= value[1];
     });
-
     setFilteredSales(filtered);
   };
 
-  // Get Most Selling Products
   const getMostSellingProducts = () => {
-    const productSales: { [key: string]: number } = {};
-
+    const counts: Record<string, number> = {};
     filteredSales.forEach((sale) => {
-      if (productSales[sale.product_name]) {
-        productSales[sale.product_name] += sale.quantity;
-      } else {
-        productSales[sale.product_name] = sale.quantity;
-      }
+      counts[sale.product_name] = (counts[sale.product_name] || 0) + sale.quantity;
     });
-
-    return Object.entries(productSales)
+    return Object.entries(counts)
       .map(([product, quantity]) => ({ product, quantity }))
       .sort((a, b) => b.quantity - a.quantity);
   };
 
-  // Get Sales Trends Over Time
   const getSalesTrends = () => {
-    const trends: { [key: string]: number } = {};
-
+    const trends: Record<string, number> = {};
     filteredSales.forEach((sale) => {
       const date = new Date(sale.created_at).toLocaleDateString();
-      if (trends[date]) {
-        trends[date] += sale.quantity;
-      } else {
-        trends[date] = sale.quantity;
-      }
+      trends[date] = (trends[date] || 0) + sale.quantity;
     });
-
     return Object.entries(trends).map(([date, quantity]) => ({ date, quantity }));
   };
 
-  // Pie Chart Data
   const pieChartData = getMostSellingProducts().map((item) => ({
     name: item.product,
     value: item.quantity,
   }));
 
-  // Pie Chart Colors
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
 
-  // Handle Approve Entry
   const handleApproveEntry = async (entryId: number) => {
-    const { error } = await supabase
-      .from('product_entries')
-      .update({ status: 'Approved' })
-      .eq('id', entryId);
-
-    if (error) {
-      console.error('Error approving entry:', error);
-      alert('Failed to approve entry.');
-    } else {
-      alert('Entry approved successfully!');
-      // Refresh the combined data
-      if (selectedProductId) {
-        await fetchCombinedData(selectedProductId);
-      }
+    const { error } = await supabase.from('product_entries').update({ status: 'Approved' }).eq('id', entryId);
+    if (!error && selectedProductId) {
+      await fetchCombinedData(selectedProductId);
     }
   };
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white">
+    <div className="container mx-auto px-4 py-6 space-y-10">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-200 to-blue-100 text-blue-800 px-6 py-3 rounded-xl shadow-md dark:bg-gray-800 dark:text-white">
           Beverages Summary
         </h1>
 
-        {/* Add Product Button */}
         <Dialog>
           <DialogTrigger asChild>
-            <Button variant="default">Add new</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white">Add New</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Add New beverage</DialogTitle>
-              <DialogDescription>Fill in the details below.</DialogDescription>
+              <DialogTitle>Add New Beverage</DialogTitle>
+              <DialogDescription>Fill in the product details.</DialogDescription>
             </DialogHeader>
-
             <Input
-              type="text"
               placeholder="Product Title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full"
             />
-
             <Select onValueChange={(value) => setSelectedCategory(Number(value))}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a Category" />
+              <SelectTrigger>
+                <SelectValue placeholder="Select Category" />
               </SelectTrigger>
               <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={String(category.id)}>
-                    {category.name}
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={String(cat.id)}>
+                    {cat.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-
             <Button onClick={handleAddProduct} disabled={loading}>
               {loading ? 'Adding...' : 'Add Product'}
             </Button>
@@ -378,33 +257,29 @@ export default function SummaryPage() {
         </Dialog>
       </div>
 
-      {/* List of Products */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {products.map((product) => (
-          <div key={product.id} className="p-4 bg-white shadow-md rounded-lg text-center">
-            <h2 className="text-lg font-semibold">{product.title}</h2>
-            <p className="text-gray-600">Available boxes: {product.maxQuantity}</p>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button
-                  onClick={() => handleProductClick(product.id)}
-                  className="mt-2"
-                >
-                  View Details
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Details for {product.title}</DialogTitle>
-                </DialogHeader>
-                <div className="max-h-[400px] overflow-auto">
+          <Card key={product.id} className="bg-white shadow-lg hover:shadow-xl transition-all duration-200">
+            <CardHeader className="text-center">
+              <CardTitle className="text-lg">{product.title}</CardTitle>
+              <p className="text-gray-500">Available: {product.maxQuantity}</p>
+            </CardHeader>
+            <CardContent className="flex justify-center">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button onClick={() => handleProductClick(product.id)}>View Details</Button>
+                </DialogTrigger>
+                <DialogContent className="max-h-[500px] overflow-y-auto space-y-4">
+                  <DialogHeader>
+                    <DialogTitle>Details for {product.title}</DialogTitle>
+                  </DialogHeader>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Transaction</TableHead>
-                        <TableHead>Boxes</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Qty</TableHead>
                         <TableHead>Date</TableHead>
-                        <TableHead>Created By</TableHead>
+                        <TableHead>By</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -413,22 +288,15 @@ export default function SummaryPage() {
                         <TableRow key={index}>
                           <TableCell>{item.type}</TableCell>
                           <TableCell>{item.data.quantity}</TableCell>
-                          <TableCell>
-                            {new Date(item.data.created_at).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell>
-                            {item.type === 'Entry' ? item.data.Created_by : '-'}
-                          </TableCell>
+                          <TableCell>{new Date(item.data.created_at).toLocaleDateString()}</TableCell>
+                          <TableCell>{item.type === 'Entry' ? item.data.Created_by : '-'}</TableCell>
                           <TableCell>
                             {item.type === 'Entry' && item.data.status === 'Pending' ? (
-                              <Button
-                                variant="outline"
-                                onClick={() => handleApproveEntry(item.data.id)}
-                              >
+                              <Button onClick={() => handleApproveEntry(item.data.id)} variant="outline" size="sm">
                                 Approve
                               </Button>
-                            ) : item.type === 'Entry' && item.data.status === 'Approved' ? (
-                              <span className="text-green-500">Approved</span>
+                            ) : item.type === 'Entry' ? (
+                              <span className="text-green-600 font-semibold">Approved</span>
                             ) : (
                               '-'
                             )}
@@ -437,72 +305,54 @@ export default function SummaryPage() {
                       ))}
                     </TableBody>
                   </Table>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+                </DialogContent>
+              </Dialog>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      {/* Sales Table and Charts Section */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-4">Sales Overview</h2>
+      {/* Charts and Table Section */}
+      <section className="space-y-10">
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Date Range</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Calendar onChange={handleDateRangeChange as any} value={dateRange} selectRange />
+          </CardContent>
+        </Card>
 
-        {/* Date Range Picker */}
-        <div className="mb-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Sales Table</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Beverage</TableHead>
+                  <TableHead>Boxes Sold</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredSales.map((sale, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>{sale.product_name}</TableCell>
+                    <TableCell>{sale.quantity}</TableCell>
+                    <TableCell>{new Date(sale.created_at).toLocaleDateString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <div className="grid lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Select Date Range</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Calendar
-                onChange={handleDateRangeChange as any}
-                value={dateRange}
-                selectRange={true}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Sales Table */}
-        <div className="mb-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Sales Table</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="max-h-[400px] overflow-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Beverage</TableHead>
-                      <TableHead>Boxes sold</TableHead>
-                      <TableHead>Date</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredSales.map((sale, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{sale.product_name}</TableCell>
-                        <TableCell>{sale.quantity}</TableCell>
-                        <TableCell>
-                          {new Date(sale.created_at).toLocaleDateString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Most Selling Products Bar Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Most Selling beverages</CardTitle>
+              <CardTitle>Top Selling Beverages</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -512,16 +362,15 @@ export default function SummaryPage() {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="quantity" fill="#8884d8" />
+                  <Bar dataKey="quantity" fill="#4F46E5" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Sales Trends Line Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Sales Trends</CardTitle>
+              <CardTitle>Sales Trend</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -531,13 +380,12 @@ export default function SummaryPage() {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="quantity" fill="#82ca9d" />
+                  <Bar dataKey="quantity" fill="#10B981" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Pie Chart for Most Selling Products */}
           <Card>
             <CardHeader>
               <CardTitle>Beverage Sales Distribution</CardTitle>
@@ -545,18 +393,9 @@ export default function SummaryPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
-                  <Pie
-                    data={pieChartData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    fill="#8884d8"
-                    label
-                  >
-                    {pieChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Pie data={pieChartData} dataKey="value" nameKey="name" outerRadius={100} label>
+                    {pieChartData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip />
@@ -566,7 +405,7 @@ export default function SummaryPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
