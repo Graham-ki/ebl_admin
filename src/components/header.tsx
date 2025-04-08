@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { CircleUser, Menu, Moon, Package2, Search, Sun } from 'lucide-react';
+import { CircleUser, Menu, Moon, Package2, Search, Sun, X } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,33 +18,32 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { useTheme } from 'next-themes';
 import { createClient } from '@/supabase/client';
-import { debounce } from 'lodash'; // Import debounce utility
+import { debounce } from 'lodash';
 
 const NAV_LINKS = [
-  { href: '/admin/dashboard', label: 'Dashboard' },
-  { href: '/admin/stock', label: 'Stock' },
-  { href: '/admin/users', label: 'Marketers' },
-  { href: '/admin/orders', label: 'Orders' },
-  { href: '/admin/ledgers', label: 'Finances' },
+  { href: '/admin/dashboard', label: 'Dashboard', icon: <Package2 className="h-4 w-4" /> },
+  { href: '/admin/stock', label: 'Stock', icon: <Package2 className="h-4 w-4" /> },
+  { href: '/admin/users', label: 'Marketers', icon: <CircleUser className="h-4 w-4" /> },
+  { href: '/admin/orders', label: 'Orders', icon: <Package2 className="h-4 w-4" /> },
+  { href: '/admin/ledgers', label: 'Finances', icon: <Package2 className="h-4 w-4" /> },
 ];
 
 export const Header = () => {
   const pathname = usePathname();
-  const { setTheme } = useTheme();
+  const { setTheme, theme } = useTheme();
   const router = useRouter();
   const supabase = createClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Handle search input change
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
     setSearchQuery(query);
-    performSearch(query); // Trigger debounced search
+    performSearch(query);
   };
 
-  // Debounced search function
   const performSearch = useCallback(
     debounce(async (query: string) => {
       if (!query.trim()) {
@@ -54,36 +53,14 @@ export const Header = () => {
 
       setLoading(true);
 
-      // Perform search across multiple tables
       const searchPromises = [
-        supabase
-          .from('product')
-          .select('*')
-          .ilike('title', `%${query}%`), // Search in product table
-        supabase
-          .from('products_materials')
-          .select('*')
-          .ilike('product_id', `%${query}%`), // Search in products_materials table
-        supabase
-          .from('order')
-          .select('*')
-          .ilike('slug', `%${query}%`), // Search in order table
-        supabase
-          .from('materials')
-          .select('*')
-          .ilike('name', `%${query}%`), // Search in materials table
-        supabase
-          .from('expenses')
-          .select('*')
-          .ilike('item', `%${query}%`), // Search in expenses table
-        supabase
-          .from('users')
-          .select('*')
-          .ilike('name', `%${query}%`), // Search in users table
-        supabase
-          .from('finance')
-          .select('*')
-          .or(`mode_of_payment.ilike.%${query}%,mode_of_mobilemoney.ilike.%${query}%,bank_name.ilike.%${query}%`), // Search in user_ledger table
+        supabase.from('product').select('*').ilike('title', `%${query}%`),
+        supabase.from('products_materials').select('*').ilike('product_id', `%${query}%`),
+        supabase.from('order').select('*').ilike('slug', `%${query}%`),
+        supabase.from('materials').select('*').ilike('name', `%${query}%`),
+        supabase.from('expenses').select('*').ilike('item', `%${query}%`),
+        supabase.from('users').select('*').ilike('name', `%${query}%`),
+        supabase.from('finance').select('*').or(`mode_of_payment.ilike.%${query}%,mode_of_mobilemoney.ilike.%${query}%,bank_name.ilike.%${query}%`),
       ];
 
       try {
@@ -100,7 +77,7 @@ export const Header = () => {
           ];
           return (result.data || []).map((item) => ({
             ...item,
-            table: tableNames[index], // Add table name to each result
+            table: tableNames[index],
           }));
         });
         setSearchResults(combinedResults);
@@ -109,21 +86,18 @@ export const Header = () => {
       } finally {
         setLoading(false);
       }
-    }, 300), // Debounce delay of 300ms
+    }, 300),
     [supabase]
   );
 
-  // Handle result click
   const handleResultClick = (result: any) => {
     if (result.table === 'user_ledger') {
-      // Navigate to the user_ledger details page
       router.push(`/admin/search/user_ledger/${result.id}`);
     } else {
-      // Navigate to the search result page for other tables
       router.push(`/admin/search/${result.table}/${result.id}`);
     }
-    setSearchQuery(''); // Clear search query
-    setSearchResults([]); // Clear search results
+    setSearchQuery('');
+    setSearchResults([]);
   };
 
   const handleLogout = async () => {
@@ -131,12 +105,18 @@ export const Header = () => {
     router.push('/');
   };
 
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 shadow-lg md:px-6">
-      <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
+    <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
+      {/* Desktop Navigation */}
+      <nav className="hidden md:flex items-center space-x-1">
         <Link
           href="/"
-          className="flex items-center gap-2 text-lg font-semibold md:text-base"
+          className="flex items-center justify-center h-10 w-10 rounded-lg mr-2"
         >
           <Package2 className="h-6 w-6" />
         </Link>
@@ -145,134 +125,167 @@ export const Header = () => {
             key={href}
             href={href}
             className={cn(
-              'rounded-lg px-3 py-2 border border-gray-300 dark:border-gray-600 shadow-md bg-white dark:bg-gray-800 text-black dark:text-white hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors',
-              {
-                'bg-gray-300 dark:bg-gray-700 shadow-lg font-bold': pathname === href,
-              }
+              'flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-colors relative',
+              'hover:bg-accent hover:text-accent-foreground',
+              pathname === href
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground'
             )}
           >
             {label}
+            {pathname === href && (
+              <span className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-4/5 h-0.5 bg-primary-foreground rounded-full" />
+            )}
           </Link>
         ))}
       </nav>
-      <Sheet>
-        <SheetTrigger asChild>
-          <Button variant="outline" size="icon" className="shrink-0 md:hidden">
+
+      {/* Mobile Navigation */}
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetTrigger asChild className="md:hidden">
+          <Button variant="ghost" size="icon" className="shrink-0">
             <Menu className="h-5 w-5" />
             <span className="sr-only">Toggle navigation menu</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side="left">
-          <nav className="grid gap-6 text-lg font-medium">
-            <Link
-              href="/"
-              className="flex items-center gap-2 text-lg font-semibold"
-            >
-              <Package2 className="h-6 w-6" />
-            </Link>
-            {NAV_LINKS.map(({ href, label }) => (
+        <SheetContent side="left" className="pt-12">
+          <nav className="grid gap-2">
+            {NAV_LINKS.map(({ href, label, icon }) => (
               <Link
                 key={href}
                 href={href}
+                onClick={() => setMobileMenuOpen(false)}
                 className={cn(
-                  'block rounded-lg px-3 py-2 border shadow-md transition-colors',
-                  'border-gray-300 bg-white text-black hover:bg-gray-200',
-                  'dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700',
-                  pathname === href &&
-                    'bg-blue-500 text-white border-blue-600 shadow-lg dark:bg-blue-600 dark:border-blue-700 dark:text-gray-200',
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all',
+                  'hover:text-primary hover:bg-accent',
+                  pathname === href && 'bg-accent text-primary'
                 )}
               >
+                {icon}
                 {label}
               </Link>
             ))}
           </nav>
         </SheetContent>
       </Sheet>
-      <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
-        <form className="ml-auto flex-1 sm:flex-initial">
+
+      {/* Search and User Controls */}
+      <div className="flex w-full items-center justify-end gap-2 md:gap-4 md:ml-auto">
+        {/* Search Bar */}
+        <div className="relative flex-1 max-w-md">
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search anything..."
-              className="pl-8 sm:w-[300px] md:w-[200px] lg:w-[300px]"
+              placeholder="Search products, orders, users..."
+              className="pl-9 pr-8 w-full"
               value={searchQuery}
               onChange={handleSearchInputChange}
             />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-        </form>
-        {/* Display search results */}
-        {searchQuery && (
-          <div className="absolute top-16 left-0 right-0 bg-white dark:bg-gray-800 shadow-lg rounded-lg mx-4 z-20">
-            <div className="p-4">
+
+          {/* Search Results Dropdown */}
+          {searchQuery && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-popover text-popover-foreground rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto">
               {loading ? (
-                <p>Loading...</p>
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  Searching...
+                </div>
               ) : searchResults.length > 0 ? (
-                searchResults.map((result) => (
-                  <div
-                    key={result.id}
-                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-                    onClick={() => handleResultClick(result)}
-                  >
-                    <p className="text-black dark:text-white">
-                      {result.title || result.material_name || result.slug || result.name || result.item || result.email || result.mode_of_payment || result.mode_of_mobilemoney || result.bank_name}
-                    </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {result.table}
-                    </p>
-                    {result.table === 'finance' && (
-                      <>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Amount: UGX {result.amount_paid}
-                        </p>
-                        {result.mode_of_payment === 'Bank' && (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Bank Name: {result.bank_name}
+                <div className="divide-y">
+                  {searchResults.map((result) => (
+                    <button
+                      key={`${result.table}-${result.id}`}
+                      className="w-full text-left p-3 hover:bg-accent transition-colors"
+                      onClick={() => handleResultClick(result)}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium">
+                            {result.title || result.material_name || result.slug || 
+                             result.name || result.item || result.email || 
+                             result.mode_of_payment || result.mode_of_mobilemoney || 
+                             result.bank_name}
                           </p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {result.table.replace('_', ' ')}
+                          </p>
+                        </div>
+                        {result.table === 'finance' && (
+                          <span className="text-sm font-mono bg-primary/10 text-primary px-2 py-1 rounded">
+                            UGX {result.amount_paid}
+                          </span>
                         )}
-                      </>
-                    )}
-                  </div>
-                ))
+                      </div>
+                    </button>
+                  ))}
+                </div>
               ) : (
-                <p>No results found.</p>
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  No results found
+                </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Theme Toggle */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="secondary" size="icon" className="rounded-full">
+            <Button variant="ghost" size="icon">
+              <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+              <span className="sr-only">Toggle theme</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setTheme('light')}>
+              Light
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme('dark')}>
+              Dark
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme('system')}>
+              System
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* User Menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full">
               <CircleUser className="h-5 w-5" />
               <span className="sr-only">Toggle user menu</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button className="w-full" variant="outline" size="icon">
-                    <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                    <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                    <span className="sr-only">Toggle theme</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setTheme('light')}>
-                    Light
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme('dark')}>
-                    Dark
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme('system')}>
-                    System
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Link href="/admin/profile" className="w-full">
+                Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/settings" className="w-full">
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="text-destructive focus:text-destructive"
+            >
+              Logout
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
