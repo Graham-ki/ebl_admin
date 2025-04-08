@@ -1,11 +1,30 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createClient } from "@supabase/supabase-js";
 
 // Initialize Supabase client
@@ -63,36 +82,24 @@ const MaterialsPage = () => {
     fetchMaterialEntries();
   }, [filter, customDate]);
 
-  // Fetch materials and apply automatic deduction
   const fetchMaterials = async () => {
     setLoading(true);
-
-    // Fetch materials from the database
-    const { data: materialsData, error: materialsError } = await supabase
+    const { data: materialsData, error } = await supabase
       .from("materials")
       .select("id, amount_available, unit, name");
-
-    if (materialsError) {
-      console.error("Error fetching materials:", materialsError);
-      setLoading(false);
-      return;
+    if (error) {
+      console.error("Error fetching materials:", error);
+    } else {
+      setMaterials(materialsData || []);
     }
-
-    // Set materials without modifying amount_available
-    setMaterials(materialsData || []);
     setLoading(false);
   };
 
-  // Fetch material entries with filtering
   const fetchMaterialEntries = async () => {
     let query = supabase
       .from("material_entries")
       .select("id, material_id, quantity, action, date, created_by");
 
-    // Apply filtering logic
-    if (filter === "daily" || filter === "monthly" || filter === "yearly") {
-      query = query.order("date", { ascending: false });
-    }
     if (filter === "daily") {
       const today = new Date().toISOString().split("T")[0];
       query = query.gte("date", today);
@@ -113,9 +120,7 @@ const MaterialsPage = () => {
       return;
     }
 
-    // Fetch material names separately
     const materialIds = [...new Set(entries.map((entry) => entry.material_id))];
-
     const { data: materials, error: materialsError } = await supabase
       .from("materials")
       .select("id, name")
@@ -126,40 +131,34 @@ const MaterialsPage = () => {
       return;
     }
 
-    // Merge material names into entries
     const mergedEntries = entries.map((entry) => ({
       ...entry,
-      material_name: materials.find((material) => material.id === entry.material_id)?.name || "Unknown",
+      material_name: materials.find((m) => m.id === entry.material_id)?.name || "Unknown",
     }));
 
     setMaterialEntries(mergedEntries);
   };
 
-  // Handle adding new material
   const handleAddMaterial = async () => {
     const { name, amount_available, unit } = newMaterial;
-
     if (!name || amount_available < 0 || unit < 0) {
       alert("Please enter valid details.");
       return;
     }
 
-    const { data, error } = await supabase.from("materials").insert([{
-      name, amount_available, unit
-    }]);
-
+    const { error } = await supabase.from("materials").insert([{ name, amount_available, unit }]);
     if (error) {
       console.error("Error adding material:", error);
       alert("Failed to add material.");
       return;
     }
 
-    setMaterials([...materials, { ...newMaterial }]);
     setIsAdding(false);
-    alert("Material added successfully!");
+    setNewMaterial({ name: "", amount_available: 0, unit: 0 });
+    fetchMaterials();
+    alert("✅ Material added successfully!");
   };
 
-  // Handle editing material
   const handleEditMaterial = (material: Material) => {
     setEditMaterial(material);
     setIsEditing(true);
@@ -180,97 +179,76 @@ const MaterialsPage = () => {
       return;
     }
 
-    setMaterials(materials.map((m) => (m.id === id ? editMaterial : m)));
     setIsEditing(false);
-    alert("Material updated successfully!");
+    fetchMaterials();
+    alert("✏️ Material updated successfully!");
   };
 
-  // Handle deleting material
   const handleDeleteMaterial = async (id: string) => {
     const { error } = await supabase.from("materials").delete().eq("id", id);
-
     if (error) {
       console.error("Error deleting material:", error);
       alert("Failed to delete material.");
       return;
     }
-
-    setMaterials(materials.filter((m) => m.id !== id));
-    alert("Material deleted successfully!");
+    fetchMaterials();
+    alert("🗑️ Material deleted successfully!");
   };
 
-  // Handle viewing material details
   const handleViewDetails = async (material: Material) => {
     setViewMaterial(material);
     setIsViewDetailsOpen(true);
 
-    // Fetch the latest amount_available from the database
-    const { data: latestMaterial, error: materialError } = await supabase
+    const { data: latestMaterial } = await supabase
       .from("materials")
       .select("amount_available")
       .eq("id", material.id)
       .single();
 
-    if (materialError) {
-      console.error("Error fetching latest material data:", materialError);
-      return;
-    }
-
-    // Fetch material entries for amount_used
-    const { data: materialEntries, error: entriesError } = await supabase
+    const { data: entries } = await supabase
       .from("material_entries")
       .select("quantity")
       .eq("material_id", material.id)
       .eq("action", "Taken to production");
 
-    if (entriesError) {
-      console.error("Error fetching material entries:", entriesError);
-      return;
-    }
+    const amountUsed = entries?.reduce((sum, entry) => sum + entry.quantity, 0) || 0;
 
-    const amountUsed = materialEntries.reduce((sum, entry) => sum + entry.quantity, 0);
-
-    // Fetch product entries for boxes_produced
-    const { data: productEntries, error: productError } = await supabase
+    const { data: productEntries } = await supabase
       .from("product_entries")
       .select("quantity")
       .eq("Created_by", "Store Manager");
 
-    if (productError) {
-      console.error("Error fetching product entries:", productError);
-      return;
-    }
-
-    const boxesProduced = productEntries.reduce((sum, entry) => sum + entry.quantity, 0);
-
-    // Calculate boxes_expected and percentage_damage
+    const boxesProduced = productEntries?.reduce((sum, entry) => sum + entry.quantity, 0) || 0;
     const boxesExpected = amountUsed / material.unit;
     const percentageDamage = ((boxesExpected - boxesProduced) / boxesExpected) * 100;
 
     setMaterialDetails({
-      amount_available: latestMaterial.amount_available, // Use the latest amount_available from the database
+      amount_available: latestMaterial?.amount_available ?? 0,
       amount_used: amountUsed,
-      boxes_expected: boxesExpected,
+      boxes_expected: boxesExpected || 0,
       boxes_produced: boxesProduced,
-      percentage_damage: percentageDamage,
+      percentage_damage: isNaN(percentageDamage) ? 0 : percentageDamage,
     });
   };
 
   return (
     <div className="container mx-auto p-6">
-      <h1 className='text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white'>
-        Materials Management
+      <h1 className="text-4xl font-bold text-center mb-8 bg-gradient-to-r from-blue-200 to-purple-200 text-blue-900 p-4 rounded-xl shadow-md">
+        📦 Materials Management
       </h1>
-      <Button onClick={() => setIsAdding(true)} className="mb-6">
-        Add Material
-      </Button>
+
+      <div className="flex justify-between mb-6">
+        <Button onClick={() => setIsAdding(true)} className="bg-green-100 text-green-900 hover:bg-green-200">
+          ➕ Add Material
+        </Button>
+      </div>
 
       {loading ? (
-        <p>Loading...</p>
+        <p className="text-center">Loading materials...</p>
       ) : (
-        <Table className="w-full">
+        <Table className="rounded-xl border shadow-sm bg-white">
           <TableHeader>
-            <TableRow>
+            <TableRow className="bg-blue-50">
               <TableHead className="text-center">Name</TableHead>
               <TableHead className="text-center">Actions</TableHead>
             </TableRow>
@@ -280,151 +258,74 @@ const MaterialsPage = () => {
               materials.map((material) => (
                 <TableRow key={material.id}>
                   <TableCell className="text-center">{material.name}</TableCell>
-                  <TableCell className="text-center">
-                    <Button variant="default" onClick={() => handleViewDetails(material)}>Details</Button>
-                    <Button variant="secondary" onClick={() => handleEditMaterial(material)}>Edit</Button>
-                    <Button variant="destructive" onClick={() => handleDeleteMaterial(material.id!)}>Delete</Button>
+                  <TableCell className="text-center flex justify-center gap-2">
+                    <Button size="sm" onClick={() => handleViewDetails(material)}>📄 Details</Button>
+                    <Button size="sm" variant="secondary" onClick={() => handleEditMaterial(material)}>✏️ Edit</Button>
+                    <Button size="sm" variant="destructive" onClick={() => handleDeleteMaterial(material.id!)}>🗑️ Delete</Button>
                   </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={2} className="text-center">
-                  No materials found
-                </TableCell>
+                <TableCell colSpan={2} className="text-center py-4">No materials found.</TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       )}
 
-      {/* Add Material Modal */}
+      {/* Add Material Dialog */}
       <Dialog open={isAdding} onOpenChange={setIsAdding}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New Material</DialogTitle>
+            <DialogTitle>➕ Add New Material</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Input
-                placeholder="Material Name"
-                value={newMaterial.name}
-                onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })}
-                className="w-full"
-              />
-            </div>
-            <div>
-              <Input
-                type="number"
-                placeholder="Amount Available"
-                value={newMaterial.amount_available || ""}
-                onChange={(e) => setNewMaterial({ ...newMaterial, amount_available: parseFloat(e.target.value) })}
-                className="w-full"
-                step="any"
-              />
-            </div>
-            <div>
-              <Input
-                placeholder="Unit Per Box"
-                value={newMaterial.unit ?? ""}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === "" || !isNaN(Number(value))) {
-                    setNewMaterial({ ...newMaterial, unit: parseFloat(value) });
-                  }
-                }}
-                className="w-full"
-                type="number"
-                step="any"
-                inputMode="decimal"
-              />
-            </div>
+            <Input placeholder="Material Name" value={newMaterial.name} onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })} />
+            <Input type="number" placeholder="Amount Available" value={newMaterial.amount_available || ""} onChange={(e) => setNewMaterial({ ...newMaterial, amount_available: parseFloat(e.target.value) })} />
+            <Input type="number" placeholder="Unit Per Box" value={newMaterial.unit || ""} onChange={(e) => setNewMaterial({ ...newMaterial, unit: parseFloat(e.target.value) })} />
           </div>
           <DialogFooter>
-            <Button onClick={() => setIsAdding(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setIsAdding(false)}>Cancel</Button>
             <Button onClick={handleAddMaterial}>Add</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Material Modal */}
+      {/* Edit Material Dialog */}
       <Dialog open={isEditing} onOpenChange={setIsEditing}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Material</DialogTitle>
+            <DialogTitle>✏️ Edit Material</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Input
-                placeholder="Material Name"
-                value={editMaterial?.name || ""}
-                onChange={(e) => setEditMaterial({ ...editMaterial!, name: e.target.value })}
-                className="w-full"
-              />
-            </div>
-            <div>
-              <Input
-                type="number"
-                placeholder="Amount Available"
-                value={editMaterial?.amount_available || 0}
-                onChange={(e) =>
-                  setEditMaterial({ ...editMaterial!, amount_available: +e.target.value })
-                }
-                className="w-full"
-              />
-            </div>
-            <div>
-              <Input
-                type="number"
-                placeholder="Unit Per Box"
-                value={editMaterial?.unit || 0}
-                onChange={(e) => setEditMaterial({ ...editMaterial!, unit: +e.target.value })}
-                className="w-full"
-              />
-            </div>
+            <Input placeholder="Material Name" value={editMaterial?.name || ""} onChange={(e) => setEditMaterial({ ...editMaterial!, name: e.target.value })} />
+            <Input type="number" placeholder="Amount Available" value={editMaterial?.amount_available || 0} onChange={(e) => setEditMaterial({ ...editMaterial!, amount_available: +e.target.value })} />
+            <Input type="number" placeholder="Unit Per Box" value={editMaterial?.unit || 0} onChange={(e) => setEditMaterial({ ...editMaterial!, unit: +e.target.value })} />
           </div>
           <DialogFooter>
-            <Button onClick={() => setIsEditing(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
             <Button onClick={handleUpdateMaterial}>Update</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* View Material Details Modal */}
+      {/* View Details Dialog */}
       <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
         <DialogContent>
-          {viewMaterial && materialDetails && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Details of {viewMaterial.name}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <Table>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>Amount Available</TableCell>
-                      <TableCell>{materialDetails.amount_available}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Amount Used</TableCell>
-                      <TableCell>{materialDetails.amount_used}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Boxes Expected</TableCell>
-                      <TableCell>{materialDetails.boxes_expected.toFixed(2)}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Boxes Produced</TableCell>
-                      <TableCell>{materialDetails.boxes_produced}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Percentage Damage</TableCell>
-                      <TableCell>{materialDetails.percentage_damage.toFixed(2)}%</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </>
+          <DialogHeader>
+            <DialogTitle>📊 Details of {viewMaterial?.name}</DialogTitle>
+          </DialogHeader>
+          {materialDetails && (
+            <Table>
+              <TableBody>
+                <TableRow><TableCell>Amount Available</TableCell><TableCell>{materialDetails.amount_available}</TableCell></TableRow>
+                <TableRow><TableCell>Amount Used</TableCell><TableCell>{materialDetails.amount_used}</TableCell></TableRow>
+                <TableRow><TableCell>Boxes Expected</TableCell><TableCell>{materialDetails.boxes_expected.toFixed(2)}</TableCell></TableRow>
+                <TableRow><TableCell>Boxes Produced</TableCell><TableCell>{materialDetails.boxes_produced}</TableCell></TableRow>
+                <TableRow><TableCell>Damage %</TableCell><TableCell>{materialDetails.percentage_damage.toFixed(2)}%</TableCell></TableRow>
+              </TableBody>
+            </Table>
           )}
           <DialogFooter>
             <Button onClick={() => setIsViewDetailsOpen(false)}>Close</Button>
@@ -432,36 +333,28 @@ const MaterialsPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Material Entries Table with Filters */}
-      <div className="mt-8">
-        <h2 className="text-2xl font-bold mb-4">Material Entries</h2>
-        <div className="mb-4 flex gap-2">
+      {/* Material Entries Section */}
+      <div className="mt-12">
+        <h2 className="text-2xl font-semibold mb-4">📘 Material Entries</h2>
+        <div className="flex gap-2 mb-4">
           <Select onValueChange={setFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Filter by" />
-            </SelectTrigger>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="daily">Daily</SelectItem>
               <SelectItem value="monthly">Monthly</SelectItem>
               <SelectItem value="yearly">Yearly</SelectItem>
-              <SelectItem value="custom">Custom Date</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
             </SelectContent>
           </Select>
-
           {filter === "custom" && (
-            <Input
-              type="date"
-              value={customDate}
-              onChange={(e) => setCustomDate(e.target.value)}
-              className="w-[180px]"
-            />
+            <Input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} />
           )}
         </div>
 
-        <Table>
+        <Table className="bg-white rounded-xl shadow-md">
           <TableHeader>
-            <TableRow>
+            <TableRow className="bg-blue-50">
               <TableHead>Material</TableHead>
               <TableHead>Quantity</TableHead>
               <TableHead>Action</TableHead>
