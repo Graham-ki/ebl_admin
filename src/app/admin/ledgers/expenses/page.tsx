@@ -1,7 +1,7 @@
-"use client";
+'use client';
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { saveAs } from "file-saver"; // For CSV export
+import { saveAs } from "file-saver";
 import { sub } from "date-fns";
 
 const supabase = createClient(
@@ -15,7 +15,7 @@ export default function ExpensesLedgerPage() {
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [balanceForward, setBalanceForward] = useState(0);
-  const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all">("all"); // Filter state
+  const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all">("all");
   const [formData, setFormData] = useState({
     item: "",
     amount_spent: 0,
@@ -23,19 +23,17 @@ export default function ExpensesLedgerPage() {
     mode_of_payment: "",
     account: "",
   });
-  const [editExpense, setEditExpense] = useState<any>(null); // For editing expenses
-  const [modes, setModes] = useState<string[]>([]); // For storing modes of payment from finance table
-  const [subModes, setSubModes] = useState<string[]>([]); // For storing submodes/accounts based on selected mode
+  const [editExpense, setEditExpense] = useState<any>(null);
+  const [modes, setModes] = useState<string[]>([]);
+  const [subModes, setSubModes] = useState<string[]>([]);
 
-  // Fetch expenses, total income, and modes on component mount and when filter changes
   useEffect(() => {
     fetchExpenses(filter);
     fetchTotalIncome();
     fetchModes();
-    fetchBalanceForward(); // Fetch balance forward from amount_available
+    fetchBalanceForward();
   }, [filter]);
 
-  // Fetch balance forward (total sum of amount_available from finance table)
   const fetchBalanceForward = async () => {
     const { data, error } = await supabase
       .from("finance")
@@ -50,7 +48,6 @@ export default function ExpensesLedgerPage() {
     setBalanceForward(total);
   };
 
-  // Fetch modes of payment from finance table
   const fetchModes = async () => {
     const { data, error } = await supabase
       .from("finance")
@@ -61,15 +58,13 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    // Extract unique modes of payment
     const uniqueModes = Array.from(new Set(data.map((entry) => entry.mode_of_payment)));
     setModes(uniqueModes);
   };
 
-  // Fetch submodes/accounts based on the selected mode of payment
   const fetchSubModes = async (mode: string) => {
     if (mode === "cash") {
-      setSubModes([]); // No submodes for cash
+      setSubModes([]);
       return;
     }
 
@@ -83,19 +78,15 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    // Extract unique submodes/accounts
     const uniqueSubModes = Array.from(
       new Set(data.map((entry) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney)))
-    ).filter((subMode): subMode is string => !!subMode); // Filter out null/undefined values
+    ).filter((subMode): subMode is string => !!subMode);
 
     setSubModes(uniqueSubModes);
   };
 
-  // Fetch expenses based on filter
   const fetchExpenses = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
     setLoading(true);
-
-    // Calculate date range based on filter
     const now = new Date();
     let startDate: Date | null = null;
     let endDate: Date | null = null;
@@ -119,10 +110,8 @@ export default function ExpensesLedgerPage() {
         break;
     }
 
-    // Build the query
     let query = supabase.from("expenses").select("*");
 
-    // Apply date filter if applicable
     if (startDate && endDate) {
       query = query.gte("date", startDate.toISOString()).lte("date", endDate.toISOString());
     }
@@ -140,7 +129,6 @@ export default function ExpensesLedgerPage() {
     setLoading(false);
   };
 
-  // Fetch total income from finance table
   const fetchTotalIncome = async () => {
     const { data, error } = await supabase
       .from("finance")
@@ -155,41 +143,36 @@ export default function ExpensesLedgerPage() {
     setTotalIncome(total);
   };
 
-  // Calculate total expenses
   const calculateTotalExpenses = (data: any[]) => {
     const total = data.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
     setTotalExpenses(total);
   };
 
-  // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
 
     if (name === "mode_of_payment") {
-      fetchSubModes(value); // Fetch submodes when mode changes
-      setFormData((prev) => ({ ...prev, account: "" })); // Reset account when mode changes
+      fetchSubModes(value);
+      setFormData((prev) => ({ ...prev, account: "" }));
     }
   };
 
-  // Submit expense (add or update)
   const submitExpense = async () => {
     if (!formData.item || !formData.amount_spent || !formData.department || !formData.mode_of_payment) {
       alert("Please fill in all fields.");
       return;
     }
 
-    // Prepare the expense data to be inserted/updated
     const expenseData = {
       item: formData.item,
       amount_spent: formData.amount_spent,
       department: formData.department,
       mode_of_payment: formData.mode_of_payment,
-      account: formData.account, // Include the account (bank name or mobile money mode)
-      submittedby: "You", // Hardcoded for now
+      account: formData.account,
+      submittedby: "You",
     };
 
-    // Submit the expense
     const { data, error } = editExpense
       ? await supabase
           .from("expenses")
@@ -204,7 +187,6 @@ export default function ExpensesLedgerPage() {
 
     alert("Expense successfully submitted!");
 
-    // Deduct the amount from the total amount_available for the selected mode
     const { data: financeData, error: financeError } = await supabase
       .from("finance")
       .select("amount_available")
@@ -221,11 +203,9 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    // Calculate the total amount_available for the selected mode
     const totalAmountAvailable = financeData.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
     const updatedAmountAvailable = totalAmountAvailable - formData.amount_spent;
 
-    // Update all entries for the selected mode with the new total amount_available
     const { error: updateError } = await supabase
       .from("finance")
       .update({ amount_available: updatedAmountAvailable })
@@ -237,14 +217,12 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    // Refresh data
     fetchExpenses(filter);
-    fetchBalanceForward(); // Update balance forward
+    fetchBalanceForward();
     setFormData({ item: "", amount_spent: 0, department: "", mode_of_payment: "", account: "" });
     setEditExpense(null);
   };
 
-  // Handle edit action
   const handleEdit = (expense: any) => {
     setEditExpense(expense);
     setFormData({
@@ -254,10 +232,9 @@ export default function ExpensesLedgerPage() {
       mode_of_payment: expense.mode_of_payment,
       account: expense.account,
     });
-    fetchSubModes(expense.mode_of_payment); // Fetch submodes for the edited expense's mode
+    fetchSubModes(expense.mode_of_payment);
   };
 
-  // Handle delete action
   const handleDelete = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this expense?")) {
       const { error } = await supabase.from("expenses").delete().eq("id", id);
@@ -272,7 +249,6 @@ export default function ExpensesLedgerPage() {
     }
   };
 
-  // Export expenses to CSV
   const exportToCSV = () => {
     const csvData = expenses.map((expense) => ({
       Item: expense.item,
@@ -294,176 +270,285 @@ export default function ExpensesLedgerPage() {
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6 text-center shadow-lg p-4 rounded-lg bg-blue-100 dark:bg-gray-800 dark:text-white">
-        Expenses Ledger
-      </h1>
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Modern header with gradient */}
+      <div className="mb-8 text-center">
+        <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-red-600 to-orange-500 bg-clip-text text-transparent">
+          Expenses Ledger
+        </h1>
+        <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+          Track and manage all company expenditures
+        </p>
+      </div>
 
-      {/* Financial Summary */}
-      <div className="grid grid-cols-3 gap-4 text-white text-center mb-6">
-        <div className="p-4 bg-green-500 rounded-lg">
-          <h2 className="text-xl font-semibold">Total Income</h2>
-          <p className="text-2xl">UGX {totalIncome.toLocaleString()}</p>
+      {/* Financial summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-4 shadow-md text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Total Income</h2>
+              <p className="text-2xl font-bold">UGX {totalIncome.toLocaleString()}</p>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          </div>
         </div>
-        <div className="p-4 bg-red-500 rounded-lg">
-          <h2 className="text-xl font-semibold">Total Expenses</h2>
-          <p className="text-2xl">UGX {totalExpenses.toLocaleString()}</p>
+
+        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-lg p-4 shadow-md text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Total Expenses</h2>
+              <p className="text-2xl font-bold">UGX {totalExpenses.toLocaleString()}</p>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+            </svg>
+          </div>
         </div>
-        <div className="p-4 bg-blue-500 rounded-lg">
-          <h2 className="text-xl font-semibold">Balance Forward</h2>
-          <p className="text-2xl">UGX {balanceForward.toLocaleString()}</p>
+
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-4 shadow-md text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Balance Forward</h2>
+              <p className="text-2xl font-bold">UGX {balanceForward.toLocaleString()}</p>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+            </svg>
+          </div>
         </div>
       </div>
 
       {/* Filters and Export Button */}
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setFilter("all")}
-            className={`p-2 rounded ${filter === "all" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+              filter === "all" 
+                ? "bg-blue-600 text-white shadow-md" 
+                : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+            }`}
           >
-            All
+            All Expenses
           </button>
           <button
             onClick={() => setFilter("daily")}
-            className={`p-2 rounded ${filter === "daily" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+              filter === "daily" 
+                ? "bg-blue-600 text-white shadow-md" 
+                : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+            }`}
           >
-            Daily
+            Today
           </button>
           <button
             onClick={() => setFilter("monthly")}
-            className={`p-2 rounded ${filter === "monthly" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+              filter === "monthly" 
+                ? "bg-blue-600 text-white shadow-md" 
+                : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+            }`}
           >
-            Monthly
+            This Month
           </button>
           <button
             onClick={() => setFilter("yearly")}
-            className={`p-2 rounded ${filter === "yearly" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+              filter === "yearly" 
+                ? "bg-blue-600 text-white shadow-md" 
+                : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+            }`}
           >
-            Yearly
+            This Year
           </button>
         </div>
         <button
           onClick={exportToCSV}
-          className="bg-green-500 text-white p-2 rounded"
+          className="px-4 py-2 rounded-full bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-medium shadow-md hover:shadow-lg transition-all flex items-center"
         >
-          Download
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Download CSV
         </button>
       </div>
 
       {/* Add/Edit Expense Form */}
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-4">
-          {editExpense ? "Edit Expense" : "Add Expense"}
+      <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <h2 className="text-lg font-semibold mb-4 flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          {editExpense ? "Edit Expense" : "Add New Expense"}
         </h2>
-        <div className="grid grid-cols-3 gap-4">
-          <input
-            type="text"
-            name="item"
-            placeholder="Item"
-            value={formData.item}
-            onChange={handleInputChange}
-            className="border p-2 rounded"
-          />
-          <input
-            type="number"
-            name="amount_spent"
-            placeholder="Amount Spent"
-            value={formData.amount_spent}
-            onChange={handleInputChange}
-            className="border p-2 rounded"
-          />
-          <input
-            type="text"
-            name="department"
-            placeholder="Department"
-            value={formData.department}
-            onChange={handleInputChange}
-            className="border p-2 rounded"
-          />
-          <select
-            name="mode_of_payment"
-            value={formData.mode_of_payment}
-            onChange={handleInputChange}
-            className="border p-2 rounded"
-          >
-            <option value="">Select Account</option>
-            {modes.map((mode, index) => (
-              <option key={index} value={mode}>
-                {mode}
-              </option>
-            ))}
-          </select>
-          {formData.mode_of_payment !== "Cash" && (
-            <select
-              name="account"
-              value={formData.account}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
+            <input
+              type="text"
+              name="item"
+              placeholder="What was purchased?"
+              value={formData.item}
               onChange={handleInputChange}
-              className="border p-2 rounded"
-              disabled={!formData.mode_of_payment}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
+            <input
+              type="number"
+              name="amount_spent"
+              placeholder="0"
+              value={formData.amount_spent}
+              onChange={handleInputChange}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+            <input
+              type="text"
+              name="department"
+              placeholder="Which department?"
+              value={formData.department}
+              onChange={handleInputChange}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+            <select
+              name="mode_of_payment"
+              value={formData.mode_of_payment}
+              onChange={handleInputChange}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="">Provider</option>
-              {subModes.map((subMode, index) => (
-                <option key={index} value={subMode}>
-                  {subMode}
+              <option value="">Select Method</option>
+              {modes.map((mode, index) => (
+                <option key={index} value={mode}>
+                  {mode}
                 </option>
               ))}
             </select>
+          </div>
+          {formData.mode_of_payment && formData.mode_of_payment !== "Cash" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {formData.mode_of_payment === "Bank" ? "Bank Name" : "Mobile Provider"}
+              </label>
+              <select
+                name="account"
+                value={formData.account}
+                onChange={handleInputChange}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={!formData.mode_of_payment}
+              >
+                <option value="">Select {formData.mode_of_payment === "Bank" ? "Bank" : "Provider"}</option>
+                {subModes.map((subMode, index) => (
+                  <option key={index} value={subMode}>
+                    {subMode}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
-        <button
-          onClick={submitExpense}
-          className="bg-blue-500 text-white p-2 rounded mt-2"
-        >
-          {editExpense ? "Update Expense" : "Add Expense"}
-        </button>
+        <div className="mt-4 flex justify-end">
+          {editExpense && (
+            <button
+              onClick={() => {
+                setEditExpense(null);
+                setFormData({ item: "", amount_spent: 0, department: "", mode_of_payment: "", account: "" });
+              }}
+              className="mr-2 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            onClick={submitExpense}
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-md hover:shadow-md transition-all"
+          >
+            {editExpense ? "Update Expense" : "Add Expense"}
+          </button>
+        </div>
       </div>
 
       {/* Expenses Table */}
       {loading ? (
-        <p>Loading...</p>
+        <div className="flex justify-center items-center h-64 rounded-lg bg-gray-50 border border-gray-100">
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+            <p className="text-gray-600">Loading expense data...</p>
+          </div>
+        </div>
       ) : (
-        <table className="w-full border-collapse border mt-4">
-          <thead>
-            <tr>
-              <th className="border p-2">Item</th>
-              <th className="border p-2">Amount Spent</th>
-              <th className="border p-2">Department</th>
-              <th className="border p-2">Account</th>
-              <th className="border p-2">Provider</th>
-              <th className="border p-2">Added by</th>
-              <th className="border p-2">Date</th>
-              <th className="border p-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.map((expense) => (
-              <tr key={expense.id}>
-                <td className="border p-2">{expense.item}</td>
-                <td className="border p-2">UGX {expense.amount_spent}</td>
-                <td className="border p-2">{expense.department}</td>
-                <td className="border p-2">{expense.mode_of_payment}</td>
-                <td className="border p-2">{expense.account}</td>
-                <td className="border p-2">{expense.submittedby}</td>
-                <td className="border p-2">{new Date(expense.date).toLocaleDateString()}</td>
-                <td className="border p-2">
-                  <button
-                    onClick={() => handleEdit(expense)}
-                    className="bg-gray-500 text-white p-1 rounded mr-2"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(expense.id)}
-                    className="bg-red-500 text-white p-1 rounded"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr className="text-left border-b border-gray-200">
+                  <th className="p-4 font-medium text-gray-500">Item</th>
+                  <th className="p-4 font-medium text-gray-500 text-right">Amount</th>
+                  <th className="p-4 font-medium text-gray-500">Department</th>
+                  <th className="p-4 font-medium text-gray-500">Method</th>
+                  <th className="p-4 font-medium text-gray-500">Account</th>
+                  <th className="p-4 font-medium text-gray-500">Added By</th>
+                  <th className="p-4 font-medium text-gray-500">Date</th>
+                  <th className="p-4 font-medium text-gray-500">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {expenses.map((expense) => (
+                  <tr key={expense.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="p-4 font-medium">{expense.item}</td>
+                    <td className="p-4 text-right font-mono text-red-600">
+                      UGX {expense.amount_spent?.toLocaleString()}
+                    </td>
+                    <td className="p-4">{expense.department}</td>
+                    <td className="p-4">{expense.mode_of_payment}</td>
+                    <td className="p-4">{expense.account || '-'}</td>
+                    <td className="p-4">{expense.submittedby}</td>
+                    <td className="p-4 text-sm text-gray-500">
+                      {new Date(expense.date).toLocaleDateString()}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEdit(expense)}
+                          className="p-2 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(expense.id)}
+                          className="p-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {expenses.length === 0 && !loading && (
+            <div className="p-8 text-center text-gray-500">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <p className="text-lg">No expenses found</p>
+              <p className="text-sm mt-1">Try adjusting your filters or add a new expense</p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
