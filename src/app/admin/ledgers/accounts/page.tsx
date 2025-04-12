@@ -22,6 +22,7 @@ export default function FinancialSummaryPage() {
   const [modeOfPayment, setModeOfPayment] = useState("");
   const [modeOfMobileMoney, setModeOfMobileMoney] = useState("");
   const [bankName, setBankName] = useState("");
+  const [purpose, setPurpose] = useState("");
   const [financialSummary, setFinancialSummary] = useState<any>({
     cash: 0,
     bank: 0,
@@ -79,7 +80,7 @@ export default function FinancialSummaryPage() {
   };
 
   const handleDepositSubmit = async () => {
-    if (!amountPaid || !modeOfPayment) {
+    if (!amountPaid || !modeOfPayment || !purpose) {
       alert("Please fill in all required fields.");
       return;
     }
@@ -89,6 +90,7 @@ export default function FinancialSummaryPage() {
       mode_of_payment: modeOfPayment,
       amount_available: amountPaid,
       submittedby: "You",
+      purpose: purpose
     };
 
     if (modeOfPayment === "Mobile Money") {
@@ -110,6 +112,7 @@ export default function FinancialSummaryPage() {
     setModeOfPayment("");
     setModeOfMobileMoney("");
     setBankName("");
+    setPurpose("");
     fetchAllLedgerEntries();
   };
 
@@ -271,6 +274,7 @@ export default function FinancialSummaryPage() {
                   <TableHead className="font-medium">Amount</TableHead>
                   <TableHead className="font-medium">Payment Method</TableHead>
                   <TableHead className="font-medium">Service Provider</TableHead>
+                  <TableHead className="font-medium">Purpose</TableHead>
                   <TableHead className="font-medium">Deposited By</TableHead>
                   <TableHead className="font-medium">Date</TableHead>
                   <TableHead className="font-medium text-right">Actions</TableHead>
@@ -287,6 +291,7 @@ export default function FinancialSummaryPage() {
                       <TableCell>
                         {entry.mode_of_mobilemoney || entry.bank_name || "-"}
                       </TableCell>
+                      <TableCell>{entry.purpose || "-"}</TableCell>
                       <TableCell>{entry.submittedby}</TableCell>
                       <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
                       <TableCell className="text-right">
@@ -302,7 +307,7 @@ export default function FinancialSummaryPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                       No deposit records found
                     </TableCell>
                   </TableRow>
@@ -377,6 +382,16 @@ export default function FinancialSummaryPage() {
                 />
               </div>
             )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Purpose</label>
+              <Input
+                type="text"
+                placeholder="Enter deposit purpose"
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value)}
+              />
+            </div>
           </div>
           
           <DialogFooter>
