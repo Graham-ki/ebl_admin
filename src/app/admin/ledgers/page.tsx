@@ -2,9 +2,62 @@
 
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { createClient } from '@supabase/supabase-js';
+import { useEffect, useState } from 'react';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function LedgerPage() {
   const router = useRouter();
+  const [summaryData, setSummaryData] = useState({
+    totalAmountPaid: 0,
+    totalAmountAvailable: 0,
+    lastUpdated: null as Date | null
+  });
+
+  useEffect(() => {
+    const fetchSummaryData = async () => {
+      try {
+        // Get sum of amount_paid and amount_available
+        const { data: sums } = await supabase
+          .from('finance')
+          .select('amount_paid, amount_available');
+        
+        // Get latest created_at date
+        const { data: latestDate } = await supabase
+          .from('finance')
+          .select('created_at')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (sums && latestDate) {
+          const totalPaid = sums.reduce((acc, entry) => acc + (entry.amount_paid || 0), 0);
+          const totalAvailable = sums.reduce((acc, entry) => acc + (entry.amount_available || 0), 0);
+          
+          setSummaryData({
+            totalAmountPaid: totalPaid,
+            totalAmountAvailable: totalAvailable,
+            lastUpdated: latestDate[0]?.created_at ? new Date(latestDate[0].created_at) : null
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching summary data:', error);
+      }
+    };
+
+    fetchSummaryData();
+  }, []);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'UGX',
+      minimumFractionDigits: 0
+    }).format(amount);
+  };
 
   return (
     <div className="container mx-auto p-4 md:p-6">
@@ -19,7 +72,7 @@ export default function LedgerPage() {
       </div>
 
       {/* Enhanced card grid with icons and better visual hierarchy */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 mb-8">
         {/* Marketer Ledger Card */}
         <Card 
           className="cursor-pointer border border-gray-100 hover:border-blue-200 bg-white hover:bg-blue-50 shadow-sm hover:shadow-md transition-all duration-200 ease-in-out group"
@@ -121,6 +174,59 @@ export default function LedgerPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Summary Section */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+        {/* Total Amount Paid */}
+        <Card className="bg-blue-50 border-blue-100">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-blue-600">
+              Total Amount Paid
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-blue-800">
+              {formatCurrency(summaryData.totalAmountPaid)}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Total Amount Available */}
+        <Card className="bg-green-50 border-green-100">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-green-600">
+              Total Amount Available
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-green-800">
+              {formatCurrency(summaryData.totalAmountAvailable)}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Last Updated */}
+        <Card className="bg-purple-50 border-purple-100">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-purple-600">
+              Last Updated
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-purple-800">
+              {summaryData.lastUpdated ? 
+                summaryData.lastUpdated.toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }) : 
+                'No data'}
+            </p>
           </CardContent>
         </Card>
       </div>
