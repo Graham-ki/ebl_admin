@@ -29,12 +29,14 @@ export default function LedgerPage() {
         // Get sum of amount_paid and amount_available from finance table (Cashier only)
         const { data: financeData } = await supabase
           .from('finance')
-          .select('amount_paid, amount_available');
+          .select('amount_paid, amount_available')
+          .eq('submittedby', 'Cashier');
 
         // Get sum of expenses (Cashier only)
         const { data: expensesData } = await supabase
           .from('expenses')
-          .select('amount_spent');
+          .select('amount_spent')
+          .eq('submittedby', 'Cashier');
 
         // Get latest created_at date
         const { data: latestDate } = await supabase
