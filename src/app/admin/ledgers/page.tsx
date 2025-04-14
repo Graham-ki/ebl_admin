@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { createClient } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,42 +26,36 @@ export default function LedgerPage() {
       try {
         setLoading(true);
         
-        // Fetch all financial data in parallel
-        const [
-          { data: financeData, error: financeError },
-          { data: expensesData, error: expensesError },
-          { data: latestDate, error: dateError }
-        ] = await Promise.all([
-          supabase
-            .from('finance')
-            .select('amount_paid, amount_available'),
-          supabase
-            .from('expenses')
-            .select('amount_spent'),
-          supabase
-            .from('finance')
-            .select('created_at')
-            .order('created_at', { ascending: false })
-            .limit(1)
-        ]);
+        // Get sum of amount_paid and amount_available from finance table (Cashier only)
+        const { data: financeData } = await supabase
+          .from('finance')
+          .select('amount_paid, amount_available');
 
-        if (financeError || expensesError || dateError) {
-          throw financeError || expensesError || dateError;
+        // Get sum of expenses (Cashier only)
+        const { data: expensesData } = await supabase
+          .from('expenses')
+          .select('amount_spent');
+
+        // Get latest created_at date
+        const { data: latestDate } = await supabase
+          .from('finance')
+          .select('created_at')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (financeData && expensesData) {
+          const totalPaid = financeData.reduce((acc, entry) => acc + (entry.amount_paid || 0), 0);
+          const totalAvailable = financeData.reduce((acc, entry) => acc + (entry.amount_available || 0), 0);
+          const totalExpenses = expensesData.reduce((acc, entry) => acc + (entry.amount_spent || 0), 0);
+          
+          setSummaryData({
+            totalAmountPaid: totalPaid,
+            totalAmountAvailable: totalAvailable,
+            totalExpenses: totalExpenses,
+            balanceForward: totalAvailable - totalExpenses,
+            lastUpdated: latestDate?.[0]?.created_at ? new Date(latestDate[0].created_at) : null
+          });
         }
-
-        // Calculate totals
-        const totalPaid = financeData?.reduce((acc, entry) => acc + (entry.amount_paid || 0), 0) || 0;
-        const totalAvailable = financeData?.reduce((acc, entry) => acc + (entry.amount_available || 0), 0) || 0;
-        const totalExpenses = expensesData?.reduce((acc, entry) => acc + (entry.amount_spent || 0), 0) || 0;
-        const balance = totalAvailable - totalExpenses;
-
-        setSummaryData({
-          totalAmountPaid: totalPaid,
-          totalAmountAvailable: totalAvailable,
-          totalExpenses: totalExpenses,
-          balanceForward: balance,
-          lastUpdated: latestDate?.[0]?.created_at ? new Date(latestDate[0].created_at) : null
-        });
       } catch (error) {
         console.error('Error fetching summary data:', error);
       } finally {
@@ -71,20 +64,6 @@ export default function LedgerPage() {
     };
 
     fetchSummaryData();
-
-    // Set up real-time subscription
-    const subscription = supabase
-      .channel('ledger-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: /finance|expenses/ },
-        () => fetchSummaryData()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(subscription);
-    };
   }, []);
 
   const formatCurrency = (amount: number) => {
@@ -215,83 +194,89 @@ export default function LedgerPage() {
       </div>
 
       {/* Summary Section */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
-        {/* Total Amount Paid */}
-        <Card className="bg-blue-50 border-blue-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-blue-600">
-              Total Amount Paid
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-full" />
-            ) : (
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader className="pb-2">
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-6 bg-gray-200 rounded w-1/2"></div>
+              <div className="h-4 bg-gray-200 rounded w-full mt-2"></div>
+              <div className="h-4 bg-gray-200 rounded w-2/3 mt-2"></div>
+              <div className="h-4 bg-gray-200 rounded w-1/2 mt-2"></div>
+              <div className="h-4 bg-gray-200 rounded w-3/4 mt-2"></div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+          {/* Total Amount Paid */}
+          <Card className="bg-blue-50 border-blue-100">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-blue-600">
+                Total Amount Paid
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
               <p className="text-2xl font-bold text-blue-800">
                 {formatCurrency(summaryData.totalAmountPaid)}
               </p>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* Total Amount Available */}
-        <Card className="bg-green-50 border-green-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-green-600">
-              Total Amount Available
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-full" />
-            ) : (
+          {/* Total Amount Available */}
+          <Card className="bg-green-50 border-green-100">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-green-600">
+                Total Amount Available
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
               <p className="text-2xl font-bold text-green-800">
                 {formatCurrency(summaryData.totalAmountAvailable)}
               </p>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* Total Expenses */}
-        <Card className="bg-red-50 border-red-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-red-600">
-              Total Expenses
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-full" />
-            ) : (
+          {/* Total Expenses */}
+          <Card className="bg-red-50 border-red-100">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-red-600">
+                Total Expenses
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
               <p className="text-2xl font-bold text-red-800">
                 {formatCurrency(summaryData.totalExpenses)}
               </p>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* Balance Forward */}
-        <Card className="bg-purple-50 border-purple-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-purple-600">
-              Balance Forward
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-full" />
-            ) : (
-              <p className={`text-2xl font-bold ${
-                summaryData.balanceForward < 0 
-                  ? 'text-red-800' 
-                  : 'text-purple-800'
-              }`}>
+          {/* Balance Forward */}
+          <Card className="bg-purple-50 border-purple-100">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-purple-600">
+                Balance Forward
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold text-purple-800">
                 {formatCurrency(summaryData.balanceForward)}
               </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Last updated: {summaryData.lastUpdated ? 
+                  summaryData.lastUpdated.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric'
+                  }) : 
+                  'N/A'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
