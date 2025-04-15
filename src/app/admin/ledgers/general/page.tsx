@@ -21,7 +21,7 @@ export default function GeneralLedgerPage() {
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalPayments, setTotalPayments] = useState(0);
   const [outstandingBalance, setOutstandingBalance] = useState(0);
-  const [amountAvailable, setAmountAvailable] = useState(0);
+  const [netProfit, setNetProfit] = useState(0); // Changed from amountAvailable to netProfit
   const [allAmountsAvailable, setAllAmountsAvailable] = useState<any[]>([]);
   const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all">("all");
   const [showIncomeStatement, setShowIncomeStatement] = useState(false);
@@ -34,21 +34,37 @@ export default function GeneralLedgerPage() {
 
   useEffect(() => {
     fetchGeneralLedger(filter);
-    fetchAmountAvailable();
+    fetchNetProfit(); // Changed from fetchAmountAvailable to fetchNetProfit
   }, [filter]);
 
-  const fetchAmountAvailable = async () => {
-    const { data, error } = await supabase
-      .from("finance")
-      .select("amount_available, created_at")
-      .order("created_at", { ascending: false });
+  const fetchNetProfit = async () => {
+    try {
+      // Get total amount_available from finance table
+      const { data: financeData, error: financeError } = await supabase
+        .from("finance")
+        .select("amount_available, created_at")
+        .order("created_at", { ascending: false });
 
-    if (!error && data) {
-      setAllAmountsAvailable(data);
-      const totalAmount = data.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
-      setAmountAvailable(totalAmount);
-    } else if (error) {
-      console.error("Error fetching amount_available:", error);
+      // Get total expenses
+      const { data: expenseData, error: expenseError } = await supabase
+        .from("expenses")
+        .select("amount_spent");
+
+      if (financeError || expenseError) {
+        console.error("Error fetching data:", financeError || expenseError);
+        return;
+      }
+
+      setAllAmountsAvailable(financeData || []);
+
+      // Calculate net profit (total amount_available - total expenses)
+      const totalAvailable = (financeData || []).reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
+      const totalExpenses = (expenseData || []).reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
+      const calculatedNetProfit = totalAvailable - totalExpenses;
+
+      setNetProfit(calculatedNetProfit);
+    } catch (error) {
+      console.error("Error calculating net profit:", error);
     }
   };
 
@@ -207,15 +223,15 @@ export default function GeneralLedgerPage() {
       return sum + ((entry.total_amount || 0) - (entry.amount_paid || 0));
     }, 0);
     
-    const netProfit = totalProfit - totalExpenses;
+    const calculatedNetProfit = totalProfit - totalExpenses;
     
     return { 
       totalIncome,
       totalProfit,
       totalExpenses,
       totalPotentialLoss,
-      netProfit: netProfit > 0 ? netProfit : 0,
-      netLoss: netProfit < 0 ? Math.abs(netProfit) : 0
+      netProfit: calculatedNetProfit > 0 ? calculatedNetProfit : 0,
+      netLoss: calculatedNetProfit < 0 ? Math.abs(calculatedNetProfit) : 0
     };
   };
 
@@ -274,7 +290,7 @@ export default function GeneralLedgerPage() {
       { "Type": "SUMMARY", "Description": "Total Profit (Amount Available)", "Amount": totalProfit, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Total Expenses", "Amount": -totalExpenses, "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Total Potential Loss", "Amount": -totalPotentialLoss, "Date": "", "Department": "" },
-      { "Type": "SUMMARY", "Description": "Net Profit", "Amount": totalProfit > 0 ? totalProfit : "", "Date": "", "Department": "" },
+      { "Type": "SUMMARY", "Description": "Net Profit", "Amount": netProfit > 0 ? netProfit : "", "Date": "", "Department": "" },
       { "Type": "SUMMARY", "Description": "Net Loss", "Amount": netLoss > 0 ? -netLoss : "", "Date": "", "Department": "" }
     ];
 
@@ -358,12 +374,12 @@ export default function GeneralLedgerPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-purple-600">
               <span>🏦</span>
-              <span>Amount Available</span>
+              <span>Net Profit</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-mono font-bold">{formatCurrency(amountAvailable)}</p>
-            <p className="text-sm text-gray-500 mt-1">Accounts receivable</p>
+            <p className="text-2xl font-mono font-bold">{formatCurrency(netProfit)}</p>
+            <p className="text-sm text-gray-500 mt-1">(Total Available - Expenses)</p>
           </CardContent>
         </Card>
       </div>
