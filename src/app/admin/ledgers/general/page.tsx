@@ -402,7 +402,7 @@ export default function GeneralLedgerPage() {
               </Button>
             )}
           </div>
-          <div className="overflow-x-auto">
+          <div className="rounded-lg max-w-6xl max-h-[90vh] overflow-auto">
             <Table>
               <TableHeader className="bg-gray-100">
                 <TableRow>
