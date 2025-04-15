@@ -88,7 +88,7 @@ export default function LedgerPage() {
         </p>
       </div>
 
-      {/* Enhanced card grid with icons and better visual hierarchy */}
+      {/* Enhanced card grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 mb-8">
         {/* Marketer Ledger Card */}
         <Card 
@@ -205,10 +205,7 @@ export default function LedgerPage() {
               </CardHeader>
               <CardContent>
                 <div className="h-6 bg-gray-200 rounded w-1/2"></div>
-              <div className="h-4 bg-gray-200 rounded w-full mt-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-2/3 mt-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/2 mt-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-3/4 mt-2"></div>
+              </CardContent>
             </Card>
           ))}
         </div>
