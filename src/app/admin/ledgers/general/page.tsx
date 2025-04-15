@@ -402,7 +402,7 @@ export default function GeneralLedgerPage() {
               </Button>
             )}
           </div>
-          <div className="rounded-lg max-w-6xl max-h-[90vh] overflow-auto">
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-gray-100">
                 <TableRow>
@@ -745,7 +745,7 @@ export default function GeneralLedgerPage() {
 
       {/* Full Amount History Dialog */}
       <Dialog open={showFullAmountHistory} onOpenChange={setShowFullAmountHistory}>
-        <DialogContent className="rounded-lg max-w-3xl">
+        <DialogContent className="rounded-lg max-w-6xl max-h-[90vh] overflow-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <span>🔄</span>
