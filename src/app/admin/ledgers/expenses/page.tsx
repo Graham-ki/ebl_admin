@@ -1,4 +1,4 @@
-'use client';
+"use client";
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { saveAs } from "file-saver";
@@ -35,17 +35,30 @@ export default function ExpensesLedgerPage() {
   }, [filter]);
 
   const fetchBalanceForward = async () => {
-    const { data, error } = await supabase
-      .from("finance")
-      .select("amount_available");
+    try {
+      // Fetch total amount available
+      const { data: financeData, error: financeError } = await supabase
+        .from("finance")
+        .select("amount_available");
 
-    if (error) {
-      alert("Error fetching balance forward: " + error.message);
-      return;
+      // Fetch total expenses
+      const { data: expensesData, error: expensesError } = await supabase
+        .from("expenses")
+        .select("amount_spent");
+
+      if (financeError || expensesError) {
+        console.error("Error fetching balance data:", financeError || expensesError);
+        return;
+      }
+
+      const totalAvailable = financeData.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
+      const totalExpenses = expensesData.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
+      
+      // Calculate balance forward (total available - total expenses)
+      setBalanceForward(totalAvailable - totalExpenses);
+    } catch (error) {
+      console.error("Error calculating balance forward:", error);
     }
-
-    const total = data.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
-    setBalanceForward(total);
   };
 
   const fetchModes = async () => {
@@ -54,7 +67,7 @@ export default function ExpensesLedgerPage() {
       .select("mode_of_payment");
 
     if (error) {
-      alert("Error fetching modes of payment: " + error.message);
+      console.error("Error fetching modes of payment:", error);
       return;
     }
 
@@ -71,10 +84,10 @@ export default function ExpensesLedgerPage() {
     const { data, error } = await supabase
       .from("finance")
       .select(mode === "Bank" ? "bank_name" : "mode_of_mobilemoney")
-      .eq("mode_of_payment", mode) as { data: { bank_name?: string; mode_of_mobilemoney?: string }[], error: any };
+      .eq("mode_of_payment", mode);
 
     if (error) {
-      alert("Error fetching submodes: " + error.message);
+      console.error("Error fetching submodes:", error);
       return;
     }
 
@@ -119,7 +132,7 @@ export default function ExpensesLedgerPage() {
     const { data, error } = await query;
 
     if (error) {
-      alert("Error fetching expenses: " + error.message);
+      console.error("Error fetching expenses:", error);
       setLoading(false);
       return;
     }
@@ -135,7 +148,7 @@ export default function ExpensesLedgerPage() {
       .select("amount_paid");
 
     if (error) {
-      alert("Error fetching total income: " + error.message);
+      console.error("Error fetching total income:", error);
       return;
     }
 
@@ -146,6 +159,7 @@ export default function ExpensesLedgerPage() {
   const calculateTotalExpenses = (data: any[]) => {
     const total = data.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
     setTotalExpenses(total);
+    fetchBalanceForward(); // Update balance when expenses change
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -160,7 +174,7 @@ export default function ExpensesLedgerPage() {
 
   const submitExpense = async () => {
     if (!formData.item || !formData.amount_spent || !formData.department || !formData.mode_of_payment) {
-      alert("Please fill in all fields.");
+      alert("Please fill in all required fields.");
       return;
     }
 
@@ -173,11 +187,8 @@ export default function ExpensesLedgerPage() {
       submittedby: "You",
     };
 
-    const { data, error } = editExpense
-      ? await supabase
-          .from("expenses")
-          .update(expenseData)
-          .eq("id", editExpense.id)
+    const { error } = editExpense
+      ? await supabase.from("expenses").update(expenseData).eq("id", editExpense.id)
       : await supabase.from("expenses").insert([expenseData]);
 
     if (error) {
@@ -185,42 +196,15 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    alert("Expense successfully submitted!");
-
-    const { data: financeData, error: financeError } = await supabase
-      .from("finance")
-      .select("amount_available")
-      .eq("submittedby","You")
-      .eq("mode_of_payment", formData.mode_of_payment);
-
-    if (financeError) {
-      alert("Error fetching finance data: " + financeError.message);
-      return;
-    }
-
-    if (financeData.length === 0) {
-      alert("No finance data found for the selected mode.");
-      return;
-    }
-
-    const totalAmountAvailable = financeData.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
-    const updatedAmountAvailable = totalAmountAvailable - formData.amount_spent;
-
-    const { error: updateError } = await supabase
-      .from("finance")
-      .update({ amount_available: updatedAmountAvailable })
-      .eq("mode_of_payment", formData.mode_of_payment)
-      .eq("submittedby","You");
-
-    if (updateError) {
-      alert("Error updating finance data: " + updateError.message);
-      return;
-    }
-
+    // Refresh all data to update totals
     fetchExpenses(filter);
     fetchBalanceForward();
+    
+    // Reset form
     setFormData({ item: "", amount_spent: 0, department: "", mode_of_payment: "", account: "" });
     setEditExpense(null);
+    
+    alert("Expense successfully submitted!");
   };
 
   const handleEdit = (expense: any) => {
@@ -244,8 +228,10 @@ export default function ExpensesLedgerPage() {
         return;
       }
 
-      alert("Expense successfully deleted!");
+      // Refresh data after deletion
       fetchExpenses(filter);
+      fetchBalanceForward();
+      alert("Expense successfully deleted!");
     }
   };
 
@@ -261,9 +247,7 @@ export default function ExpensesLedgerPage() {
     }));
 
     const csvHeaders = Object.keys(csvData[0]).join(",") + "\n";
-    const csvRows = csvData
-      .map((row) => Object.values(row).join(","))
-      .join("\n");
+    const csvRows = csvData.map((row) => Object.values(row).join(",")).join("\n");
 
     const csvBlob = new Blob([csvHeaders + csvRows], { type: "text/csv;charset=utf-8" });
     saveAs(csvBlob, "expenses.csv");
@@ -271,7 +255,7 @@ export default function ExpensesLedgerPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Modern header with gradient */}
+      {/* Header */}
       <div className="mb-8 text-center">
         <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-red-600 to-orange-500 bg-clip-text text-transparent">
           Expenses Ledger
@@ -281,7 +265,7 @@ export default function ExpensesLedgerPage() {
         </p>
       </div>
 
-      {/* Financial summary cards */}
+      {/* Financial Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-4 shadow-md text-white">
           <div className="flex items-center justify-between">
@@ -294,7 +278,7 @@ export default function ExpensesLedgerPage() {
             </svg>
           </div>
         </div>
-
+        
         <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-lg p-4 shadow-md text-white">
           <div className="flex items-center justify-between">
             <div>
@@ -306,12 +290,13 @@ export default function ExpensesLedgerPage() {
             </svg>
           </div>
         </div>
-
+        
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-4 shadow-md text-white">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold">Balance Forward</h2>
               <p className="text-2xl font-bold">UGX {balanceForward.toLocaleString()}</p>
+              <p className="text-xs opacity-80 mt-1">(Available - Expenses)</p>
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
