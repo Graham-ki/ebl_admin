@@ -224,21 +224,6 @@ export default function LedgerPage() {
               </p>
             </CardContent>
           </Card>
-
-          {/* Total Amount Available */}
-          <Card className="bg-green-50 border-green-100">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-green-600">
-                Total Amount Available
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold text-green-800">
-                {formatCurrency(summaryData.totalAmountAvailable)}
-              </p>
-            </CardContent>
-          </Card>
-
           {/* Total Expenses */}
           <Card className="bg-red-50 border-red-100">
             <CardHeader className="pb-2">
