@@ -1,4 +1,4 @@
-"use client";
+'use client';
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { saveAs } from "file-saver";
@@ -35,30 +35,33 @@ export default function ExpensesLedgerPage() {
   }, [filter]);
 
   const fetchBalanceForward = async () => {
-    try {
-      // Fetch total amount available
-      const { data: financeData, error: financeError } = await supabase
-        .from("finance")
-        .select("amount_available");
+    // Get total amount available
+    const { data: financeData, error: financeError } = await supabase
+      .from("finance")
+      .select("amount_available");
 
-      // Fetch total expenses
-      const { data: expensesData, error: expensesError } = await supabase
-        .from("expenses")
-        .select("amount_spent");
-
-      if (financeError || expensesError) {
-        console.error("Error fetching balance data:", financeError || expensesError);
-        return;
-      }
-
-      const totalAvailable = financeData.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
-      const totalExpenses = expensesData.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
-      
-      // Calculate balance forward (total available - total expenses)
-      setBalanceForward(totalAvailable - totalExpenses);
-    } catch (error) {
-      console.error("Error calculating balance forward:", error);
+    if (financeError) {
+      alert("Error fetching finance data: " + financeError.message);
+      return;
     }
+
+    const totalAmountAvailable = financeData.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
+
+    // Get total expenses
+    const { data: expensesData, error: expensesError } = await supabase
+      .from("expenses")
+      .select("amount_spent");
+
+    if (expensesError) {
+      alert("Error fetching expenses: " + expensesError.message);
+      return;
+    }
+
+    const totalExpenses = expensesData.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
+
+    // Calculate balance forward
+    const balance = totalAmountAvailable - totalExpenses;
+    setBalanceForward(balance);
   };
 
   const fetchModes = async () => {
@@ -67,7 +70,7 @@ export default function ExpensesLedgerPage() {
       .select("mode_of_payment");
 
     if (error) {
-      console.error("Error fetching modes of payment:", error);
+      alert("Error fetching modes of payment: " + error.message);
       return;
     }
 
@@ -84,10 +87,10 @@ export default function ExpensesLedgerPage() {
     const { data, error } = await supabase
       .from("finance")
       .select(mode === "Bank" ? "bank_name" : "mode_of_mobilemoney")
-      .eq("mode_of_payment", mode);
+      .eq("mode_of_payment", mode) as { data: { bank_name?: string; mode_of_mobilemoney?: string }[], error: any };
 
     if (error) {
-      console.error("Error fetching submodes:", error);
+      alert("Error fetching submodes: " + error.message);
       return;
     }
 
@@ -132,7 +135,7 @@ export default function ExpensesLedgerPage() {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Error fetching expenses:", error);
+      alert("Error fetching expenses: " + error.message);
       setLoading(false);
       return;
     }
@@ -148,7 +151,7 @@ export default function ExpensesLedgerPage() {
       .select("amount_paid");
 
     if (error) {
-      console.error("Error fetching total income:", error);
+      alert("Error fetching total income: " + error.message);
       return;
     }
 
@@ -159,7 +162,6 @@ export default function ExpensesLedgerPage() {
   const calculateTotalExpenses = (data: any[]) => {
     const total = data.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
     setTotalExpenses(total);
-    fetchBalanceForward(); // Update balance when expenses change
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -174,7 +176,7 @@ export default function ExpensesLedgerPage() {
 
   const submitExpense = async () => {
     if (!formData.item || !formData.amount_spent || !formData.department || !formData.mode_of_payment) {
-      alert("Please fill in all required fields.");
+      alert("Please fill in all fields.");
       return;
     }
 
@@ -187,8 +189,11 @@ export default function ExpensesLedgerPage() {
       submittedby: "You",
     };
 
-    const { error } = editExpense
-      ? await supabase.from("expenses").update(expenseData).eq("id", editExpense.id)
+    const { data, error } = editExpense
+      ? await supabase
+          .from("expenses")
+          .update(expenseData)
+          .eq("id", editExpense.id)
       : await supabase.from("expenses").insert([expenseData]);
 
     if (error) {
@@ -196,15 +201,11 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    // Refresh all data to update totals
+    alert("Expense successfully submitted!");
     fetchExpenses(filter);
-    fetchBalanceForward();
-    
-    // Reset form
+    fetchBalanceForward(); // Update the balance forward after adding expense
     setFormData({ item: "", amount_spent: 0, department: "", mode_of_payment: "", account: "" });
     setEditExpense(null);
-    
-    alert("Expense successfully submitted!");
   };
 
   const handleEdit = (expense: any) => {
@@ -228,10 +229,9 @@ export default function ExpensesLedgerPage() {
         return;
       }
 
-      // Refresh data after deletion
-      fetchExpenses(filter);
-      fetchBalanceForward();
       alert("Expense successfully deleted!");
+      fetchExpenses(filter);
+      fetchBalanceForward(); // Update the balance forward after deleting expense
     }
   };
 
@@ -247,7 +247,9 @@ export default function ExpensesLedgerPage() {
     }));
 
     const csvHeaders = Object.keys(csvData[0]).join(",") + "\n";
-    const csvRows = csvData.map((row) => Object.values(row).join(",")).join("\n");
+    const csvRows = csvData
+      .map((row) => Object.values(row).join(","))
+      .join("\n");
 
     const csvBlob = new Blob([csvHeaders + csvRows], { type: "text/csv;charset=utf-8" });
     saveAs(csvBlob, "expenses.csv");
@@ -255,7 +257,7 @@ export default function ExpensesLedgerPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
+      {/* Modern header with gradient */}
       <div className="mb-8 text-center">
         <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-red-600 to-orange-500 bg-clip-text text-transparent">
           Expenses Ledger
@@ -265,7 +267,7 @@ export default function ExpensesLedgerPage() {
         </p>
       </div>
 
-      {/* Financial Summary Cards */}
+      {/* Financial summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-4 shadow-md text-white">
           <div className="flex items-center justify-between">
@@ -278,7 +280,7 @@ export default function ExpensesLedgerPage() {
             </svg>
           </div>
         </div>
-        
+
         <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-lg p-4 shadow-md text-white">
           <div className="flex items-center justify-between">
             <div>
@@ -290,13 +292,12 @@ export default function ExpensesLedgerPage() {
             </svg>
           </div>
         </div>
-        
+
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-4 shadow-md text-white">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold">Balance Forward</h2>
               <p className="text-2xl font-bold">UGX {balanceForward.toLocaleString()}</p>
-              <p className="text-xs opacity-80 mt-1">(Available - Expenses)</p>
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
