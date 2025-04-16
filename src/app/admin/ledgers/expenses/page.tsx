@@ -479,7 +479,7 @@ export default function ExpensesLedgerPage() {
                   <th className="p-4 font-medium text-gray-500">Item</th>
                   <th className="p-4 font-medium text-gray-500 text-right">Amount</th>
                   <th className="p-4 font-medium text-gray-500">Department</th>
-                  <th className="p-4 font-medium text-gray-500">Method</th>
+                  <th className="p-4 font-medium text-gray-500">Source Account</th>
                   <th className="p-4 font-medium text-gray-500">Account</th>
                   <th className="p-4 font-medium text-gray-500">Added By</th>
                   <th className="p-4 font-medium text-gray-500">Date</th>
