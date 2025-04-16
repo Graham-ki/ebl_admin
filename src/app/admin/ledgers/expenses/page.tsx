@@ -411,7 +411,7 @@ export default function ExpensesLedgerPage() {
               onChange={handleInputChange}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="">Select Method</option>
+              <option value="">Account to spend from</option>
               {modes.map((mode, index) => (
                 <option key={index} value={mode}>
                   {mode}
