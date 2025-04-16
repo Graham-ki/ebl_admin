@@ -480,7 +480,7 @@ export default function ExpensesLedgerPage() {
                   <th className="p-4 font-medium text-gray-500 text-right">Amount</th>
                   <th className="p-4 font-medium text-gray-500">Department</th>
                   <th className="p-4 font-medium text-gray-500">Source Account</th>
-                  <th className="p-4 font-medium text-gray-500">Account</th>
+                  <th className="p-4 font-medium text-gray-500">Details</th>
                   <th className="p-4 font-medium text-gray-500">Added By</th>
                   <th className="p-4 font-medium text-gray-500">Date</th>
                   <th className="p-4 font-medium text-gray-500">Actions</th>
@@ -495,7 +495,7 @@ export default function ExpensesLedgerPage() {
                     </td>
                     <td className="p-4">{expense.department}</td>
                     <td className="p-4">{expense.mode_of_payment}</td>
-                    <td className="p-4">{expense.account || '-'}</td>
+                    <td className="p-4">{expense.account || 'N/A'}</td>
                     <td className="p-4">{expense.submittedby}</td>
                     <td className="p-4 text-sm text-gray-500">
                       {new Date(expense.date).toLocaleDateString()}
