@@ -375,7 +375,7 @@ export default function ExpensesLedgerPage() {
             <input
               type="text"
               name="item"
-              placeholder="What was purchased?"
+              placeholder="Item Or purpose"
               value={formData.item}
               onChange={handleInputChange}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -404,7 +404,7 @@ export default function ExpensesLedgerPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Source Account</label>
             <select
               name="mode_of_payment"
               value={formData.mode_of_payment}
