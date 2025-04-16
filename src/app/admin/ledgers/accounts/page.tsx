@@ -30,6 +30,11 @@ export default function FinancialSummaryPage() {
     mtn: 0,
     airtel: 0,
     bankNames: {},
+    balanceForward: {
+      cash: 0,
+      bank: 0,
+      mobileMoney: 0
+    }
   });
 
   const fetchAllLedgerEntries = async () => {
@@ -47,7 +52,7 @@ export default function FinancialSummaryPage() {
     setLoading(false);
   };
 
-  const calculateFinancialSummary = (ledger: any[]) => {
+  const calculateFinancialSummary = async (ledger: any[]) => {
     const summary = {
       cash: 0,
       bank: 0,
@@ -55,8 +60,14 @@ export default function FinancialSummaryPage() {
       mtn: 0,
       airtel: 0,
       bankNames: {} as { [key: string]: number },
+      balanceForward: {
+        cash: 0,
+        bank: 0,
+        mobileMoney: 0
+      }
     };
 
+    // Calculate total deposits for each payment method
     ledger.forEach((entry) => {
       if (entry.mode_of_payment === "Cash") {
         summary.cash += entry.amount_paid;
@@ -75,6 +86,34 @@ export default function FinancialSummaryPage() {
         }
       }
     });
+
+    // Fetch and calculate expenses for each payment method
+    const { data: expenses, error } = await supabase.from("expenses").select("amount_spent, mode_of_payment");
+
+    if (!error && expenses) {
+      const expenseSummary = {
+        cash: 0,
+        bank: 0,
+        mobileMoney: 0
+      };
+
+      expenses.forEach((expense) => {
+        if (expense.amount_spent) {
+          if (expense.mode_of_payment === "Cash") {
+            expenseSummary.cash += expense.amount_spent;
+          } else if (expense.mode_of_payment === "Bank") {
+            expenseSummary.bank += expense.amount_spent;
+          } else if (expense.mode_of_payment === "Mobile Money") {
+            expenseSummary.mobileMoney += expense.amount_spent;
+          }
+        }
+      });
+
+      // Calculate balance forward (deposits - expenses)
+      summary.balanceForward.cash = summary.cash - expenseSummary.cash;
+      summary.balanceForward.bank = summary.bank - expenseSummary.bank;
+      summary.balanceForward.mobileMoney = summary.mobileMoney - expenseSummary.mobileMoney;
+    }
 
     setFinancialSummary(summary);
   };
@@ -167,6 +206,9 @@ export default function FinancialSummaryPage() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-mono font-bold">{formatCurrency(financialSummary.cash)}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Balance forward: <span className="font-medium">{formatCurrency(financialSummary.balanceForward.cash)}</span>
+            </p>
           </CardContent>
         </Card>
         
@@ -179,6 +221,9 @@ export default function FinancialSummaryPage() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-mono font-bold">{formatCurrency(financialSummary.bank)}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Balance forward: <span className="font-medium">{formatCurrency(financialSummary.balanceForward.bank)}</span>
+            </p>
           </CardContent>
         </Card>
         
@@ -191,6 +236,9 @@ export default function FinancialSummaryPage() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-mono font-bold">{formatCurrency(financialSummary.mobileMoney)}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Balance forward: <span className="font-medium">{formatCurrency(financialSummary.balanceForward.mobileMoney)}</span>
+            </p>
           </CardContent>
         </Card>
       </div>
