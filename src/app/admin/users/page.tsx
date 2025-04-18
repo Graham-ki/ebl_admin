@@ -71,7 +71,7 @@ const UsersPage = () => {
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("users").select("id, name, email, phone, address, type");
+    const { data, error } = await supabase.from("users").select("id, name, email, phone, address, type").neq('type',"ADMIN");
 
     if (error) {
       console.error("Error fetching users:", error);
