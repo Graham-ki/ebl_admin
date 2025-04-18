@@ -39,7 +39,7 @@ export default function FinancialSummaryPage() {
 
   const fetchAllLedgerEntries = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("finance").select("*");
+    const { data, error } = await supabase.from("finance").select("*").order('id',{ascending:false});
 
     if (error) {
       alert("Error fetching ledger entries: " + error.message);
