@@ -215,7 +215,7 @@ export default function LedgerPage() {
           <Card className="bg-blue-50 border-blue-100">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-blue-600">
-                Total Amount Paid
+                Total Deposits
               </CardTitle>
             </CardHeader>
             <CardContent>
