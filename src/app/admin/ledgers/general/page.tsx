@@ -181,7 +181,7 @@ export default function GeneralLedgerPage() {
 
     const { data: incomeData, error: incomeError } = await supabase
       .from("finance")
-      .select("amount_paid, amount_available, created_at, mode_of_payment, submittedby,total_amount")
+      .select("amount_paid, amount_available, created_at, mode_of_payment, submittedby,total_amount,purpose")
       .gte("created_at", startDate.toISOString())
       .lte("created_at", endDate.toISOString());
 
@@ -259,7 +259,8 @@ export default function GeneralLedgerPage() {
       "Amount Paid": item.amount_paid,
       "Amount Available": item.amount_available,
       "Date": new Date(item.created_at).toLocaleDateString(),
-      "Submitted By": item.submittedby
+      "Submitted By": item.submittedby,
+      "Purpose":item.purpose
     }));
 
     const expenseRows = expenseData.map((item) => ({
@@ -672,6 +673,7 @@ export default function GeneralLedgerPage() {
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Payment Mode</TableHead>
+                    <TableHead>Purpose/Reason</TableHead>
                     <TableHead className="text-right">Amount Paid</TableHead>
                     <TableHead className="text-right">Amount Available</TableHead>
                     <TableHead>Submitted By</TableHead>
@@ -684,6 +686,7 @@ export default function GeneralLedgerPage() {
                       <TableCell>
                         <Badge variant="outline">{item.mode_of_payment}</Badge>
                       </TableCell>
+                      <TableCell>{item.purpose}</TableCell>
                       <TableCell className="text-right font-mono">{formatCurrency(item.amount_paid)}</TableCell>
                       <TableCell className="text-right font-mono">{formatCurrency(item.amount_available)}</TableCell>
                       <TableCell>{item.submittedby}</TableCell>
