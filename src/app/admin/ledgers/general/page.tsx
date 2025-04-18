@@ -255,7 +255,7 @@ export default function GeneralLedgerPage() {
     
     const incomeRows = incomeData.map((item) => ({
       "Type": "Income",
-      "Description": `Payment via ${item.mode_of_payment}`,
+      "Description": `Deposit via ${item.mode_of_payment}`,
       "Amount Paid": item.amount_paid,
       "Amount Available": item.amount_available,
       "Date": new Date(item.created_at).toLocaleDateString(),
