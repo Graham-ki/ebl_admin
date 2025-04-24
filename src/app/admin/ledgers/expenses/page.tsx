@@ -1,13 +1,24 @@
 'use client';
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { saveAs } from "file-saver";
 import { sub } from "date-fns";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+// Predefined expense categories
+const EXPENSE_CATEGORIES = [
+  "Labour",
+  "Salary",
+  "Wage",
+  "Repairs",
+  "Stock",
+  "Allowance",
+  "Utility/Welfare",
+  "Other"
+];
 
 export default function ExpensesLedgerPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -18,6 +29,7 @@ export default function ExpensesLedgerPage() {
   const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all">("all");
   const [formData, setFormData] = useState({
     item: "",
+    customItem: "",
     amount_spent: 0,
     department: "",
     mode_of_payment: "",
@@ -172,16 +184,24 @@ export default function ExpensesLedgerPage() {
       fetchSubModes(value);
       setFormData((prev) => ({ ...prev, account: "" }));
     }
+
+    // Reset customItem when selecting a non-"Other" category
+    if (name === "item" && value !== "Other") {
+      setFormData(prev => ({ ...prev, customItem: "" }));
+    }
   };
 
   const submitExpense = async () => {
-    if (!formData.item || !formData.amount_spent || !formData.department || !formData.mode_of_payment) {
-      alert("Please fill in all fields.");
+    // Determine the final item name (use customItem if "Other" was selected)
+    const finalItem = formData.item === "Other" ? formData.customItem : formData.item;
+    
+    if (!finalItem || !formData.amount_spent || !formData.department || !formData.mode_of_payment) {
+      alert("Please fill in all required fields.");
       return;
     }
 
     const expenseData = {
-      item: formData.item,
+      item: finalItem,
       amount_spent: formData.amount_spent,
       department: formData.department,
       mode_of_payment: formData.mode_of_payment,
@@ -203,15 +223,25 @@ export default function ExpensesLedgerPage() {
 
     alert("Expense successfully submitted!");
     fetchExpenses(filter);
-    fetchBalanceForward(); // Update the balance forward after adding expense
-    setFormData({ item: "", amount_spent: 0, department: "", mode_of_payment: "", account: "" });
+    fetchBalanceForward();
+    setFormData({ 
+      item: "", 
+      customItem: "", 
+      amount_spent: 0, 
+      department: "", 
+      mode_of_payment: "", 
+      account: "" 
+    });
     setEditExpense(null);
   };
 
   const handleEdit = (expense: any) => {
     setEditExpense(expense);
+    // Check if the expense item is in our predefined categories
+    const isPredefinedCategory = EXPENSE_CATEGORIES.includes(expense.item);
     setFormData({
-      item: expense.item,
+      item: isPredefinedCategory ? expense.item : "Other",
+      customItem: isPredefinedCategory ? "" : expense.item,
       amount_spent: expense.amount_spent,
       department: expense.department,
       mode_of_payment: expense.mode_of_payment,
@@ -231,7 +261,7 @@ export default function ExpensesLedgerPage() {
 
       alert("Expense successfully deleted!");
       fetchExpenses(filter);
-      fetchBalanceForward(); // Update the balance forward after deleting expense
+      fetchBalanceForward();
     }
   };
 
@@ -252,7 +282,14 @@ export default function ExpensesLedgerPage() {
       .join("\n");
 
     const csvBlob = new Blob([csvHeaders + csvRows], { type: "text/csv;charset=utf-8" });
-    saveAs(csvBlob, "expenses.csv");
+    
+    // Create download link and trigger click
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(csvBlob);
+    link.download = "expenses.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -372,14 +409,29 @@ export default function ExpensesLedgerPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
-            <input
-              type="text"
+            <select
               name="item"
-              placeholder="Item Or purpose"
               value={formData.item}
               onChange={handleInputChange}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+            >
+              <option value="">Select an item</option>
+              {EXPENSE_CATEGORIES.map(category => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+            {formData.item === "Other" && (
+              <div className="mt-2">
+                <input
+                  type="text"
+                  name="customItem"
+                  placeholder="Specify item name"
+                  value={formData.customItem}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
@@ -446,7 +498,14 @@ export default function ExpensesLedgerPage() {
             <button
               onClick={() => {
                 setEditExpense(null);
-                setFormData({ item: "", amount_spent: 0, department: "", mode_of_payment: "", account: "" });
+                setFormData({ 
+                  item: "", 
+                  customItem: "", 
+                  amount_spent: 0, 
+                  department: "", 
+                  mode_of_payment: "", 
+                  account: "" 
+                });
               }}
               className="mr-2 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
             >
