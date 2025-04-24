@@ -71,7 +71,6 @@ export default function FinancialSummaryPage() {
       }
     };
 
-    // Calculate total deposits for each payment method
     ledger.forEach((entry) => {
       if (entry.mode_of_payment === "Cash") {
         summary.cash += entry.amount_paid;
@@ -91,7 +90,6 @@ export default function FinancialSummaryPage() {
       }
     });
 
-    // Fetch and calculate expenses for each payment method
     const { data: expenses, error } = await supabase.from("expenses").select("amount_spent, mode_of_payment");
 
     if (!error && expenses) {
@@ -113,7 +111,6 @@ export default function FinancialSummaryPage() {
         }
       });
 
-      // Calculate balance forward (deposits - expenses)
       summary.balanceForward.cash = summary.cash - expenseSummary.cash;
       summary.balanceForward.bank = summary.bank - expenseSummary.bank;
       summary.balanceForward.mobileMoney = summary.mobileMoney - expenseSummary.mobileMoney;
@@ -189,7 +186,6 @@ export default function FinancialSummaryPage() {
     setLoading(true);
     
     try {
-      // Fetch deposits for this mode
       let query = supabase
         .from('finance')
         .select('amount_paid, created_at, submittedby, purpose, bank_name, mode_of_mobilemoney')
@@ -200,7 +196,6 @@ export default function FinancialSummaryPage() {
 
       if (depositError) throw depositError;
 
-      // Fetch expenses for this mode
       const { data: expenses, error: expenseError } = await supabase
         .from('expenses')
         .select('item, amount_spent, date, department, submittedby, account')
@@ -220,6 +215,58 @@ export default function FinancialSummaryPage() {
     }
   };
 
+  const handleDownloadDetails = () => {
+    const depositsCSV = [
+      ['Amount', 'Date', 'Submitted By', 'Purpose', 
+       currentDetailsMode === 'Bank' ? 'Bank Name' : '', 
+       currentDetailsMode === 'Mobile Money' ? 'Provider' : '']
+      .filter(Boolean).join(','),
+      ...depositDetails.map(deposit => [
+        deposit.amount_paid,
+        new Date(deposit.created_at).toLocaleDateString(),
+        deposit.submittedby,
+        deposit.purpose,
+        currentDetailsMode === 'Bank' ? deposit.bank_name : '',
+        currentDetailsMode === 'Mobile Money' ? deposit.mode_of_mobilemoney : ''
+      ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const expensesCSV = [
+      ['Item', 'Amount', 'Date', 'Department', 'Submitted By', 'Account'].join(','),
+      ...expenseDetails.map(expense => [
+        expense.item,
+        expense.amount_spent,
+        new Date(expense.date).toLocaleDateString(),
+        expense.department,
+        expense.submittedby,
+        expense.account
+      ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const depositsBlob = new Blob([depositsCSV], { type: 'text/csv' });
+    const expensesBlob = new Blob([expensesCSV], { type: 'text/csv' });
+
+    const depositsUrl = URL.createObjectURL(depositsBlob);
+    const expensesUrl = URL.createObjectURL(expensesBlob);
+
+    const depositsLink = document.createElement('a');
+    depositsLink.href = depositsUrl;
+    depositsLink.download = `${currentDetailsMode}_deposits.csv`;
+    document.body.appendChild(depositsLink);
+    depositsLink.click();
+    document.body.removeChild(depositsLink);
+
+    const expensesLink = document.createElement('a');
+    expensesLink.href = expensesUrl;
+    expensesLink.download = `${currentDetailsMode}_expenses.csv`;
+    document.body.appendChild(expensesLink);
+    expensesLink.click();
+    document.body.removeChild(expensesLink);
+
+    URL.revokeObjectURL(depositsUrl);
+    URL.revokeObjectURL(expensesUrl);
+  };
+
   useEffect(() => {
     fetchAllLedgerEntries();
   }, []);
@@ -235,7 +282,6 @@ export default function FinancialSummaryPage() {
         </div>
       </div>
 
-      {/* Payment Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <Card className="bg-green-50 border-green-200">
           <CardHeader>
@@ -304,7 +350,6 @@ export default function FinancialSummaryPage() {
         </Card>
       </div>
 
-      {/* Detailed Breakdown */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
           <span>📊</span>
@@ -355,7 +400,6 @@ export default function FinancialSummaryPage() {
         </div>
       </div>
 
-      {/* Deposit Button */}
       <Button 
         onClick={() => setIsModalOpen(true)}
         className="mb-6 bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
@@ -364,7 +408,6 @@ export default function FinancialSummaryPage() {
         <span>Make Deposit</span>
       </Button>
 
-      {/* Deposit Records Table */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
           <span>📋</span>
@@ -427,7 +470,6 @@ export default function FinancialSummaryPage() {
         )}
       </div>
 
-      {/* Deposit Form Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="rounded-lg max-w-md">
           <DialogHeader>
@@ -514,7 +556,6 @@ export default function FinancialSummaryPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Details Dialog */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
         <DialogContent className="rounded-lg max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -522,8 +563,16 @@ export default function FinancialSummaryPage() {
               <span>📊</span>
               <span>{currentDetailsMode} Cash Flow Details</span>
             </DialogTitle>
-            <DialogDescription>
-              Deposits and expenses for {currentDetailsMode.toLowerCase()}
+            <DialogDescription className="flex justify-between items-center">
+              <span>Deposits and expenses for {currentDetailsMode.toLowerCase()}</span>
+              <Button 
+                variant="outline" 
+                className="gap-2"
+                onClick={handleDownloadDetails}
+              >
+                <span>↓</span>
+                Download CSV
+              </Button>
             </DialogDescription>
           </DialogHeader>
 
@@ -533,7 +582,6 @@ export default function FinancialSummaryPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Deposits Section */}
               <div>
                 <h3 className="text-lg font-semibold mb-2">Deposits</h3>
                 {depositDetails.length > 0 ? (
@@ -568,7 +616,6 @@ export default function FinancialSummaryPage() {
                 )}
               </div>
 
-              {/* Expenses Section */}
               <div>
                 <h3 className="text-lg font-semibold mb-2">Expenses</h3>
                 {expenseDetails.length > 0 ? (
