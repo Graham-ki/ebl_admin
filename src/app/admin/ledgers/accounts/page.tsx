@@ -36,6 +36,10 @@ export default function FinancialSummaryPage() {
       mobileMoney: 0
     }
   });
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [currentDetailsMode, setCurrentDetailsMode] = useState("");
+  const [depositDetails, setDepositDetails] = useState<any[]>([]);
+  const [expenseDetails, setExpenseDetails] = useState<any[]>([]);
 
   const fetchAllLedgerEntries = async () => {
     setLoading(true);
@@ -180,6 +184,42 @@ export default function FinancialSummaryPage() {
     }).format(amount);
   };
 
+  const fetchPaymentDetails = async (mode: string) => {
+    setCurrentDetailsMode(mode);
+    setLoading(true);
+    
+    try {
+      // Fetch deposits for this mode
+      let query = supabase
+        .from('finance')
+        .select('amount_paid, created_at, submittedby, purpose, bank_name, mode_of_mobilemoney')
+        .eq('mode_of_payment', mode)
+        .order('created_at', { ascending: false });
+
+      const { data: deposits, error: depositError } = await query;
+
+      if (depositError) throw depositError;
+
+      // Fetch expenses for this mode
+      const { data: expenses, error: expenseError } = await supabase
+        .from('expenses')
+        .select('item, amount_spent, date, department, submittedby, account')
+        .eq('mode_of_payment', mode)
+        .order('date', { ascending: false });
+
+      if (expenseError) throw expenseError;
+
+      setDepositDetails(deposits || []);
+      setExpenseDetails(expenses || []);
+      setDetailsDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching payment details:', error);
+      alert('Failed to load payment details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAllLedgerEntries();
   }, []);
@@ -209,6 +249,13 @@ export default function FinancialSummaryPage() {
             <p className="text-sm text-gray-500 mt-1">
               Balance forward: <span className="font-medium">{formatCurrency(financialSummary.balanceForward.cash)}</span>
             </p>
+            <Button 
+              variant="outline" 
+              className="mt-2 text-green-600 border-green-300 hover:bg-green-100"
+              onClick={() => fetchPaymentDetails("Cash")}
+            >
+              Details
+            </Button>
           </CardContent>
         </Card>
         
@@ -224,6 +271,13 @@ export default function FinancialSummaryPage() {
             <p className="text-sm text-gray-500 mt-1">
               Balance forward: <span className="font-medium">{formatCurrency(financialSummary.balanceForward.bank)}</span>
             </p>
+            <Button 
+              variant="outline" 
+              className="mt-2 text-blue-600 border-blue-300 hover:bg-blue-100"
+              onClick={() => fetchPaymentDetails("Bank")}
+            >
+              Details
+            </Button>
           </CardContent>
         </Card>
         
@@ -239,6 +293,13 @@ export default function FinancialSummaryPage() {
             <p className="text-sm text-gray-500 mt-1">
               Balance forward: <span className="font-medium">{formatCurrency(financialSummary.balanceForward.mobileMoney)}</span>
             </p>
+            <Button 
+              variant="outline" 
+              className="mt-2 text-purple-600 border-purple-300 hover:bg-purple-100"
+              onClick={() => fetchPaymentDetails("Mobile Money")}
+            >
+              Details
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -450,6 +511,99 @@ export default function FinancialSummaryPage() {
               Submit Deposit
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Details Dialog */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="rounded-lg max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span>📊</span>
+              <span>{currentDetailsMode} Cash Flow Details</span>
+            </DialogTitle>
+            <DialogDescription>
+              Deposits and expenses for {currentDetailsMode.toLowerCase()}
+            </DialogDescription>
+          </DialogHeader>
+
+          {loading ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Deposits Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Deposits</h3>
+                {depositDetails.length > 0 ? (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-gray-50">
+                        <TableRow>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Submitted By</TableHead>
+                          <TableHead>Purpose</TableHead>
+                          {currentDetailsMode === "Bank" && <TableHead>Bank Name</TableHead>}
+                          {currentDetailsMode === "Mobile Money" && <TableHead>Provider</TableHead>}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {depositDetails.map((deposit, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-mono">{formatCurrency(deposit.amount_paid)}</TableCell>
+                            <TableCell>{new Date(deposit.created_at).toLocaleDateString()}</TableCell>
+                            <TableCell>{deposit.submittedby}</TableCell>
+                            <TableCell>{deposit.purpose}</TableCell>
+                            {currentDetailsMode === "Bank" && <TableCell>{deposit.bank_name}</TableCell>}
+                            {currentDetailsMode === "Mobile Money" && <TableCell>{deposit.mode_of_mobilemoney}</TableCell>}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No deposits found</p>
+                )}
+              </div>
+
+              {/* Expenses Section */}
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Expenses</h3>
+                {expenseDetails.length > 0 ? (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-gray-50">
+                        <TableRow>
+                          <TableHead>Item</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Department</TableHead>
+                          <TableHead>Submitted By</TableHead>
+                          <TableHead>Account</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {expenseDetails.map((expense, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{expense.item}</TableCell>
+                            <TableCell className="font-mono">{formatCurrency(expense.amount_spent)}</TableCell>
+                            <TableCell>{new Date(expense.date).toLocaleDateString()}</TableCell>
+                            <TableCell>{expense.department}</TableCell>
+                            <TableCell>{expense.submittedby}</TableCell>
+                            <TableCell>{expense.account}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No expenses found</p>
+                )}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
