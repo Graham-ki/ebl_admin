@@ -182,7 +182,6 @@ export default function PageComponent({ ordersWithProducts }: Props) {
           <div>
             <span className="font-semibold">⚠️ Important Notice:</span>
             <p className="mt-1">All proofs of payment will be automatically deleted after 7 days!</p>
-            <p>Please delete completed orders after 7 days to maintain system performance.</p>
           </div>
           <button
             onClick={() => setShowWarning(false)}
