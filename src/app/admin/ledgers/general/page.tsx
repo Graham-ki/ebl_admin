@@ -183,7 +183,7 @@ export default function GeneralLedgerPage() {
       .from("finance")
       .select("amount_paid, amount_available, created_at, mode_of_payment, submittedby,total_amount,purpose")
       .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString());
+      .lte("created_at", endDate.toISOString()).order("created_at",{ascending:false});
 
     if (incomeError) {
       alert("Error fetching income data: " + incomeError.message);
@@ -195,7 +195,7 @@ export default function GeneralLedgerPage() {
       .from("expenses")
       .select("item, amount_spent, date, department, submittedby")
       .gte("date", startDate.toISOString())
-      .lte("date", endDate.toISOString());
+      .lte("date", endDate.toISOString()).order("date",{ascending:false});
 
     if (expenseError) {
       alert("Error fetching expense data: " + expenseError.message);
