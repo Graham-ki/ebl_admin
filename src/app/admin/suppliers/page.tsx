@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { createClient } from "@/utils/supabase/client";
 
 interface Supplier {
   id: string;
@@ -30,36 +31,39 @@ export default function Suppliers() {
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const supabase = createClient();
 
   useEffect(() => {
-    // Simulate fetching data
     const fetchData = async () => {
       setIsLoading(true);
-      // In a real app, you would fetch from your API
-      setTimeout(() => {
-        setSuppliers([
-          { 
-            id: "1", 
-            name: "ABC Distributors", 
-            contact: "john@abc.com", 
-            address: "123 Main St, City", 
-            created_at: "2023-05-15T10:30:00Z" 
-          },
-          { 
-            id: "2", 
-            name: "XYZ Wholesale", 
-            contact: "sarah@xyz.com", 
-            address: "456 Market Ave, Town", 
-            created_at: "2023-06-20T14:45:00Z" 
-          },
-        ]);
-        setSupplyItems([
-          { id: "1", supplier_id: "1", name: "Widget A", quantity: 100, price: 12.99 },
-          { id: "2", supplier_id: "1", name: "Gadget B", quantity: 50, price: 24.95 },
-          { id: "3", supplier_id: "2", name: "Tool X", quantity: 200, price: 8.50 },
-        ]);
+      setError(null);
+      
+      try {
+        // Fetch suppliers
+        const { data: suppliersData, error: suppliersError } = await supabase
+          .from('suppliers')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (suppliersError) throw suppliersError;
+
+        // Fetch supply items
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('supply_items')
+          .select('*');
+
+        if (itemsError) throw itemsError;
+
+        setSuppliers(suppliersData || []);
+        setSupplyItems(itemsData || []);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load data. Please try again.');
+      } finally {
         setIsLoading(false);
-      }, 800);
+      }
     };
 
     fetchData();
@@ -70,22 +74,55 @@ export default function Suppliers() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newSupplier = {
-      ...formData,
-      id: Math.random().toString(36).substring(2, 9),
-      created_at: new Date().toISOString(),
-    };
-    setSuppliers((prev) => [...prev, newSupplier]);
-    setFormData({ name: "", contact: "", address: "" });
-    setIsDialogOpen(false);
+    setError(null);
+    
+    try {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .insert([formData])
+        .select();
+
+      if (error) throw error;
+
+      if (data && data[0]) {
+        setSuppliers((prev) => [data[0], ...prev]);
+        setFormData({ name: "", contact: "", address: "" });
+        setIsDialogOpen(false);
+      }
+    } catch (err) {
+      console.error('Error adding supplier:', err);
+      setError('Failed to add supplier. Please try again.');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setSuppliers((prev) => prev.filter((supplier) => supplier.id !== id));
-    // Also remove related supply items
-    setSupplyItems((prev) => prev.filter((item) => item.supplier_id !== id));
+  const handleDelete = async (id: string) => {
+    setError(null);
+    
+    try {
+      // First delete related supply items
+      const { error: itemsError } = await supabase
+        .from('supply_items')
+        .delete()
+        .eq('supplier_id', id);
+
+      if (itemsError) throw itemsError;
+
+      // Then delete the supplier
+      const { error: supplierError } = await supabase
+        .from('suppliers')
+        .delete()
+        .eq('id', id);
+
+      if (supplierError) throw supplierError;
+
+      setSuppliers((prev) => prev.filter((supplier) => supplier.id !== id));
+      setSupplyItems((prev) => prev.filter((item) => item.supplier_id !== id));
+    } catch (err) {
+      console.error('Error deleting supplier:', err);
+      setError('Failed to delete supplier. Please try again.');
+    }
   };
 
   const getSupplierItemsCount = (supplierId: string) => {
@@ -129,6 +166,12 @@ export default function Suppliers() {
           </button>
         </div>
       </header>
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         {suppliers.length === 0 ? (
@@ -269,6 +312,11 @@ export default function Suppliers() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+                {error && (
+                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded">
+                    {error}
+                  </div>
+                )}
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
