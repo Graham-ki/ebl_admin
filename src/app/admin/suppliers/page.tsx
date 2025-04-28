@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { createClient } from "@/supabase/client";
+import { createClient } from "@supabase/supabase-js";
 
 interface Supplier {
   id: string;
