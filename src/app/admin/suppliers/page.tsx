@@ -42,10 +42,11 @@ export default function Suppliers() {
     purchase_date: new Date().toISOString().split('T')[0],
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [showSuppliesModal, setShowSuppliesModal] = useState(false);
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -145,7 +146,7 @@ export default function Suppliers() {
           price: 0,
           purchase_date: new Date().toISOString().split('T')[0],
         });
-        setIsItemDialogOpen(false);
+        setShowAddItemModal(false);
       }
     } catch (err) {
       console.error('Error adding supply item:', err);
@@ -224,7 +225,18 @@ export default function Suppliers() {
 
   const openSuppliesModal = (supplier: Supplier) => {
     setSelectedSupplier(supplier);
-    setIsItemDialogOpen(true);
+    setShowSuppliesModal(true);
+  };
+
+  const openAddItemModal = () => {
+    setItemFormData({
+      supplier_id: selectedSupplier?.id || "",
+      name: "",
+      quantity: 0,
+      price: 0,
+      purchase_date: new Date().toISOString().split('T')[0],
+    });
+    setShowAddItemModal(true);
   };
 
   if (isLoading) {
@@ -428,8 +440,8 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* Supplies Modal */}
-      {isItemDialogOpen && selectedSupplier && (
+      {/* Supplies Table Modal */}
+      {showSuppliesModal && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
             <div className="p-6 flex-shrink-0">
@@ -439,25 +451,13 @@ export default function Suppliers() {
                 </h3>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {
-                      setItemFormData({
-                        supplier_id: selectedSupplier.id,
-                        name: "",
-                        quantity: 0,
-                        price: 0,
-                        purchase_date: new Date().toISOString().split('T')[0],
-                      });
-                      setIsItemDialogOpen(true);
-                    }}
+                    onClick={openAddItemModal}
                     className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
                   >
                     + Add Item
                   </button>
                   <button 
-                    onClick={() => {
-                      setIsItemDialogOpen(false);
-                      setSelectedSupplier(null);
-                    }}
+                    onClick={() => setShowSuppliesModal(false)}
                     className="text-gray-400 hover:text-gray-500"
                   >
                     ✕
@@ -526,16 +526,16 @@ export default function Suppliers() {
       )}
 
       {/* Add Supply Item Modal */}
-      {isItemDialogOpen && selectedSupplier && (
+      {showAddItemModal && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Add New Supply Item
+                  Add New Supply Item for {selectedSupplier.name}
                 </h3>
                 <button 
-                  onClick={() => setIsItemDialogOpen(false)}
+                  onClick={() => setShowAddItemModal(false)}
                   className="text-gray-400 hover:text-gray-500"
                 >
                   ✕
@@ -609,7 +609,7 @@ export default function Suppliers() {
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => setIsItemDialogOpen(false)}
+                    onClick={() => setShowAddItemModal(false)}
                     className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
