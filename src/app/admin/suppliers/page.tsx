@@ -36,8 +36,6 @@ export default function Suppliers() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
-
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
