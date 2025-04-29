@@ -10,7 +10,7 @@ const supabase = createClient(
 );
 
 interface Employee {
-  id: string;
+  id: number;
   name: string;
   role: string;
   contact: string;
@@ -21,8 +21,8 @@ interface Employee {
 }
 
 interface AttendanceRecord {
-  id: string;
-  employee_id: string;
+  id: number;
+  employee_id: number;
   day: number;
   month: number;
   year: number;
