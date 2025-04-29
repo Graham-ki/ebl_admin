@@ -447,7 +447,7 @@ export default function Suppliers() {
             <div className="p-6 flex-shrink-0">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Supplies for {selectedSupplier.name}
+                  Supplies from {selectedSupplier.name}
                 </h3>
                 <div className="flex items-center gap-2">
                   <button
@@ -481,7 +481,7 @@ export default function Suppliers() {
                           Quantity
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Price
+                         Unit  Price
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Purchase Date
@@ -573,7 +573,7 @@ export default function Suppliers() {
                 </div>
                 <div>
                   <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-                    Price
+                   Unit  Price
                   </label>
                   <input
                     type="number"
