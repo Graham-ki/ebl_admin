@@ -275,7 +275,7 @@ export default function Suppliers() {
       <div className="min-h-screen p-6 bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-          <p>Loading suppliers...</p>
+          <p>Loading service providers...</p>
         </div>
       </div>
     );
@@ -287,15 +287,15 @@ export default function Suppliers() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <span className="text-blue-500">📦</span> Suppliers
+              <span className="text-blue-500">📦</span> Providers
             </h1>
-            <p className="text-gray-600">Manage your suppliers and their supplies</p>
+            <p className="text-gray-600">Manage your service providers and the services provided</p>
           </div>
           <button
             onClick={() => setIsDialogOpen(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
           >
-            <span>+</span> Add Supplier
+            <span>+</span> Add new
           </button>
         </div>
       </header>
@@ -312,8 +312,8 @@ export default function Suppliers() {
             <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <span className="text-2xl">📭</span>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">No suppliers yet</h3>
-            <p className="text-gray-500 mb-4">Get started by adding your first supplier</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-1">No data yet</h3>
+            <p className="text-gray-500 mb-4">Get started by adding your first service provider</p>
             <button
               onClick={() => setIsDialogOpen(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
@@ -327,13 +327,13 @@ export default function Suppliers() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Supplier
+                    Name
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Contact
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Supplies
+                    Services
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Added
@@ -367,7 +367,7 @@ export default function Suppliers() {
                           onClick={() => openSuppliesModal(supplier)}
                           className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 flex items-center gap-1"
                         >
-                          <span>📦</span> Supplies
+                          <span>📦</span> View supplies
                         </button>
                         <button 
                           onClick={() => handleDelete(supplier.id)}
@@ -391,7 +391,7 @@ export default function Suppliers() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Add New Supplier</h3>
+                <h3 className="text-lg font-medium text-gray-900">Add provider</h3>
                 <button 
                   onClick={() => setIsDialogOpen(false)}
                   className="text-gray-400 hover:text-gray-500"
@@ -493,7 +493,7 @@ export default function Suppliers() {
               <div className="overflow-y-auto max-h-[60vh]">
                 {getSupplierItems(selectedSupplier.id).length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    No supply items found for this supplier.
+                    No supplied items found for this service.
                   </div>
                 ) : (
                   <table className="min-w-full divide-y divide-gray-200">
@@ -581,7 +581,7 @@ export default function Suppliers() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Add Supply Item
+                  Add  Item
                 </h3>
                 <button 
                   onClick={() => setShowAddItemModal(false)}
