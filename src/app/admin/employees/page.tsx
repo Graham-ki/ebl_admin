@@ -75,7 +75,7 @@ export default function Employees() {
     fetchData();
   }, []);
 
-  const fetchAttendance = async (employeeId: string) => {
+  const fetchAttendance = async (employeeId: number) => {
     try {
       const { data, error } = await supabase
         .from('attendance')
@@ -128,7 +128,7 @@ export default function Employees() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
     setError(null);
     
     try {
@@ -146,7 +146,7 @@ export default function Employees() {
     }
   };
 
-  const toggleStatus = async (id: string, currentStatus: 'Active' | 'Inactive') => {
+  const toggleStatus = async (id: number, currentStatus: 'Active' | 'Inactive') => {
     try {
       const { data, error } = await supabase
         .from('employees')
@@ -242,7 +242,7 @@ export default function Employees() {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'UGX'
     }).format(amount);
   };
 
