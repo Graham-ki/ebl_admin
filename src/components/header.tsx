@@ -64,6 +64,8 @@ export const Header = () => {
         supabase.from('expenses').select('*').ilike('item', `%${query}%`),
         supabase.from('users').select('*').ilike('name', `%${query}%`),
         supabase.from('finance').select('*').or(`mode_of_payment.ilike.%${query}%,mode_of_mobilemoney.ilike.%${query}%,bank_name.ilike.%${query}%`),
+         supabase.from('employees').select('*').ilike('name', `%${query}%`), 
+        supabase.from('suppliers').select('*').ilike('name', `%${query}%`),
       ];
 
       try {
@@ -77,6 +79,8 @@ export const Header = () => {
             'expenses',
             'users',
             'finance',
+            'employees',
+            'suppliers',
           ];
           return (result.data || []).map((item) => ({
             ...item,
