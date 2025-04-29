@@ -46,13 +46,16 @@ export default function Suppliers() {
     purchase_date: new Date().toISOString().split('T')[0],
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [selectedItem, setSelectedItem] = useState<SupplyItem | null>(null);
   const [showSuppliesModal, setShowSuppliesModal] = useState(false);
-  const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [existingItems, setExistingItems] = useState<string[]>([]);
   const [isNewItem, setIsNewItem] = useState(true);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isItemEditMode, setIsItemEditMode] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -128,21 +131,37 @@ export default function Suppliers() {
     setError(null);
     
     try {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .insert([formData])
-        .select();
+      if (isEditMode && selectedSupplier) {
+        const { data, error } = await supabase
+          .from('suppliers')
+          .update(formData)
+          .eq('id', selectedSupplier.id)
+          .select();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      if (data && data[0]) {
-        setSuppliers(prev => [data[0], ...prev]);
-        setFormData({ name: "", contact: "", address: "" });
-        setIsDialogOpen(false);
+        if (data && data[0]) {
+          setSuppliers(prev => prev.map(supplier => 
+            supplier.id === selectedSupplier.id ? data[0] : supplier
+          ));
+          resetForm();
+        }
+      } else {
+        const { data, error } = await supabase
+          .from('suppliers')
+          .insert([formData])
+          .select();
+
+        if (error) throw error;
+
+        if (data && data[0]) {
+          setSuppliers(prev => [data[0], ...prev]);
+          resetForm();
+        }
       }
     } catch (err) {
-      console.error('Error adding supplier:', err);
-      setError('Failed to add supplier. Please try again.');
+      console.error('Error saving supplier:', err);
+      setError('Failed to save supplier. Please try again.');
     }
   };
 
@@ -156,35 +175,44 @@ export default function Suppliers() {
       const total_cost = itemFormData.quantity * itemFormData.price;
       const balance = total_cost - itemFormData.amount_paid;
 
-      const itemToSubmit = {
+      const itemData = {
         ...itemFormData,
         supplier_id: selectedSupplier.id,
         total_cost,
         balance
       };
 
-      const { data, error } = await supabase
-        .from('supply_items')
-        .insert([itemToSubmit])
-        .select();
+      if (isItemEditMode && selectedItem) {
+        const { data, error } = await supabase
+          .from('supply_items')
+          .update(itemData)
+          .eq('id', selectedItem.id)
+          .select();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      if (data && data[0]) {
-        setSupplyItems(prev => [...prev, data[0]]);
-        setItemFormData({
-          supplier_id: "",
-          name: "",
-          quantity: 0,
-          price: 0,
-          amount_paid: 0,
-          purchase_date: new Date().toISOString().split('T')[0],
-        });
-        setShowAddItemModal(false);
+        if (data && data[0]) {
+          setSupplyItems(prev => prev.map(item => 
+            item.id === selectedItem.id ? data[0] : item
+          ));
+          resetItemForm();
+        }
+      } else {
+        const { data, error } = await supabase
+          .from('supply_items')
+          .insert([itemData])
+          .select();
+
+        if (error) throw error;
+
+        if (data && data[0]) {
+          setSupplyItems(prev => [...prev, data[0]]);
+          resetItemForm();
+        }
       }
     } catch (err) {
-      console.error('Error adding supply item:', err);
-      setError('Failed to add supply item. Please try again.');
+      console.error('Error saving supply item:', err);
+      setError('Failed to save supply item. Please try again.');
     }
   };
 
@@ -251,6 +279,23 @@ export default function Suppliers() {
     }).format(amount);
   };
 
+  const openEditSupplierModal = (supplier: Supplier) => {
+    setFormData({
+      name: supplier.name,
+      contact: supplier.contact,
+      address: supplier.address
+    });
+    setSelectedSupplier(supplier);
+    setIsEditMode(true);
+    setIsDialogOpen(true);
+  };
+
+  const openAddSupplierModal = () => {
+    resetForm();
+    setIsEditMode(false);
+    setIsDialogOpen(true);
+  };
+
   const openSuppliesModal = async (supplier: Supplier) => {
     setSelectedSupplier(supplier);
     await fetchSupplierItems(supplier.id);
@@ -258,16 +303,50 @@ export default function Suppliers() {
   };
 
   const openAddItemModal = () => {
+    resetItemForm();
+    setIsItemEditMode(false);
+    setIsNewItem(true);
+    setIsItemDialogOpen(true);
+  };
+
+  const openEditItemModal = (item: SupplyItem) => {
     setItemFormData({
-      supplier_id: selectedSupplier?.id || "",
+      supplier_id: item.supplier_id,
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      amount_paid: item.amount_paid,
+      purchase_date: item.purchase_date || new Date().toISOString().split('T')[0],
+    });
+    setSelectedItem(item);
+    setIsItemEditMode(true);
+    setIsNewItem(false);
+    setIsItemDialogOpen(true);
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      contact: "",
+      address: ""
+    });
+    setSelectedSupplier(null);
+    setIsDialogOpen(false);
+    setIsEditMode(false);
+  };
+
+  const resetItemForm = () => {
+    setItemFormData({
+      supplier_id: "",
       name: "",
       quantity: 0,
       price: 0,
       amount_paid: 0,
       purchase_date: new Date().toISOString().split('T')[0],
     });
-    setIsNewItem(true);
-    setShowAddItemModal(true);
+    setSelectedItem(null);
+    setIsItemDialogOpen(false);
+    setIsItemEditMode(false);
   };
 
   if (isLoading) {
@@ -287,12 +366,12 @@ export default function Suppliers() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <span className="text-blue-500">📦</span> Providers
+              <span className="text-blue-500">📦</span> Service providers
             </h1>
-            <p className="text-gray-600">Manage your service providers and the services provided</p>
+            <p className="text-gray-600">Manage your service providers and their supplies</p>
           </div>
           <button
-            onClick={() => setIsDialogOpen(true)}
+            onClick={openAddSupplierModal}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
           >
             <span>+</span> Add new
@@ -315,10 +394,10 @@ export default function Suppliers() {
             <h3 className="text-lg font-medium text-gray-900 mb-1">No data yet</h3>
             <p className="text-gray-500 mb-4">Get started by adding your first service provider</p>
             <button
-              onClick={() => setIsDialogOpen(true)}
+              onClick={openAddSupplierModal}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
             >
-              Add Supplier
+              Add new
             </button>
           </div>
         ) : (
@@ -327,13 +406,13 @@ export default function Suppliers() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
+                    Provider
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Contact
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Services
+                    Supplies
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Added
@@ -364,10 +443,16 @@ export default function Suppliers() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
                         <button
-                          onClick={() => openSuppliesModal(supplier)}
+                          onClick={() => openEditSupplierModal(supplier)}
                           className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 flex items-center gap-1"
                         >
-                          <span>📦</span> View supplies
+                          <span>✏️</span> Edit
+                        </button>
+                        <button
+                          onClick={() => openSuppliesModal(supplier)}
+                          className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                        >
+                          <span>📦</span> View Supplies
                         </button>
                         <button 
                           onClick={() => handleDelete(supplier.id)}
@@ -385,15 +470,17 @@ export default function Suppliers() {
         )}
       </div>
 
-      {/* Add Supplier Modal */}
+      {/* Supplier Add/Edit Modal */}
       {isDialogOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Add provider</h3>
+                <h3 className="text-lg font-medium text-gray-900">
+                  {isEditMode ? 'Edit Supplier' : 'Add New Supplier'}
+                </h3>
                 <button 
-                  onClick={() => setIsDialogOpen(false)}
+                  onClick={resetForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
                   ✕
@@ -447,7 +534,7 @@ export default function Suppliers() {
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => setIsDialogOpen(false)}
+                    onClick={resetForm}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
@@ -456,7 +543,7 @@ export default function Suppliers() {
                     type="submit"
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
-                    Save Supplier
+                    {isEditMode ? 'Update Supplier' : 'Save Supplier'}
                   </button>
                 </div>
               </form>
@@ -472,7 +559,7 @@ export default function Suppliers() {
             <div className="p-6 flex-shrink-0">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Supplies from {selectedSupplier.name}
+                  Services from {selectedSupplier.name}
                 </h3>
                 <div className="flex items-center gap-2">
                   <button
@@ -493,7 +580,7 @@ export default function Suppliers() {
               <div className="overflow-y-auto max-h-[60vh]">
                 {getSupplierItems(selectedSupplier.id).length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    No supplied items found for this service.
+                    No items found for this service provider.
                   </div>
                 ) : (
                   <table className="min-w-full divide-y divide-gray-200">
@@ -552,12 +639,20 @@ export default function Suppliers() {
                             {item.purchase_date ? formatDate(item.purchase_date) : 'N/A'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button
-                              onClick={() => handleDeleteItem(item.id)}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              Delete
-                            </button>
+                            <div className="flex justify-end space-x-2">
+                              <button
+                                onClick={() => openEditItemModal(item)}
+                                className="text-blue-600 hover:text-blue-900"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteItem(item.id)}
+                                className="text-red-600 hover:text-red-900"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -570,21 +665,17 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* Add Supply Item Modal */}
-      {showAddItemModal && selectedSupplier && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 ">
-          <div className="bg-white rounded-lg shadow-lg
-      w-full max-w-lg        
-      max-h-screen          
-      overflow-y-auto       
-      p-6">
+      {/* Supply Item Add/Edit Modal */}
+      {isItemDialogOpen && selectedSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Add  Item
+                  {isItemEditMode ? 'Edit Item' : 'Add  Item'}
                 </h3>
                 <button 
-                  onClick={() => setShowAddItemModal(false)}
+                  onClick={resetItemForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
                   ✕
@@ -595,24 +686,26 @@ export default function Suppliers() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Item Name
                   </label>
-                  <div className="flex gap-2 mb-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsNewItem(true)}
-                      className={`px-3 py-1 text-sm rounded-lg ${isNewItem ? 'bg-blue-100 text-blue-800' : 'bg-gray-100'}`}
-                    >
-                      New Item
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsNewItem(false)}
-                      className={`px-3 py-1 text-sm rounded-lg ${!isNewItem ? 'bg-blue-100 text-blue-800' : 'bg-gray-100'}`}
-                    >
-                      Existing Item
-                    </button>
-                  </div>
+                  {!isItemEditMode && (
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsNewItem(true)}
+                        className={`px-3 py-1 text-sm rounded-lg ${isNewItem ? 'bg-blue-100 text-blue-800' : 'bg-gray-100'}`}
+                      >
+                        New Item
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsNewItem(false)}
+                        className={`px-3 py-1 text-sm rounded-lg ${!isNewItem ? 'bg-blue-100 text-blue-800' : 'bg-gray-100'}`}
+                      >
+                        Existing Item
+                      </button>
+                    </div>
+                  )}
                   
-                  {isNewItem ? (
+                  {isNewItem || isItemEditMode ? (
                     <input
                       type="text"
                       name="name"
@@ -620,7 +713,8 @@ export default function Suppliers() {
                       onChange={handleItemInputChange}
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter new item name"
+                      placeholder="Enter item name"
+                      disabled={isItemEditMode}
                     />
                   ) : (
                     <select
@@ -732,7 +826,7 @@ export default function Suppliers() {
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => setShowAddItemModal(false)}
+                    onClick={resetItemForm}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
@@ -741,7 +835,7 @@ export default function Suppliers() {
                     type="submit"
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
-                    Save Item
+                    {isItemEditMode ? 'Update Item' : 'Save Item'}
                   </button>
                 </div>
               </form>
