@@ -572,12 +572,7 @@ export default function Suppliers() {
 
       {/* Add Supply Item Modal */}
       {showAddItemModal && selectedSupplier && (
-        <div className="  fixed inset-0
-    bg-black bg-opacity-50
-    flex items-center justify-center
-    p-4
-    z-50
-    overflow-auto ">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 ">
           <div className="bg-white rounded-lg shadow-lg
       w-full max-w-lg        
       max-h-screen          
