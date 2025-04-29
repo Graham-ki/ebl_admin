@@ -17,7 +17,7 @@ export default function ItemDetailsPage() {
       try {
         // Fetch the item based on the table and ID
         const { data, error } = await supabase
-          .from(table as 'users' | 'order' | 'category' | 'expenses' | 'ledger' | 'materials' | 'order_item' | 'product' | 'products_materials' | 'proof_of_payment' | 'finance' | 'employees' | 'suppliers')
+          .from(table as 'users' | 'order' | 'category' | 'expenses' | 'ledger' | 'materials' | 'order_item' | 'product' | 'products_materials' | 'proof_of_payment' | 'finance')
           .select('*')
           .eq('id', id)
           .single();
@@ -53,8 +53,6 @@ export default function ItemDetailsPage() {
         {table === 'expenses' && <ExpenseDetails item={item} />}
         {table === 'products_materials' && <ProductMaterialDetails item={item} />}
         {table === 'users' && <UserDetails item={item} />}
-        {table === 'employees' && <EmployeeDetails item={item} />}
-        {table === 'suppliers' && <SupplierDetails item={item} />}
         {table === 'finance' && <UserLedgerDetails item={item} />}
       </div>
     </div>
@@ -157,38 +155,6 @@ function UserDetails({ item }: { item: any }) {
   );
 }
 
-// Component to display employee details
-function EmployeeDetails({ item }: { item: any }) {
-  return (
-    <div>
-      <h2 className="text-2xl font-semibold mb-4 text-sky-600">{item.name} is an employee</h2>
-      <p>
-        <strong>Start Date:</strong> <em className="text-lime-600">{item.start_date}</em>
-      </p>
-      <p>
-        <strong>Salary:</strong> <em className="text-lime-600">{item.salary}</em>
-      </p>
-      <p>
-        <strong>Status:</strong> <em className="text-lime-600">{item.status}</em>
-      </p>
-    </div>
-  );
-}
-
-// Component to display supplier details
-function SupplierDetails({ item }: { item: any }) {
-  return (
-    <div>
-      <h2 className="text-2xl font-semibold mb-4 text-sky-600">{item.name} is a supplier</h2>
-      <p>
-        <strong>Contact:</strong> <em className="text-lime-600">{item.contact}</em>
-      </p>
-      <p>
-        <strong>Address:</strong> <em className="text-lime-600">{item.address}</em>
-      </p>
-    </div>
-  );
-}
 // Component to display user ledger details
 function UserLedgerDetails({ item }: { item: any }) {
   return (
