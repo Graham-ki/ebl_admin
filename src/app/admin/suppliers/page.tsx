@@ -23,6 +23,9 @@ interface SupplyItem {
   name: string;
   quantity: number;
   price: number;
+  total_cost: number;
+  amount_paid: number;
+  balance: number;
   purchase_date?: string;
 }
 
@@ -34,11 +37,12 @@ export default function Suppliers() {
     contact: "",
     address: "",
   });
-  const [itemFormData, setItemFormData] = useState<Omit<SupplyItem, "id">>({
+  const [itemFormData, setItemFormData] = useState<Omit<SupplyItem, "id" | "total_cost" | "balance">>({
     supplier_id: "",
     name: "",
     quantity: 0,
     price: 0,
+    amount_paid: 0,
     purchase_date: new Date().toISOString().split('T')[0],
   });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -47,6 +51,8 @@ export default function Suppliers() {
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [showSuppliesModal, setShowSuppliesModal] = useState(false);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [existingItems, setExistingItems] = useState<string[]>([]);
+  const [isNewItem, setIsNewItem] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -54,7 +60,6 @@ export default function Suppliers() {
       setError(null);
       
       try {
-        // Fetch suppliers
         const { data: suppliersData, error: suppliersError } = await supabase
           .from('suppliers')
           .select('*')
@@ -62,7 +67,6 @@ export default function Suppliers() {
 
         if (suppliersError) throw suppliersError;
 
-        // Fetch supply items
         const { data: itemsData, error: itemsError } = await supabase
           .from('supply_items')
           .select('*');
@@ -82,16 +86,40 @@ export default function Suppliers() {
     fetchData();
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  useEffect(() => {
+    if (itemFormData.quantity && itemFormData.price) {
+      const total = itemFormData.quantity * itemFormData.price;
+      const balance = total - (itemFormData.amount_paid || 0);
+      setItemFormData(prev => ({ ...prev, total_cost: total, balance }));
+    }
+  }, [itemFormData.quantity, itemFormData.price, itemFormData.amount_paid]);
+
+  const fetchSupplierItems = async (supplierId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('supply_items')
+        .select('name')
+        .eq('supplier_id', supplierId);
+
+      if (error) throw error;
+
+      const uniqueItems = [...new Set(data?.map(item => item.name))];
+      setExistingItems(uniqueItems || []);
+    } catch (err) {
+      console.error('Error fetching supplier items:', err);
+    }
   };
 
-  const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setItemFormData((prev) => ({ 
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setItemFormData(prev => ({ 
       ...prev, 
-      [name]: name === 'quantity' || name === 'price' ? Number(value) : value 
+      [name]: name === 'quantity' || name === 'price' || name === 'amount_paid' ? Number(value) : value 
     }));
   };
 
@@ -108,7 +136,7 @@ export default function Suppliers() {
       if (error) throw error;
 
       if (data && data[0]) {
-        setSuppliers((prev) => [data[0], ...prev]);
+        setSuppliers(prev => [data[0], ...prev]);
         setFormData({ name: "", contact: "", address: "" });
         setIsDialogOpen(false);
       }
@@ -125,9 +153,14 @@ export default function Suppliers() {
     try {
       if (!selectedSupplier) return;
       
+      const total_cost = itemFormData.quantity * itemFormData.price;
+      const balance = total_cost - itemFormData.amount_paid;
+
       const itemToSubmit = {
         ...itemFormData,
         supplier_id: selectedSupplier.id,
+        total_cost,
+        balance
       };
 
       const { data, error } = await supabase
@@ -138,12 +171,13 @@ export default function Suppliers() {
       if (error) throw error;
 
       if (data && data[0]) {
-        setSupplyItems((prev) => [...prev, data[0]]);
+        setSupplyItems(prev => [...prev, data[0]]);
         setItemFormData({
           supplier_id: "",
           name: "",
           quantity: 0,
           price: 0,
+          amount_paid: 0,
           purchase_date: new Date().toISOString().split('T')[0],
         });
         setShowAddItemModal(false);
@@ -158,7 +192,6 @@ export default function Suppliers() {
     setError(null);
     
     try {
-      // First delete related supply items
       const { error: itemsError } = await supabase
         .from('supply_items')
         .delete()
@@ -166,7 +199,6 @@ export default function Suppliers() {
 
       if (itemsError) throw itemsError;
 
-      // Then delete the supplier
       const { error: supplierError } = await supabase
         .from('suppliers')
         .delete()
@@ -174,8 +206,8 @@ export default function Suppliers() {
 
       if (supplierError) throw supplierError;
 
-      setSuppliers((prev) => prev.filter((supplier) => supplier.id !== id));
-      setSupplyItems((prev) => prev.filter((item) => item.supplier_id !== id));
+      setSuppliers(prev => prev.filter(supplier => supplier.id !== id));
+      setSupplyItems(prev => prev.filter(item => item.supplier_id !== id));
     } catch (err) {
       console.error('Error deleting supplier:', err);
       setError('Failed to delete supplier. Please try again.');
@@ -193,7 +225,7 @@ export default function Suppliers() {
 
       if (error) throw error;
 
-      setSupplyItems((prev) => prev.filter((item) => item.id !== id));
+      setSupplyItems(prev => prev.filter(item => item.id !== id));
     } catch (err) {
       console.error('Error deleting supply item:', err);
       setError('Failed to delete supply item. Please try again.');
@@ -202,10 +234,6 @@ export default function Suppliers() {
 
   const getSupplierItems = (supplierId: string) => {
     return supplyItems.filter(item => item.supplier_id === supplierId);
-  };
-
-  const getSupplierItemsCount = (supplierId: string) => {
-    return getSupplierItems(supplierId).length;
   };
 
   const formatDate = (dateString: string) => {
@@ -223,8 +251,9 @@ export default function Suppliers() {
     }).format(amount);
   };
 
-  const openSuppliesModal = (supplier: Supplier) => {
+  const openSuppliesModal = async (supplier: Supplier) => {
     setSelectedSupplier(supplier);
+    await fetchSupplierItems(supplier.id);
     setShowSuppliesModal(true);
   };
 
@@ -234,8 +263,10 @@ export default function Suppliers() {
       name: "",
       quantity: 0,
       price: 0,
+      amount_paid: 0,
       purchase_date: new Date().toISOString().split('T')[0],
     });
+    setIsNewItem(true);
     setShowAddItemModal(true);
   };
 
@@ -262,7 +293,7 @@ export default function Suppliers() {
           </div>
           <button
             onClick={() => setIsDialogOpen(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
           >
             <span>+</span> Add Supplier
           </button>
@@ -270,12 +301,12 @@ export default function Suppliers() {
       </header>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+        <div className="mb-4 p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg">
           {error}
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
         {suppliers.length === 0 ? (
           <div className="p-8 text-center">
             <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -285,7 +316,7 @@ export default function Suppliers() {
             <p className="text-gray-500 mb-4">Get started by adding your first supplier</p>
             <button
               onClick={() => setIsDialogOpen(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
             >
               Add Supplier
             </button>
@@ -295,19 +326,19 @@ export default function Suppliers() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Supplier
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Contact
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Supplies
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Added
                   </th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -324,7 +355,7 @@ export default function Suppliers() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {getSupplierItemsCount(supplier.id)} items
+                        {getSupplierItems(supplier.id).length} items
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -332,20 +363,17 @@ export default function Suppliers() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <button className="text-blue-600 hover:text-blue-900">
-                          ✏️ Edit
+                        <button
+                          onClick={() => openSuppliesModal(supplier)}
+                          className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 flex items-center gap-1"
+                        >
+                          <span>📦</span> Supplies
                         </button>
                         <button 
                           onClick={() => handleDelete(supplier.id)}
-                          className="text-red-600 hover:text-red-900"
+                          className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
                         >
-                          🗑️ Delete
-                        </button>
-                        <button
-                          onClick={() => openSuppliesModal(supplier)}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          📦 Supplies
+                          <span>🗑️</span> Delete
                         </button>
                       </div>
                     </td>
@@ -373,49 +401,46 @@ export default function Suppliers() {
               </div>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Name
                   </label>
                   <input
                     type="text"
-                    id="name"
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label htmlFor="contact" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Contact
                   </label>
                   <input
                     type="text"
-                    id="contact"
                     name="contact"
                     value={formData.contact}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Address
                   </label>
                   <input
                     type="text"
-                    id="address"
                     name="address"
                     value={formData.address}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 {error && (
-                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded">
+                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
                     {error}
                   </div>
                 )}
@@ -423,13 +448,13 @@ export default function Suppliers() {
                   <button
                     type="button"
                     onClick={() => setIsDialogOpen(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Save Supplier
                   </button>
@@ -443,7 +468,7 @@ export default function Suppliers() {
       {/* Supplies Table Modal */}
       {showSuppliesModal && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
             <div className="p-6 flex-shrink-0">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
@@ -452,9 +477,9 @@ export default function Suppliers() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={openAddItemModal}
-                    className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                    className="px-3 py-1 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1"
                   >
-                    + Add Item
+                    <span>+</span> Add Item
                   </button>
                   <button 
                     onClick={() => setShowSuppliesModal(false)}
@@ -475,16 +500,25 @@ export default function Suppliers() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Item Name
+                          Item
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Quantity
+                          Qty
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                         Unit  Price
+                          Unit Price
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Purchase Date
+                          Total Cost
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Amount Paid
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Balance
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Date
                         </th>
                         <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
@@ -502,6 +536,17 @@ export default function Suppliers() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {formatCurrency(item.price)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatCurrency(item.total_cost)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatCurrency(item.amount_paid)}
+                          </td>
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                            item.balance > 0 ? 'text-red-600' : 'text-green-600'
+                          }`}>
+                            {formatCurrency(item.balance)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {item.purchase_date ? formatDate(item.purchase_date) : 'N/A'}
@@ -532,7 +577,7 @@ export default function Suppliers() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Add New Supply Item for {selectedSupplier.name}
+                  Add Supply Item
                 </h3>
                 <button 
                   onClick={() => setShowAddItemModal(false)}
@@ -543,80 +588,154 @@ export default function Suppliers() {
               </div>
               <form onSubmit={handleItemSubmit} className="space-y-4">
                 <div>
-                  <label htmlFor="item-name" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Item Name
                   </label>
-                  <input
-                    type="text"
-                    id="item-name"
-                    name="name"
-                    value={itemFormData.name}
-                    onChange={handleItemInputChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsNewItem(true)}
+                      className={`px-3 py-1 text-sm rounded-lg ${isNewItem ? 'bg-blue-100 text-blue-800' : 'bg-gray-100'}`}
+                    >
+                      New Item
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsNewItem(false)}
+                      className={`px-3 py-1 text-sm rounded-lg ${!isNewItem ? 'bg-blue-100 text-blue-800' : 'bg-gray-100'}`}
+                    >
+                      Existing Item
+                    </button>
+                  </div>
+                  
+                  {isNewItem ? (
+                    <input
+                      type="text"
+                      name="name"
+                      value={itemFormData.name}
+                      onChange={handleItemInputChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter new item name"
+                    />
+                  ) : (
+                    <select
+                      name="name"
+                      value={itemFormData.name}
+                      onChange={handleItemInputChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select existing item</option>
+                      {existingItems.map(item => (
+                        <option key={item} value={item}>{item}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantity
+                    </label>
+                    <input
+                      type="number"
+                      name="quantity"
+                      value={itemFormData.quantity}
+                      onChange={handleItemInputChange}
+                      required
+                      min="1"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Unit Price (UGX)
+                    </label>
+                    <input
+                      type="number"
+                      name="price"
+                      value={itemFormData.price}
+                      onChange={handleItemInputChange}
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <div className="flex justify-between mb-1">
+                    <span className="text-sm font-medium">Total Cost:</span>
+                    <span className="font-medium">
+                      {formatCurrency((itemFormData.quantity || 0) * (itemFormData.price || 0))}
+                    </span>
+                  </div>
+                </div>
+
                 <div>
-                  <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">
-                    Quantity
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Amount Paid (UGX)
                   </label>
                   <input
                     type="number"
-                    id="quantity"
-                    name="quantity"
-                    value={itemFormData.quantity}
+                    name="amount_paid"
+                    value={itemFormData.amount_paid}
                     onChange={handleItemInputChange}
-                    required
-                    min="0"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-                   Unit  Price
-                  </label>
-                  <input
-                    type="number"
-                    id="price"
-                    name="price"
-                    value={itemFormData.price}
-                    onChange={handleItemInputChange}
-                    required
                     min="0"
                     step="0.01"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+
+                <div className="bg-gray-100 p-3 rounded-lg">
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Balance:</span>
+                    <span className={`font-medium ${
+                      ((itemFormData.quantity || 0) * (itemFormData.price || 0) - (itemFormData.amount_paid || 0)) > 0 
+                        ? 'text-red-600' 
+                        : 'text-green-600'
+                    }`}>
+                      {formatCurrency(
+                        (itemFormData.quantity || 0) * (itemFormData.price || 0) - (itemFormData.amount_paid || 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
+
                 <div>
-                  <label htmlFor="purchase_date" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Purchase Date
                   </label>
                   <input
                     type="date"
-                    id="purchase_date"
                     name="purchase_date"
                     value={itemFormData.purchase_date}
                     onChange={handleItemInputChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+
                 {error && (
-                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded">
+                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
                     {error}
                   </div>
                 )}
+
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
                     onClick={() => setShowAddItemModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Save Item
                   </button>
