@@ -29,11 +29,11 @@ interface Expense {
   item: string;
   amount_spent: number;
   department: string;
-  created_at: string;
+  date: string;
 }
 
 interface Finance {
-  id: string;
+  id: number;
   total_amount: number;
   amount_paid: number;
   mode_of_payment: 'Cash' | 'Bank' | 'Mobile Money';
