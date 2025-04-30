@@ -20,13 +20,25 @@ type FinancialData = {
   cashFlowRatio: number;
   burnRate: number;
   runway: number;
-  totalCashAvailable: number;
+  cashAtHand: number;
+  totalDeposits: number;
   totalLiabilities: number;
   expenseByItem: { name: string; value: number }[];
   liabilitiesStatus: { name: string; value: number }[];
   monthlyTrends: { month: string; inflow: number; outflow: number; net: number }[];
   largestExpenses: { name: string; value: number }[];
   recentTransactions: { description: string; amount: number; type: 'income' | 'expense'; date: string }[];
+};
+
+// Tooltip explanations
+const metricExplanations = {
+  liquidityRatio: "Measures your ability to pay short-term debts. A ratio above 1.5 means you can cover current liabilities 1.5 times over.",
+  cashFlowRatio: "Shows if operating cash can cover current liabilities. Above 1 is healthy (cash covers debts).",
+  burnRate: "Your net monthly cash loss (negative means you're gaining cash). Aim for negative/zero.",
+  runway: "How many months you can operate at current burn rate before running out of cash.",
+  cashAtHand: "Actual cash available after accounting for all expenses (Amount available - Amount spent).",
+  totalDeposits: "Total money received from all sources (amount_paid in finance table).",
+  totalLiabilities: "Total unpaid obligations to suppliers/service providers."
 };
 
 export default function FinancialHealth() {
@@ -36,7 +48,8 @@ export default function FinancialHealth() {
     cashFlowRatio: 0,
     burnRate: 0,
     runway: 0,
-    totalCashAvailable: 0,
+    cashAtHand: 0,
+    totalDeposits: 0,
     totalLiabilities: 0,
     expenseByItem: [],
     liabilitiesStatus: [],
@@ -64,10 +77,10 @@ export default function FinancialHealth() {
       // Execute all queries in parallel
       const results = await Promise.allSettled([
         supabase
-          .from('expenses')
+          .from('expense')
           .select('item, amount_spent, created_at')
-          .gte('date', startDate)
-          .lte('date', endDate),
+          .gte('created_at', startDate)
+          .lte('created_at', endDate),
         supabase
           .from('finance')
           .select('amount_paid, amount_available, created_at')
@@ -121,6 +134,86 @@ export default function FinancialHealth() {
   // Date range change handler
   const handleDateChange = (range: { start: Date; end: Date }) => {
     setDateRange(range);
+  };
+
+  // Process raw data into metrics
+  const processFinancialData = (
+    expenses: any[],
+    finance: any[],
+    liabilities: any[]
+  ): FinancialData => {
+    // Calculate totals with proper null checks
+    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount_spent || 0), 0);
+    const totalDeposits = finance.reduce((sum, f) => sum + (f.amount_paid || 0), 0);
+    const totalAmountAvailable = finance.reduce((sum, f) => sum + (f.amount_available || 0), 0);
+    const cashAtHand = totalAmountAvailable - totalExpenses;
+    const totalLiabilities = liabilities.reduce((sum, l) => sum + (l.balance || 0), 0);
+    const totalPaidLiabilities = liabilities.reduce((sum, l) => sum + (l.amount_paid || 0), 0);
+
+    // Group expenses by item
+    const expenseByItem = expenses.reduce((acc: { name: string; value: number }[], expense) => {
+      if (!expense?.item) return acc;
+      
+      const existing = acc.find(item => item.name === expense.item);
+      if (existing) {
+        existing.value += expense.amount_spent || 0;
+      } else {
+        acc.push({ 
+          name: expense.item, 
+          value: expense.amount_spent || 0 
+        });
+      }
+      return acc;
+    }, []);
+
+    // Sort and get top expenses
+    expenseByItem.sort((a, b) => b.value - a.value);
+    const largestExpenses = [...expenseByItem].slice(0, 3);
+
+    // Create monthly trends
+    const monthlyTrends = [
+      { month: 'Current', inflow: totalDeposits, outflow: totalExpenses, net: totalDeposits - totalExpenses }
+    ];
+
+    // Create recent transactions list
+    const recentTransactions = [
+      ...expenses.map(e => ({
+        description: e.item,
+        amount: -(e.amount_spent || 0),
+        type: 'expense' as const,
+        date: e.created_at
+      })),
+      ...finance.map(f => ({
+        description: 'Deposit',
+        amount: f.amount_paid || 0,
+        type: 'income' as const,
+        date: f.created_at
+      }))
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Calculate financial ratios
+    const liquidityRatio = totalLiabilities > 0 ? cashAtHand / totalLiabilities : 0;
+    const cashFlowRatio = totalLiabilities > 0 ? (totalDeposits - totalExpenses) / totalLiabilities : 0;
+    const burnRate = totalExpenses - totalDeposits;
+    const runway = cashAtHand > 0 ? Math.round(cashAtHand / Math.max(burnRate, 1)) : 0;
+
+    return {
+      liquidityRatio,
+      cashFlowRatio,
+      burnRate,
+      runway,
+      cashAtHand,
+      totalDeposits,
+      totalLiabilities,
+      expenseByItem,
+      liabilitiesStatus: [
+        { name: 'Paid', value: totalPaidLiabilities },
+        { name: 'Pending', value: totalLiabilities }
+      ],
+      monthlyTrends,
+      largestExpenses,
+      recentTransactions
+    };
   };
 
   // Loading skeleton UI
@@ -206,13 +299,14 @@ export default function FinancialHealth() {
     );
   };
 
-  // Metric card component
+  // Metric card component with tooltip
   const MetricCard = ({ 
     title, 
     value, 
     idealRange, 
     isGood, 
-    description, 
+    description,
+    metricKey,
     isCurrency = false, 
     unit = '',
     loading = false
@@ -222,17 +316,23 @@ export default function FinancialHealth() {
     idealRange: string;
     isGood: boolean;
     description: string;
+    metricKey: keyof typeof metricExplanations;
     isCurrency?: boolean;
     unit?: string;
     loading?: boolean;
   }) => (
-    <div className="bg-white p-5 rounded-lg shadow">
-      <h3 className="text-sm font-medium text-gray-500 mb-1">{title}</h3>
+    <div className="bg-white p-5 rounded-lg shadow relative group">
+      <h3 className="text-sm font-medium text-gray-500 mb-1 flex items-center">
+        {title}
+        <span className="ml-1 text-gray-400 cursor-help" title={metricExplanations[metricKey]}>
+          (?)
+        </span>
+      </h3>
       {loading ? (
         <div className="h-8 bg-gray-200 rounded w-3/4 mb-2 animate-pulse" />
       ) : (
         <p className="text-2xl font-bold text-gray-900 m-0 mb-1">
-          {isCurrency ? '$' : ''}{value.toLocaleString()}{unit ? ` ${unit}` : ''}
+          {isCurrency ? 'UGX ' : ''}{value.toLocaleString()}{unit ? ` ${unit}` : ''}
         </p>
       )}
       <div className="flex items-center mb-1">
@@ -281,73 +381,6 @@ export default function FinancialHealth() {
     </div>
   );
 
-  // Process raw data into metrics
-  const processFinancialData = (
-    expenses: any[],
-    finance: any[],
-    liabilities: any[]
-  ): FinancialData => {
-    // Calculate totals with proper null checks
-    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount_spent || 0), 0);
-    const totalIncome = finance.reduce((sum, f) => sum + (f.amount_paid || 0), 0);
-    const totalCashAvailable = finance.reduce((sum, f) => sum + (f.amount_available || 0), 0);
-    const totalLiabilities = liabilities.reduce((sum, l) => sum + (l.balance || 0), 0);
-    const totalPaidLiabilities = liabilities.reduce((sum, l) => sum + (l.amount_paid || 0), 0);
-
-    // Group expenses by item
-    const expenseByItem = expenses.reduce((acc: { name: string; value: number }[], expense) => {
-      const existing = acc.find(item => item.name === expense.item);
-      if (existing) {
-        existing.value += expense.amount_spent || 0;
-      } else {
-        acc.push({ name: expense.item, value: expense.amount_spent || 0 });
-      }
-      return acc;
-    }, []);
-
-    // Sort and get top expenses
-    expenseByItem.sort((a, b) => b.value - a.value);
-    const largestExpenses = [...expenseByItem].slice(0, 3);
-
-    // Create monthly trends
-    const monthlyTrends = [
-      { month: 'Current', inflow: totalIncome, outflow: totalExpenses, net: totalIncome - totalExpenses }
-    ];
-
-    // Create recent transactions list
-    const recentTransactions = [
-      ...expenses.map(e => ({
-        description: e.item,
-        amount: -(e.amount_spent || 0),
-        type: 'expense' as const,
-        date: e.created_at
-      })),
-      ...finance.map(f => ({
-        description: 'Income',
-        amount: f.amount_paid || 0,
-        type: 'income' as const,
-        date: f.created_at
-      }))
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-    return {
-      liquidityRatio: totalLiabilities > 0 ? totalCashAvailable / totalLiabilities : 0,
-      cashFlowRatio: totalLiabilities > 0 ? (totalIncome - totalExpenses) / totalLiabilities : 0,
-      burnRate: totalExpenses - totalIncome,
-      runway: totalCashAvailable > 0 ? Math.round(totalCashAvailable / Math.max(totalExpenses - totalIncome, 1)) : 0,
-      totalCashAvailable,
-      totalLiabilities,
-      expenseByItem,
-      liabilitiesStatus: [
-        { name: 'Paid', value: totalPaidLiabilities },
-        { name: 'Pending', value: totalLiabilities }
-      ],
-      monthlyTrends,
-      largestExpenses,
-      recentTransactions
-    };
-  };
-
   // Main render
   return (
     <div className="min-h-screen p-6 bg-gray-50">
@@ -383,7 +416,8 @@ export default function FinancialHealth() {
               value={data.liquidityRatio} 
               idealRange="1.5-3" 
               isGood={data.liquidityRatio >= 1.5}
-              description="Cash available vs current liabilities"
+              description="Current assets vs current liabilities"
+              metricKey="liquidityRatio"
             />
             <MetricCard 
               title="Operating Cash Flow" 
@@ -391,6 +425,7 @@ export default function FinancialHealth() {
               idealRange="≥1" 
               isGood={data.cashFlowRatio >= 1}
               description="Operating cash vs current liabilities"
+              metricKey="cashFlowRatio"
             />
             <MetricCard 
               title="Monthly Burn Rate" 
@@ -399,6 +434,7 @@ export default function FinancialHealth() {
               idealRange="Negative is good" 
               isGood={data.burnRate < 0}
               description="Net monthly cash consumption"
+              metricKey="burnRate"
             />
             <MetricCard 
               title="Cash Runway" 
@@ -406,48 +442,84 @@ export default function FinancialHealth() {
               unit="months"
               idealRange="6+ months" 
               isGood={data.runway >= 6}
-              description="At current burn rate"
+              description="Months until cash runs out"
+              metricKey="runway"
+            />
+            <MetricCard 
+              title="Cash At Hand" 
+              value={data.cashAtHand} 
+              isCurrency={true}
+              idealRange="Positive balance" 
+              isGood={data.cashAtHand >= 0}
+              description="Actual available cash"
+              metricKey="cashAtHand"
+            />
+            <MetricCard 
+              title="Total Deposits" 
+              value={data.totalDeposits} 
+              isCurrency={true}
+              idealRange="Monitor growth" 
+              isGood={true}
+              description="Total money received"
+              metricKey="totalDeposits"
             />
           </div>
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
             <ChartCard title="Cash Flow Trend">
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={data.monthlyTrends}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="month" stroke="#64748b" />
-                  <YAxis stroke="#64748b" />
-                  <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, 
-                    value === 'inflow' ? 'Income' : value === 'outflow' ? 'Expenses' : 'Net']} />
-                  <Area type="monotone" dataKey="inflow" stroke="#4ade80" fill="#bbf7d0" name="Income" />
-                  <Area type="monotone" dataKey="outflow" stroke="#f87171" fill="#fecaca" name="Expenses" />
-                  <Area type="monotone" dataKey="net" stroke="#60a5fa" fill="#bfdbfe" name="Net" />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={data.monthlyTrends}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="month" stroke="#64748b" />
+                    <YAxis stroke="#64748b" />
+                    <Tooltip 
+                      formatter={(value, name) => [
+                        `UGX ${Number(value).toLocaleString()}`,
+                        name === 'inflow' ? 'Income' : 
+                        name === 'outflow' ? 'Expenses' : 'Net'
+                      ]}
+                    />
+                    <Area type="monotone" dataKey="inflow" stroke="#4ade80" fill="#bbf7d0" name="Income" />
+                    <Area type="monotone" dataKey="outflow" stroke="#f87171" fill="#fecaca" name="Expenses" />
+                    <Area type="monotone" dataKey="net" stroke="#60a5fa" fill="#bfdbfe" name="Net" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </ChartCard>
 
             <ChartCard title="Expenses Breakdown">
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={data.expenseByItem}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {data.expenseByItem.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+              {data.expenseByItem.length > 0 ? (
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={data.expenseByItem}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {data.expenseByItem.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value) => `UGX ${Number(value).toLocaleString()}`}
+                      />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-gray-500">
+                  No expense data available for the selected period
+                </div>
+              )}
             </ChartCard>
           </div>
 
@@ -455,10 +527,11 @@ export default function FinancialHealth() {
           <ChartCard title="Actionable Insights">
             <div className="space-y-4">
               <div className="p-3 bg-blue-50 rounded-lg">
-                <h4 className="font-medium text-blue-800">Cash Position</h4>
+                <h4 className="font-medium text-blue-800">Cash Position Summary</h4>
                 <p className="text-sm text-blue-700">
-                  Available cash: ${data.totalCashAvailable.toLocaleString()} | 
-                  Liabilities: ${data.totalLiabilities.toLocaleString()}
+                  Cash at hand: UGX {data.cashAtHand.toLocaleString()} | 
+                  Pending liabilities: UGX {data.totalLiabilities.toLocaleString()} | 
+                  Runway: {data.runway} months
                 </p>
               </div>
 
@@ -470,19 +543,22 @@ export default function FinancialHealth() {
                   <li>Improve operating cash flow by increasing revenue or reducing expenses</li>
                 )}
                 {data.burnRate > 0 && (
-                  <li>Reduce monthly burn rate (currently ${data.burnRate.toLocaleString()})</li>
+                  <li>Reduce monthly burn rate (currently UGX {data.burnRate.toLocaleString()})</li>
                 )}
                 {data.runway < 6 && (
-                  <li>Extend cash runway beyond current {data.runway} months</li>
+                  <li>Extend cash runway beyond current {data.runway} months by increasing deposits or reducing expenses</li>
                 )}
                 {data.largestExpenses.length > 0 && (
                   <li>
-                    Focus on top expenses: {data.largestExpenses.map((e, i) => (
+                    Review top expenses: {data.largestExpenses.map((e, i) => (
                       <span key={i}>
-                        {e.name} (${e.value.toLocaleString()}){i < data.largestExpenses.length - 1 ? ', ' : ''}
+                        {e.name} (UGX {e.value.toLocaleString()}){i < data.largestExpenses.length - 1 ? ', ' : ''}
                       </span>
                     ))}
                   </li>
+                )}
+                {data.cashAtHand < data.totalLiabilities && (
+                  <li>Warning: Your cash at hand (UGX {data.cashAtHand.toLocaleString()}) is less than pending liabilities (UGX {data.totalLiabilities.toLocaleString()})</li>
                 )}
               </ul>
             </div>
