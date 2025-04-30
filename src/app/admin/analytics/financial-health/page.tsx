@@ -181,7 +181,7 @@ export default function FinancialHealth() {
         description: e.item,
         amount: -(e.amount_spent || 0),
         type: 'expense' as const,
-        date: e.created_at
+        date: e.date
       })),
       ...finance.map(f => ({
         description: 'Deposit',
