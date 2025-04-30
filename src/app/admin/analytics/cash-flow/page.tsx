@@ -116,7 +116,7 @@ export default function CashFlow() {
 
     // Process expenses
     expenses.forEach(expense => {
-      const date = new Date(expense.created_at);
+      const date = new Date(expense.date);
       const dateKey = timeRange === 'day' 
         ? date.toLocaleDateString() 
         : timeRange === 'week' 
