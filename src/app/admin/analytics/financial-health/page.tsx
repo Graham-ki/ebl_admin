@@ -36,8 +36,8 @@ const metricExplanations = {
   cashFlowRatio: "Shows if operating cash can cover current liabilities. Above 1 is healthy (cash covers debts).",
   burnRate: "Your net monthly cash loss (negative means you're gaining cash). Aim for negative/zero.",
   runway: "How many months you can operate at current burn rate before running out of cash.",
-  cashAtHand: "Actual cash available after accounting for all expenses (Amount available - Amount spent).",
-  totalDeposits: "Total money received from all sources (amount_paid in finance table).",
+  cashAtHand: "Actual cash available after accounting for all expenses.",
+  totalDeposits: "Total money received from all sources.",
   totalLiabilities: "Total unpaid obligations to suppliers/service providers."
 };
 
@@ -77,10 +77,10 @@ export default function FinancialHealth() {
       // Execute all queries in parallel
       const results = await Promise.allSettled([
         supabase
-          .from('expense')
+          .from('expenses')
           .select('item, amount_spent, created_at')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate),
+          .gte('date', startDate)
+          .lte('date', endDate),
         supabase
           .from('finance')
           .select('amount_paid, amount_available, created_at')
