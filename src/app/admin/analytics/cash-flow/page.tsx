@@ -56,11 +56,11 @@ export default function CashFlow() {
       try {
         const { data: expensesData, error: expensesError } = await supabase
           .from('expenses')
-          .select('*');
+          .select('*').order('date',{ascending:false});
 
         const { data: financesData, error: financesError } = await supabase
           .from('finance')
-          .select('*');
+          .select('*').order('created_at',{ascending:false});
 
         if (expensesError || financesError) {
           throw expensesError || financesError;
