@@ -4,8 +4,8 @@
 import { useState, useEffect } from 'react';
 import { createClient } from "@supabase/supabase-js";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
-import { DateRangePicker } from './components/DateRangePicker';
-import { Skeleton } from './components/Skeleton';
+import { DateRangePicker } from '@/components/DateRangePicker';
+import { Skeleton } from '@/components/Skeleton';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28DFF', '#FF6E83'];
 
