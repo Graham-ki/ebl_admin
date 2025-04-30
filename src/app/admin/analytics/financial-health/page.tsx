@@ -1,6 +1,5 @@
 // app/financial-health/page.tsx
 'use client';
-
 import { useState, useEffect } from 'react';
 import { createClient } from "@supabase/supabase-js";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
@@ -78,7 +77,7 @@ export default function FinancialHealth() {
       const results = await Promise.allSettled([
         supabase
           .from('expenses')
-          .select('item, amount_spent, created_at')
+          .select('item, amount_spent, date')
           .gte('date', startDate)
           .lte('date', endDate),
         supabase
