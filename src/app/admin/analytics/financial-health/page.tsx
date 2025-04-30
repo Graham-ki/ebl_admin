@@ -49,9 +49,9 @@ export default function FinancialHealth() {
       // Fetch expenses within date range
       const { data: expenses, error: expensesError } = await supabase
         .from('expenses')
-        .select('item, amount_spent, created_at')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate);
+        .select('item, amount_spent, date')
+        .gte('date', startDate)
+        .lte('date', endDate);
 
       if (expensesError) throw expensesError;
 
