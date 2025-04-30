@@ -1,5 +1,6 @@
 // app/financial-health/page.tsx
 'use client';
+
 import { useState, useEffect } from 'react';
 import { createClient } from "@supabase/supabase-js";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
@@ -14,6 +15,21 @@ const supabase = createClient(
 );
 
 // Type definitions
+type ExpenseDetail = {
+  id: string;
+  date: string;
+  amount: number;
+  department?: string;
+  description?: string;
+};
+
+type ExpenseItem = {
+  name: string;
+  value: number;
+  department?: string;
+  details: ExpenseDetail[];
+};
+
 type FinancialData = {
   liquidityRatio: number;
   cashFlowRatio: number;
@@ -22,22 +38,26 @@ type FinancialData = {
   cashAtHand: number;
   totalDeposits: number;
   totalLiabilities: number;
-  expenseByItem: { name: string; value: number }[];
+  totalExpenses: number;
+  totalAmountAvailable: number;
+  expenseByItem: ExpenseItem[];
   liabilitiesStatus: { name: string; value: number }[];
   monthlyTrends: { month: string; inflow: number; outflow: number; net: number }[];
-  largestExpenses: { name: string; value: number }[];
+  largestExpenses: ExpenseItem[];
   recentTransactions: { description: string; amount: number; type: 'income' | 'expense'; date: string }[];
 };
 
 // Tooltip explanations
 const metricExplanations = {
-  liquidityRatio: "Measures your ability to pay short-term debts. A ratio above 1.5 means you can cover current liabilities 1.5 times over.",
-  cashFlowRatio: "Shows if operating cash can cover current liabilities. Above 1 is healthy (cash covers debts).",
-  burnRate: "Your net monthly cash loss (negative means you're gaining cash). Aim for negative/zero.",
-  runway: "How many months you can operate at current burn rate before running out of cash.",
-  cashAtHand: "Actual cash available after accounting for all expenses.",
+  liquidityRatio: "Measures ability to pay short-term debts. Ratio >1.5 is healthy.",
+  cashFlowRatio: "Shows if operating cash covers current liabilities. ≥1 is good.",
+  burnRate: "Net monthly cash loss. Negative means you're gaining cash.",
+  runway: "Months until cash runs out at current burn rate. 6+ months is ideal.",
+  cashAtHand: "Actual available cash (Total deposits - Total expenses).",
   totalDeposits: "Total money received from all sources.",
-  totalLiabilities: "Total unpaid obligations to suppliers/service providers."
+  totalLiabilities: "Total unpaid obligations to suppliers/service providers.",
+  totalExpenses: "Sum of all expenses in the selected period.",
+  totalAmountAvailable: "Total funds available before expenses."
 };
 
 export default function FinancialHealth() {
@@ -50,6 +70,8 @@ export default function FinancialHealth() {
     cashAtHand: 0,
     totalDeposits: 0,
     totalLiabilities: 0,
+    totalExpenses: 0,
+    totalAmountAvailable: 0,
     expenseByItem: [],
     liabilitiesStatus: [],
     monthlyTrends: [],
@@ -62,6 +84,8 @@ export default function FinancialHealth() {
     start: new Date(new Date().setMonth(new Date().getMonth() - 6)),
     end: new Date()
   });
+  const [selectedExpense, setSelectedExpense] = useState<ExpenseItem | null>(null);
+  const [showExpenseDetails, setShowExpenseDetails] = useState(false);
 
   // Fetch data with error handling
   const fetchData = async () => {
@@ -77,7 +101,7 @@ export default function FinancialHealth() {
       const results = await Promise.allSettled([
         supabase
           .from('expenses')
-          .select('item, amount_spent, date')
+          .select('id, item, amount_spent, date, department, description')
           .gte('date', startDate)
           .lte('date', endDate),
         supabase
@@ -125,23 +149,13 @@ export default function FinancialHealth() {
     }
   };
 
-  // Initial data fetch
-  useEffect(() => {
-    fetchData();
-  }, [dateRange]);
-
-  // Date range change handler
-  const handleDateChange = (range: { start: Date; end: Date }) => {
-    setDateRange(range);
-  };
-
   // Process raw data into metrics
   const processFinancialData = (
     expenses: any[],
     finance: any[],
     liabilities: any[]
   ): FinancialData => {
-    // Calculate totals with proper null checks
+    // Calculate totals
     const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount_spent || 0), 0);
     const totalDeposits = finance.reduce((sum, f) => sum + (f.amount_paid || 0), 0);
     const totalAmountAvailable = finance.reduce((sum, f) => sum + (f.amount_available || 0), 0);
@@ -149,21 +163,39 @@ export default function FinancialHealth() {
     const totalLiabilities = liabilities.reduce((sum, l) => sum + (l.balance || 0), 0);
     const totalPaidLiabilities = liabilities.reduce((sum, l) => sum + (l.amount_paid || 0), 0);
 
-    // Group expenses by item
-    const expenseByItem = expenses.reduce((acc: { name: string; value: number }[], expense) => {
-      if (!expense?.item) return acc;
+    // Group expenses by item with all details
+    const expenseMap = new Map<string, ExpenseItem>();
+    
+    expenses.forEach(expense => {
+      if (!expense?.item) return;
       
-      const existing = acc.find(item => item.name === expense.item);
+      const existing = expenseMap.get(expense.item);
+      const detail = {
+        id: expense.id,
+        date: expense.date,
+        amount: expense.amount_spent || 0,
+        department: expense.department,
+        description: expense.description
+      };
+
       if (existing) {
-        existing.value += expense.amount_spent || 0;
+        existing.value += detail.amount;
+        existing.details.push(detail);
+        // Keep the first department we find if not already set
+        if (!existing.department && detail.department) {
+          existing.department = detail.department;
+        }
       } else {
-        acc.push({ 
+        expenseMap.set(expense.item, { 
           name: expense.item, 
-          value: expense.amount_spent || 0 
+          value: detail.amount,
+          department: detail.department,
+          details: [detail]
         });
       }
-      return acc;
-    }, []);
+    });
+
+    const expenseByItem = Array.from(expenseMap.values());
 
     // Sort and get top expenses
     expenseByItem.sort((a, b) => b.value - a.value);
@@ -171,7 +203,7 @@ export default function FinancialHealth() {
 
     // Create monthly trends
     const monthlyTrends = [
-      { month: 'Current', inflow: totalDeposits, outflow: totalExpenses, net: totalDeposits - totalExpenses }
+      { month: 'Current Period', inflow: totalDeposits, outflow: totalExpenses, net: totalDeposits - totalExpenses }
     ];
 
     // Create recent transactions list
@@ -204,6 +236,8 @@ export default function FinancialHealth() {
       cashAtHand,
       totalDeposits,
       totalLiabilities,
+      totalExpenses,
+      totalAmountAvailable,
       expenseByItem,
       liabilitiesStatus: [
         { name: 'Paid', value: totalPaidLiabilities },
@@ -213,6 +247,12 @@ export default function FinancialHealth() {
       largestExpenses,
       recentTransactions
     };
+  };
+
+  // View expense details
+  const viewExpenseDetails = (expense: ExpenseItem) => {
+    setSelectedExpense(expense);
+    setShowExpenseDetails(true);
   };
 
   // Loading skeleton UI
@@ -380,6 +420,125 @@ export default function FinancialHealth() {
     </div>
   );
 
+  // Expense Details Modal
+  const ExpenseDetailsModal = () => {
+    if (!selectedExpense) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  {selectedExpense.name}
+                </h3>
+                <p className="text-lg text-gray-700">
+                  UGX {selectedExpense.value.toLocaleString()}
+                </p>
+                {selectedExpense.department && (
+                  <p className="text-gray-600 mt-1">
+                    <span className="font-medium">Department:</span> {selectedExpense.department}
+                  </p>
+                )}
+              </div>
+              <button 
+                onClick={() => setShowExpenseDetails(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <h4 className="font-medium mb-3">Transaction Details:</h4>
+            {selectedExpense.details.length > 0 ? (
+              <div className="border rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                      {selectedExpense.details.some(d => d.department) && (
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                      )}
+                      {selectedExpense.details.some(d => d.description) && (
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {selectedExpense.details.map((detail) => (
+                      <tr key={detail.id}>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {detail.date ? new Date(detail.date).toLocaleDateString() : 'N/A'}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                          UGX {detail.amount?.toLocaleString() || '0'}
+                        </td>
+                        {selectedExpense.details.some(d => d.department) && (
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                            {detail.department || 'N/A'}
+                          </td>
+                        )}
+                        {selectedExpense.details.some(d => d.description) && (
+                          <td className="px-4 py-2 text-sm text-gray-500">
+                            {detail.description || 'N/A'}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-gray-500">No detailed transaction records available</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Expense Item Component with Details Button
+  const ExpenseItem = ({ expense }: { expense: ExpenseItem }) => (
+    <div className="flex justify-between items-center py-3 px-4 border-b border-gray-100 hover:bg-gray-50">
+      <div className="flex-1 min-w-0">
+        <p className="font-medium truncate">{expense.name}</p>
+        {expense.department && (
+          <p className="text-sm text-gray-500 truncate">{expense.department}</p>
+        )}
+      </div>
+      <div className="flex items-center ml-4">
+        <span className="font-medium whitespace-nowrap mr-4">
+          UGX {expense.value.toLocaleString()}
+        </span>
+        <button 
+          onClick={() => viewExpenseDetails(expense)}
+          className="px-3 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 text-sm whitespace-nowrap"
+        >
+          View Details
+        </button>
+      </div>
+    </div>
+  );
+
+  // Expense Breakdown Component
+  const ExpenseBreakdown = ({ expenses }: { expenses: ExpenseItem[] }) => (
+    <div className="border rounded-lg overflow-hidden">
+      {expenses.length > 0 ? (
+        expenses.map((expense, index) => (
+          <ExpenseItem key={index} expense={expense} />
+        ))
+      ) : (
+        <div className="p-4 text-center text-gray-500">
+          No expenses recorded for this period
+        </div>
+      )}
+    </div>
+  );
+
   // Main render
   return (
     <div className="min-h-screen p-6 bg-gray-50">
@@ -390,7 +549,7 @@ export default function FinancialHealth() {
             <span className="text-2xl">💓</span>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 m-0">Financial Health</h1>
+            <h1 className="text-2xl font-bold text-gray-900 m-0">Financial Health Dashboard</h1>
             <p className="text-gray-500 m-0 text-sm">
               {dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}
             </p>
@@ -403,7 +562,7 @@ export default function FinancialHealth() {
       {error && <ErrorDisplay message={error} onRetry={fetchData} />}
 
       {/* Loading state */}
-      {loading && !data && <LoadingSkeleton />}
+      {loading && <LoadingSkeleton />}
 
       {/* Data display */}
       {!loading && !error && (
@@ -415,7 +574,7 @@ export default function FinancialHealth() {
               value={data.liquidityRatio} 
               idealRange="1.5-3" 
               isGood={data.liquidityRatio >= 1.5}
-              description="Current assets vs current liabilities"
+              description="Current assets vs liabilities"
               metricKey="liquidityRatio"
             />
             <MetricCard 
@@ -423,16 +582,16 @@ export default function FinancialHealth() {
               value={data.cashFlowRatio} 
               idealRange="≥1" 
               isGood={data.cashFlowRatio >= 1}
-              description="Operating cash vs current liabilities"
+              description="Operating cash vs liabilities"
               metricKey="cashFlowRatio"
             />
             <MetricCard 
               title="Monthly Burn Rate" 
               value={data.burnRate} 
               isCurrency={true}
-              idealRange="Negative is good" 
+              idealRange="Negative" 
               isGood={data.burnRate < 0}
-              description="Net monthly cash consumption"
+              description="Net monthly cash flow"
               metricKey="burnRate"
             />
             <MetricCard 
@@ -448,7 +607,7 @@ export default function FinancialHealth() {
               title="Cash At Hand" 
               value={data.cashAtHand} 
               isCurrency={true}
-              idealRange="Positive balance" 
+              idealRange="Positive" 
               isGood={data.cashAtHand >= 0}
               description="Actual available cash"
               metricKey="cashAtHand"
@@ -461,6 +620,24 @@ export default function FinancialHealth() {
               isGood={true}
               description="Total money received"
               metricKey="totalDeposits"
+            />
+            <MetricCard 
+              title="Total Expenses" 
+              value={data.totalExpenses} 
+              isCurrency={true}
+              idealRange="Monitor reduction" 
+              isGood={false}
+              description="Total money spent"
+              metricKey="totalExpenses"
+            />
+            <MetricCard 
+              title="Total Liabilities" 
+              value={data.totalLiabilities} 
+              isCurrency={true}
+              idealRange="Monitor reduction" 
+              isGood={false}
+              description="Unpaid obligations"
+              metricKey="totalLiabilities"
             />
           </div>
 
@@ -516,10 +693,16 @@ export default function FinancialHealth() {
                 </div>
               ) : (
                 <div className="h-[300px] flex items-center justify-center text-gray-500">
-                  No expense data available for the selected period
+                  No expense data available
                 </div>
               )}
             </ChartCard>
+          </div>
+
+          {/* Expense Breakdown Section */}
+          <div className="mb-8">
+            <h2 className="text-xl font-bold mb-4">Detailed Expenses</h2>
+            <ExpenseBreakdown expenses={data.expenseByItem} />
           </div>
 
           {/* Recommendations */}
@@ -528,9 +711,13 @@ export default function FinancialHealth() {
               <div className="p-3 bg-blue-50 rounded-lg">
                 <h4 className="font-medium text-blue-800">Cash Position Summary</h4>
                 <p className="text-sm text-blue-700">
-                  Cash at hand: UGX {data.cashAtHand.toLocaleString()} | 
-                  Pending liabilities: UGX {data.totalLiabilities.toLocaleString()} | 
-                  Runway: {data.runway} months
+                  Available: UGX {data.totalAmountAvailable.toLocaleString()} | 
+                  Spent: UGX {data.totalExpenses.toLocaleString()} | 
+                  Cash At Hand: UGX {data.cashAtHand.toLocaleString()}
+                </p>
+                <p className="text-sm text-blue-700 mt-1">
+                  Runway: {data.runway} months | 
+                  Liabilities: UGX {data.totalLiabilities.toLocaleString()}
                 </p>
               </div>
 
@@ -557,13 +744,18 @@ export default function FinancialHealth() {
                   </li>
                 )}
                 {data.cashAtHand < data.totalLiabilities && (
-                  <li>Warning: Your cash at hand (UGX {data.cashAtHand.toLocaleString()}) is less than pending liabilities (UGX {data.totalLiabilities.toLocaleString()})</li>
+                  <li className="text-red-600 font-medium">
+                    Warning: Cash at hand is less than pending liabilities
+                  </li>
                 )}
               </ul>
             </div>
           </ChartCard>
         </>
       )}
+
+      {/* Expense Details Modal */}
+      {showExpenseDetails && <ExpenseDetailsModal />}
     </div>
   );
 }
