@@ -53,7 +53,7 @@ const metricExplanations = {
   cashFlowRatio: "Shows if operating cash covers current liabilities. ≥1 is good.",
   burnRate: "Net monthly cash loss. Negative means you're gaining cash.",
   runway: "Months until cash runs out at current burn rate. 6+ months is ideal.",
-  cashAtHand: "Actual available cash (Total deposits - Total expenses).",
+  cashAtHand: "Actual available cash.",
   totalDeposits: "Total money received from all sources.",
   totalLiabilities: "Total unpaid obligations to suppliers/service providers.",
   totalExpenses: "Sum of all expenses in the selected period.",
@@ -101,7 +101,7 @@ export default function FinancialHealth() {
       const results = await Promise.allSettled([
         supabase
           .from('expenses')
-          .select('id, item, amount_spent, date, department, description')
+          .select('id, item, amount_spent, date, department')
           .gte('date', startDate)
           .lte('date', endDate),
         supabase
@@ -148,6 +148,16 @@ export default function FinancialHealth() {
       setLoading(false);
     }
   };
+
+  // Handle date range change
+  const handleDateChange = (newRange: { start: Date; end: Date }) => {
+    setDateRange(newRange);
+  };
+
+  // Fetch data when date range changes
+  useEffect(() => {
+    fetchData();
+  }, [dateRange]);
 
   // Process raw data into metrics
   const processFinancialData = (
@@ -463,9 +473,6 @@ export default function FinancialHealth() {
                       {selectedExpense.details.some(d => d.department) && (
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
                       )}
-                      {selectedExpense.details.some(d => d.description) && (
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                      )}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -480,11 +487,6 @@ export default function FinancialHealth() {
                         {selectedExpense.details.some(d => d.department) && (
                           <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
                             {detail.department || 'N/A'}
-                          </td>
-                        )}
-                        {selectedExpense.details.some(d => d.description) && (
-                          <td className="px-4 py-2 text-sm text-gray-500">
-                            {detail.description || 'N/A'}
                           </td>
                         )}
                       </tr>
