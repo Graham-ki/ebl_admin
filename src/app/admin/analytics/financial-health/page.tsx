@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from "@supabase/supabase-js";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 // Color palette for charts
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28DFF', '#FF6E83'];
@@ -20,7 +20,7 @@ type ExpenseDetail = {
   date: string;
   amount: number;
   department?: string;
-  description?: string;
+  account?: string;
 };
 
 type ExpenseItem = {
@@ -101,7 +101,7 @@ export default function FinancialHealth() {
       const results = await Promise.allSettled([
         supabase
           .from('expenses')
-          .select('id, item, amount_spent, date, department')
+          .select('id, item, amount_spent, date, department, account')
           .gte('date', startDate)
           .lte('date', endDate),
         supabase
@@ -185,21 +185,16 @@ export default function FinancialHealth() {
         date: expense.date,
         amount: expense.amount_spent || 0,
         department: expense.department,
-        description: expense.description
+        account: expense.account
       };
 
       if (existing) {
         existing.value += detail.amount;
         existing.details.push(detail);
-        // Keep the first department we find if not already set
-        if (!existing.department && detail.department) {
-          existing.department = detail.department;
-        }
       } else {
         expenseMap.set(expense.item, { 
           name: expense.item, 
           value: detail.amount,
-          department: detail.department,
           details: [detail]
         });
       }
@@ -434,6 +429,9 @@ export default function FinancialHealth() {
   const ExpenseDetailsModal = () => {
     if (!selectedExpense) return null;
 
+    // Calculate total spent on this item
+    const totalSpent = selectedExpense.details.reduce((sum, detail) => sum + detail.amount, 0);
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -444,13 +442,8 @@ export default function FinancialHealth() {
                   {selectedExpense.name}
                 </h3>
                 <p className="text-lg text-gray-700">
-                  UGX {selectedExpense.value.toLocaleString()}
+                  Total Spent: UGX {totalSpent.toLocaleString()}
                 </p>
-                {selectedExpense.department && (
-                  <p className="text-gray-600 mt-1">
-                    <span className="font-medium">Department:</span> {selectedExpense.department}
-                  </p>
-                )}
               </div>
               <button 
                 onClick={() => setShowExpenseDetails(false)}
@@ -473,6 +466,9 @@ export default function FinancialHealth() {
                       {selectedExpense.details.some(d => d.department) && (
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
                       )}
+                      {selectedExpense.details.some(d => d.account) && (
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Source Account</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -489,6 +485,11 @@ export default function FinancialHealth() {
                             {detail.department || 'N/A'}
                           </td>
                         )}
+                        {selectedExpense.details.some(d => d.account) && (
+                          <td className="px-4 py-2 text-sm text-gray-500">
+                            {detail.description || 'N/A'}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -503,36 +504,59 @@ export default function FinancialHealth() {
     );
   };
 
-  // Expense Item Component with Details Button
-  const ExpenseItem = ({ expense }: { expense: ExpenseItem }) => (
-    <div className="flex justify-between items-center py-3 px-4 border-b border-gray-100 hover:bg-gray-50">
-      <div className="flex-1 min-w-0">
-        <p className="font-medium truncate">{expense.name}</p>
-        {expense.department && (
-          <p className="text-sm text-gray-500 truncate">{expense.department}</p>
-        )}
+  // Expense Item Component with Percentage Bar
+  const ExpenseItem = ({ expense, totalExpenses, index }: { expense: ExpenseItem, totalExpenses: number, index: number }) => {
+    const percentage = (expense.value / totalExpenses) * 100;
+    const color = COLORS[index % COLORS.length];
+    
+    return (
+      <div className="py-3 px-4 border-b border-gray-100 hover:bg-gray-50">
+        <div className="flex justify-between items-center mb-1">
+          <p className="font-medium truncate">{expense.name}</p>
+          <span className="font-medium whitespace-nowrap ml-4">
+            UGX {expense.value.toLocaleString()}
+          </span>
+        </div>
+        
+        <div className="flex items-center">
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+            <div 
+              className="h-2.5 rounded-full" 
+              style={{ 
+                width: `${percentage}%`,
+                backgroundColor: color
+              }}
+            />
+          </div>
+          <span className="text-xs text-gray-500">{percentage.toFixed(1)}%</span>
+        </div>
+        
+        <div className="flex justify-end mt-2">
+          <button 
+            onClick={() => viewExpenseDetails(expense)}
+            className="px-3 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 text-sm"
+          >
+            View Details
+          </button>
+        </div>
       </div>
-      <div className="flex items-center ml-4">
-        <span className="font-medium whitespace-nowrap mr-4">
-          UGX {expense.value.toLocaleString()}
-        </span>
-        <button 
-          onClick={() => viewExpenseDetails(expense)}
-          className="px-3 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 text-sm whitespace-nowrap"
-        >
-          View Details
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // Expense Breakdown Component
-  const ExpenseBreakdown = ({ expenses }: { expenses: ExpenseItem[] }) => (
+  const ExpenseBreakdown = ({ expenses, totalExpenses }: { expenses: ExpenseItem[], totalExpenses: number }) => (
     <div className="border rounded-lg overflow-hidden">
       {expenses.length > 0 ? (
-        expenses.map((expense, index) => (
-          <ExpenseItem key={index} expense={expense} />
-        ))
+        <div className="max-h-[300px] overflow-y-auto">
+          {expenses.map((expense, index) => (
+            <ExpenseItem 
+              key={index} 
+              expense={expense} 
+              totalExpenses={totalExpenses} 
+              index={index} 
+            />
+          ))}
+        </div>
       ) : (
         <div className="p-4 text-center text-gray-500">
           No expenses recorded for this period
@@ -668,43 +692,11 @@ export default function FinancialHealth() {
             </ChartCard>
 
             <ChartCard title="Expenses Breakdown">
-              {data.expenseByItem.length > 0 ? (
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={data.expenseByItem}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={2}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                      >
-                        {data.expenseByItem.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        formatter={(value) => `UGX ${Number(value).toLocaleString()}`}
-                      />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-[300px] flex items-center justify-center text-gray-500">
-                  No expense data available
-                </div>
-              )}
+              <ExpenseBreakdown 
+                expenses={data.expenseByItem} 
+                totalExpenses={data.totalExpenses} 
+              />
             </ChartCard>
-          </div>
-
-          {/* Expense Breakdown Section */}
-          <div className="mb-8">
-            <h2 className="text-xl font-bold mb-4">Detailed Expenses</h2>
-            <ExpenseBreakdown expenses={data.expenseByItem} />
           </div>
 
           {/* Recommendations */}
