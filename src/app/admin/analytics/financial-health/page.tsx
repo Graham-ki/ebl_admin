@@ -487,7 +487,7 @@ export default function FinancialHealth() {
                         )}
                         {selectedExpense.details.some(d => d.account) && (
                           <td className="px-4 py-2 text-sm text-gray-500">
-                            {detail.description || 'N/A'}
+                            {detail.account || 'N/A'}
                           </td>
                         )}
                       </tr>
