@@ -259,7 +259,7 @@ export default function CashFlow() {
         {/* Payment Method Distribution */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <span className="text-purple-500">💳</span> Account Balances
+            <span className="text-purple-500">💳</span> Account Deposits
           </h2>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
