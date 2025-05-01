@@ -186,7 +186,7 @@ export default function AnalyticsDashboard() {
         height: '100vh',
         backgroundColor: '#f9fafb'
       }}>
-        <div>Loading dashboard data...</div>
+        <div>Loading analytics data...</div>
       </div>
     );
   }
@@ -270,7 +270,7 @@ export default function AnalyticsDashboard() {
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: UGX {(percent * 100).toFixed(0)}%`}
                   >
                     {dashboardData.chartData.paymentStatus.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -306,7 +306,7 @@ export default function AnalyticsDashboard() {
 
         {/* Customer Table */}
         <div style={{ backgroundColor: "white", padding: "24px", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
-          <h3 style={{ marginBottom: "16px", color: "#111827" }}>Payment Details</h3>
+          <h3 style={{ marginBottom: "16px", color: "#111827" }}>Order Payment Details</h3>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
@@ -325,7 +325,7 @@ export default function AnalyticsDashboard() {
                     <td style={{ padding: "12px" }}>{payment.userName || 'Unknown'}</td>
                     <td style={{ padding: "12px" }}>{new Date(payment.orderDate).toLocaleDateString()}</td>
                     <td style={{ padding: "12px" }}>{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString() : '-'}</td>
-                    <td style={{ padding: "12px" }}>${payment.totalAmount?.toLocaleString() || '0'}</td>
+                    <td style={{ padding: "12px" }}>UGX {payment.totalAmount?.toLocaleString() || '0'}</td>
                     <td style={{ padding: "12px", color: payment.status === 'On Time' ? '#10B981' : payment.status === 'Late' ? '#EF4444' : '#6b7280' }}>
                       {payment.status}
                     </td>
@@ -356,13 +356,13 @@ export default function AnalyticsDashboard() {
           <div style={{ backgroundColor: "white", padding: "16px", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <h3 style={{ fontSize: "0.875rem", color: "#6b7280", marginBottom: "8px" }}>Total Spend</h3>
             <p style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#111827" }}>
-              ${dashboardData.metrics.totalSpend.toLocaleString()}
+              UGX {dashboardData.metrics.totalSpend.toLocaleString()}
             </p>
           </div>
           <div style={{ backgroundColor: "white", padding: "16px", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <h3 style={{ fontSize: "0.875rem", color: "#6b7280", marginBottom: "8px" }}>Outstanding</h3>
             <p style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#EF4444" }}>
-              ${dashboardData.metrics.outstanding.toLocaleString()}
+              UGX {dashboardData.metrics.outstanding.toLocaleString()}
             </p>
           </div>
         </div>
@@ -382,13 +382,13 @@ export default function AnalyticsDashboard() {
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: UGX {(percent * 100).toFixed(0)}%`}
                   >
                     {dashboardData.chartData.vendorPaymentStatus.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, 'Amount']} />
+                  <Tooltip formatter={(value) => [`$UGX {value.toLocaleString()}`, 'Amount']} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -405,7 +405,7 @@ export default function AnalyticsDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
-                  <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, 'Amount']} />
+                  <Tooltip formatter={(value) => [`$UGX {value.toLocaleString()}`, 'Amount']} />
                   <Legend />
                   <Bar dataKey="totalSpend" fill="#3B82F6" name="Total Spend" />
                   <Bar dataKey="totalPaid" fill="#10B981" name="Paid" />
@@ -433,10 +433,10 @@ export default function AnalyticsDashboard() {
                 {dashboardData.supplierData.sort((a, b) => b.totalSpend - a.totalSpend).slice(0, 10).map((supplier) => (
                   <tr key={supplier.name} style={{ borderBottom: "1px solid #e5e7eb" }}>
                     <td style={{ padding: "12px" }}>{supplier.name}</td>
-                    <td style={{ padding: "12px" }}>${supplier.totalSpend.toLocaleString()}</td>
-                    <td style={{ padding: "12px", color: "#10B981" }}>${supplier.totalPaid.toLocaleString()}</td>
+                    <td style={{ padding: "12px" }}>UGX {supplier.totalSpend.toLocaleString()}</td>
+                    <td style={{ padding: "12px", color: "#10B981" }}>UGX {supplier.totalPaid.toLocaleString()}</td>
                     <td style={{ padding: "12px", color: supplier.outstanding > 0 ? "#EF4444" : "#10B981" }}>
-                      ${supplier.outstanding.toLocaleString()}
+                      UGX {supplier.outstanding.toLocaleString()}
                     </td>
                     <td style={{ padding: "12px" }}>{supplier.items}</td>
                   </tr>
