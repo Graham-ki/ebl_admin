@@ -270,7 +270,7 @@ export default function AnalyticsDashboard() {
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
-                    label={({ name, percent }) => `${name}: UGX {(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                   >
                     {dashboardData.chartData.paymentStatus.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -382,13 +382,13 @@ export default function AnalyticsDashboard() {
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
-                    label={({ name, percent }) => `${name}: UGX {(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                   >
                     {dashboardData.chartData.vendorPaymentStatus.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => [`$UGX {value.toLocaleString()}`, 'Amount']} />
+                  <Tooltip formatter={(value) => [`$UGX{value.toLocaleString()}`, 'Amount']} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -405,7 +405,7 @@ export default function AnalyticsDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
-                  <Tooltip formatter={(value) => [`$UGX {value.toLocaleString()}`, 'Amount']} />
+                  <Tooltip formatter={(value) => [`$UGX{value.toLocaleString()}`, 'Amount']} />
                   <Legend />
                   <Bar dataKey="totalSpend" fill="#3B82F6" name="Total Spend" />
                   <Bar dataKey="totalPaid" fill="#10B981" name="Paid" />
