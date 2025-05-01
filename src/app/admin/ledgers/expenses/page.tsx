@@ -107,28 +107,28 @@ export default function ExpensesLedgerPage() {
     setModes(uniqueModes);
   };
 
-  const fetchSubModes = async (mode: string) => {
-    if (mode === "cash") {
-      setSubModes([]);
-      return;
-    }
+ const fetchSubModes = async (mode: string) => {
+  if (mode === "cash") {
+    setSubModes([]);
+    return;
+  }
 
-    const { data, error } = await supabase
-      .from("finance")
-      .select(mode === "Bank" ? "bank_name" : "mode_of_mobilemoney")
-      .eq("mode_of_payment", mode);
+  const { data, error } = await supabase
+    .from("finance")
+    .select(mode === "Bank" ? "bank_name" : "mode_of_mobilemoney")
+    .eq("mode_of_payment", mode);
 
-    if (error) {
-      alert("Error fetching submodes: " + error.message);
-      return;
-    }
+  if (error) {
+    alert("Error fetching submodes: " + error.message);
+    return;
+  }
 
-    const uniqueSubModes = Array.from(
-      new Set(data.map((entry: any) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney))
-    ).filter((subMode): subMode is string => !!subMode);
+  const uniqueSubModes = Array.from(
+    new Set(data.map((entry: any) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney)))
+  ).filter((subMode): subMode is string => !!subMode);
 
-    setSubModes(uniqueSubModes);
-  };
+  setSubModes(uniqueSubModes);
+};
 
   const fetchExpenses = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
     setLoading(true);
