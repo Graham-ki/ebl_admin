@@ -311,7 +311,7 @@ export default function AnalyticsDashboard() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                  <th style={{ padding: "12px", textAlign: "left", color: "#6b7280", fontSize: "0.75rem" }}>Customer</th>
+                  <th style={{ padding: "12px", textAlign: "left", color: "#6b7280", fontSize: "0.75rem" }}>Marketer</th>
                   <th style={{ padding: "12px", textAlign: "left", color: "#6b7280", fontSize: "0.75rem" }}>Order Date</th>
                   <th style={{ padding: "12px", textAlign: "left", color: "#6b7280", fontSize: "0.75rem" }}>Payment Date</th>
                   <th style={{ padding: "12px", textAlign: "left", color: "#6b7280", fontSize: "0.75rem" }}>Amount</th>
