@@ -575,7 +575,7 @@ export default function FinancialHealth() {
             <span className="text-2xl">💓</span>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 m-0">Financial Health Dashboard</h1>
+            <h1 className="text-2xl font-bold text-gray-900 m-0">Financial Health Status</h1>
             <p className="text-gray-500 m-0 text-sm">
               {dateRange.start.toLocaleDateString()} - {dateRange.end.toLocaleDateString()}
             </p>
