@@ -125,7 +125,7 @@ export default function ExpensesLedgerPage() {
 
     const uniqueSubModes = Array.from(
       new Set(data.map((entry) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney))
-    ).filter((subMode): subMode is string => !!subMode);
+    ).filter((subMode): subMode is string => !!subMode),
 
     setSubModes(uniqueSubModes);
   };
