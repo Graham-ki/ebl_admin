@@ -38,13 +38,30 @@ export default function ExpensesLedgerPage() {
   const [editExpense, setEditExpense] = useState<any>(null);
   const [modes, setModes] = useState<string[]>([]);
   const [subModes, setSubModes] = useState<string[]>([]);
+  const [existingItems, setExistingItems] = useState<string[]>([]);
+  const [showNotice, setShowNotice] = useState(true);
 
   useEffect(() => {
     fetchExpenses(filter);
     fetchTotalIncome();
     fetchModes();
     fetchBalanceForward();
+    fetchExistingItems();
   }, [filter]);
+
+  const fetchExistingItems = async () => {
+    const { data, error } = await supabase
+      .from("expenses")
+      .select("item");
+    
+    if (error) {
+      console.error("Error fetching existing items:", error);
+      return;
+    }
+    
+    const uniqueItems = Array.from(new Set(data.map(item => item.item)));
+    setExistingItems(uniqueItems);
+  };
 
   const fetchBalanceForward = async () => {
     // Get total amount available
@@ -107,7 +124,7 @@ export default function ExpensesLedgerPage() {
     }
 
     const uniqueSubModes = Array.from(
-      new Set(data.map((entry) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney)))
+      new Set(data.map((entry) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney))
     ).filter((subMode): subMode is string => !!subMode);
 
     setSubModes(uniqueSubModes);
@@ -224,6 +241,7 @@ export default function ExpensesLedgerPage() {
     alert("Expense successfully submitted!");
     fetchExpenses(filter);
     fetchBalanceForward();
+    fetchExistingItems(); // Refresh the items list
     setFormData({ 
       item: "", 
       customItem: "", 
@@ -237,11 +255,11 @@ export default function ExpensesLedgerPage() {
 
   const handleEdit = (expense: any) => {
     setEditExpense(expense);
-    // Check if the expense item is in our predefined categories
-    const isPredefinedCategory = EXPENSE_CATEGORIES.includes(expense.item);
+    // Check if the expense item is in our existing items or predefined categories
+    const isExistingItem = existingItems.includes(expense.item) || EXPENSE_CATEGORIES.includes(expense.item);
     setFormData({
-      item: isPredefinedCategory ? expense.item : "Other",
-      customItem: isPredefinedCategory ? "" : expense.item,
+      item: isExistingItem ? expense.item : "Other",
+      customItem: isExistingItem ? "" : expense.item,
       amount_spent: expense.amount_spent,
       department: expense.department,
       mode_of_payment: expense.mode_of_payment,
@@ -262,6 +280,7 @@ export default function ExpensesLedgerPage() {
       alert("Expense successfully deleted!");
       fetchExpenses(filter);
       fetchBalanceForward();
+      fetchExistingItems(); // Refresh the items list
     }
   };
 
@@ -406,6 +425,33 @@ export default function ExpensesLedgerPage() {
           </svg>
           {editExpense ? "Edit Expense" : "Add New Expense"}
         </h2>
+
+        {/* Dismissible notice */}
+        {showNotice && (
+          <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
+            <div className="flex justify-between items-start">
+              <div className="flex items-start">
+                <svg className="h-5 w-5 text-blue-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="text-sm text-blue-800 font-medium">
+                    Please endeavor to select from the existing items list, to enable organized data
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowNotice(false)}
+                className="text-blue-500 hover:text-blue-700"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
@@ -416,16 +462,29 @@ export default function ExpensesLedgerPage() {
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Select an item</option>
-              {EXPENSE_CATEGORIES.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
+              {/* Predefined categories */}
+              <optgroup label="Common Categories">
+                {EXPENSE_CATEGORIES.filter(cat => cat !== "Other").map(category => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </optgroup>
+              {/* Existing items from database */}
+              <optgroup label="Previously Used Items">
+                {existingItems
+                  .filter(item => !EXPENSE_CATEGORIES.includes(item))
+                  .map((item, index) => (
+                    <option key={`existing-${index}`} value={item}>{item}</option>
+                  ))}
+              </optgroup>
+              {/* Option to add new item */}
+              <option value="Other">Other (specify below)</option>
             </select>
             {formData.item === "Other" && (
               <div className="mt-2">
                 <input
                   type="text"
                   name="customItem"
-                  placeholder="Specify item name"
+                  placeholder="Specify new item name"
                   value={formData.customItem}
                   onChange={handleInputChange}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
