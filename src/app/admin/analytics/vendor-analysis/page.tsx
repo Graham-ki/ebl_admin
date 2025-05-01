@@ -1,3 +1,4 @@
+'use client'
 // app/analytics-dashboard/page.tsx
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
