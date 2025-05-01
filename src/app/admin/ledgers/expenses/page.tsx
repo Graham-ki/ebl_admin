@@ -127,7 +127,7 @@ export default function ExpensesLedgerPage() {
       new Set(data.map((entry) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney))
     ).filter((subMode): subMode is string => !!subMode),
 
-    setSubModes(uniqueSubModes)
+    setSubModes(uniqueSubModes),
   };
 
   const fetchExpenses = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
