@@ -59,7 +59,7 @@ export default function ExpensesLedgerPage() {
       return;
     }
     
-    const uniqueItems = Array.from(new Set(data.map(item => item.item)));
+    const uniqueItems = Array.from(new Set(data.map((item: any) => item.item)));
     setExistingItems(uniqueItems);
   };
 
@@ -74,7 +74,7 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    const totalAmountAvailable = financeData.reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
+    const totalAmountAvailable = financeData.reduce((sum: number, entry: any) => sum + (entry.amount_available || 0), 0);
 
     // Get total expenses
     const { data: expensesData, error: expensesError } = await supabase
@@ -86,7 +86,7 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    const totalExpenses = expensesData.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
+    const totalExpenses = expensesData.reduce((sum: number, entry: any) => sum + (entry.amount_spent || 0), 0);
 
     // Calculate balance forward
     const balance = totalAmountAvailable - totalExpenses;
@@ -103,7 +103,7 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    const uniqueModes = Array.from(new Set(data.map((entry) => entry.mode_of_payment)));
+    const uniqueModes = Array.from(new Set(data.map((entry: any) => entry.mode_of_payment)));
     setModes(uniqueModes);
   };
 
@@ -116,7 +116,7 @@ export default function ExpensesLedgerPage() {
     const { data, error } = await supabase
       .from("finance")
       .select(mode === "Bank" ? "bank_name" : "mode_of_mobilemoney")
-      .eq("mode_of_payment", mode) as { data: { bank_name?: string; mode_of_mobilemoney?: string }[], error: any };
+      .eq("mode_of_payment", mode);
 
     if (error) {
       alert("Error fetching submodes: " + error.message);
@@ -124,10 +124,10 @@ export default function ExpensesLedgerPage() {
     }
 
     const uniqueSubModes = Array.from(
-      new Set(data.map((entry) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney))
-    ).filter((subMode): subMode is string => !!subMode),
+      new Set(data.map((entry: any) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney))
+    ).filter((subMode): subMode is string => !!subMode);
 
-    setSubModes(uniqueSubModes),
+    setSubModes(uniqueSubModes);
   };
 
   const fetchExpenses = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
@@ -155,7 +155,7 @@ export default function ExpensesLedgerPage() {
         break;
     }
 
-    let query = supabase.from("expenses").select("*").order('date',{ascending:false});
+    let query = supabase.from("expenses").select("*").order('date', {ascending: false});
 
     if (startDate && endDate) {
       query = query.gte("date", startDate.toISOString()).lte("date", endDate.toISOString());
@@ -184,12 +184,12 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    const total = data.reduce((sum, entry) => sum + (entry.amount_paid || 0), 0);
+    const total = data.reduce((sum: number, entry: any) => sum + (entry.amount_paid || 0), 0);
     setTotalIncome(total);
   };
 
   const calculateTotalExpenses = (data: any[]) => {
-    const total = data.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
+    const total = data.reduce((sum: number, entry: any) => sum + (entry.amount_spent || 0), 0);
     setTotalExpenses(total);
   };
 
@@ -226,7 +226,7 @@ export default function ExpensesLedgerPage() {
       submittedby: "You",
     };
 
-    const { data, error } = editExpense
+    const { error } = editExpense
       ? await supabase
           .from("expenses")
           .update(expenseData)
@@ -285,7 +285,7 @@ export default function ExpensesLedgerPage() {
   };
 
   const exportToCSV = () => {
-    const csvData = expenses.map((expense) => ({
+    const csvData = expenses.map((expense: any) => ({
       Item: expense.item,
       "Amount Spent": expense.amount_spent,
       Department: expense.department,
@@ -605,7 +605,7 @@ export default function ExpensesLedgerPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {expenses.map((expense) => (
+                {expenses.map((expense: any) => (
                   <tr key={expense.id} className="hover:bg-gray-50 transition-colors">
                     <td className="p-4 font-medium">{expense.item}</td>
                     <td className="p-4 text-right font-mono text-red-600">
