@@ -1,18 +1,569 @@
 // app/optimization/page.tsx
+'use client';
+
+import { useState, useEffect } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
+import { createClient } from "@supabase/supabase-js";
 export default function Optimization() {
+  const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState({
+    supplyItems: [],
+    expenses: [],
+    finances: [],
+    materials: [],
+    products: [],
+    approvedOrderItems: [],
+    taxPayments: [],
+    nssfPayments: []
+  });
+  const [inputs, setInputs] = useState({
+    newHires: 0,
+    purchaseAmount: 0,
+    sellingPrice: 0,
+    projectedRevenue: 0
+  });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      
+      // Fetch all data in parallel
+      const [
+        { data: supplyItems }, 
+        { data: expenses }, 
+        { data: finances },
+        { data: materials },
+        { data: products },
+        { data: taxPayments },
+        { data: nssfPayments }
+      ] = await Promise.all([
+        supabase.from('supply_items').select('*'),
+        supabase.from('expenses').select('*'),
+        supabase.from('finance').select('*'),
+        supabase.from('Materials').select('*'),
+        supabase.from('product').select('*'),
+        supabase.from('expenses').select('*').eq('item', 'Tax'),
+        supabase.from('expenses').select('*').eq('item', 'NSSF')
+      ]);
+
+      // Fetch approved orders separately
+      const { data: approvedOrders } = await supabase
+        .from('order')
+        .select('id')
+        .eq('status', 'Approved');
+      
+      let approvedOrderItems = [];
+      if (approvedOrders && approvedOrders.length > 0) {
+        const orderIds = approvedOrders.map(order => order.id);
+        const { data: items } = await supabase
+          .from('order_items')
+          .select('*')
+          .in('order', orderIds);
+        approvedOrderItems = items || [];
+      }
+
+      setData({
+        supplyItems: supplyItems || [],
+        expenses: expenses || [],
+        finances: finances || [],
+        materials: materials || [],
+        products: products || [],
+        approvedOrderItems,
+        taxPayments: taxPayments || [],
+        nssfPayments: nssfPayments || []
+      });
+      setLoading(false);
+    };
+
+    fetchData();
+  }, []);
+
+  // Current cash position calculation
+  const totalAvailable = data.finances.reduce((sum, item) => sum + (item.amount_available || 0), 0);
+  const totalExpenses = data.expenses.reduce((sum, item) => sum + (item.amount_spent || 0), 0);
+  const currentCash = totalAvailable - totalExpenses;
+
+  // What-if scenario calculations
+  const monthlyExpenses = data.expenses
+    .filter(e => new Date(e.date) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+    .reduce((sum, item) => sum + (item.amount_spent || 0), 0);
+  
+  const avgEmployeeCost = monthlyExpenses * 0.3; // 30% of expenses as payroll estimate
+  const projectedPayroll = monthlyExpenses + (inputs.newHires * avgEmployeeCost);
+  const projectedCash = currentCash - inputs.purchaseAmount - (inputs.newHires * avgEmployeeCost);
+
+  // Break-even calculations
+  const productionCostPerUnit = data.materials.reduce((sum, material) => 
+    sum + ((material.unit || 0) * (material.cost || 0)), 0);
+  
+  const fixedCosts = 5000000; // Example fixed cost
+  const totalSalesVolume = data.approvedOrderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  const breakEvenPoint = inputs.sellingPrice > 0 
+    ? Math.ceil(fixedCosts / (inputs.sellingPrice - productionCostPerUnit))
+    : 0;
+
+  // Tax calculations
+  const avgTaxRate = data.taxPayments.length > 0 
+    ? data.taxPayments.reduce((sum, payment) => sum + (payment.amount_spent || 0), 0) / 10000000
+    : 0.18;
+  
+  const projectedTax = inputs.projectedRevenue * avgTaxRate;
+  const projectedNSSF = data.nssfPayments.length > 0 
+    ? data.nssfPayments[0]?.amount_spent || 100000
+    : 100000;
+
+  // Prepare data for charts
+  const cashFlowData = [
+    { name: 'Available', value: totalAvailable },
+    { name: 'Expenses', value: totalExpenses },
+    { name: 'Current', value: currentCash }
+  ];
+
+  const expenseBreakdown = data.expenses
+    .filter(e => e.item && e.amount_spent)
+    .reduce((acc, item) => {
+      const existing = acc.find(i => i.name === item.item);
+      if (existing) {
+        existing.value += item.amount_spent;
+      } else {
+        acc.push({ name: item.item, value: item.amount_spent });
+      }
+      return acc;
+    }, [])
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+
   return (
-    <div style={{ minHeight: "100vh", padding: "24px", backgroundColor: "#f9fafb" }}>
-      <header style={{ marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#111827", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span>⚡</span> Financial Optimization
-        </h1>
-        <p style={{ color: "#4b5563" }}>
-          Maximize efficiency and reduce costs
-        </p>
+    <div className="min-h-screen bg-gray-50 p-6">
+      {/* Header */}
+      <header className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Financial Optimization Dashboard
+            </h1>
+            <p className="text-gray-600">Actionable insights to maximize financial efficiency</p>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setActiveTab('overview')} 
+              className={`px-4 py-2 rounded-lg ${activeTab === 'overview' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
+            >
+              Overview
+            </button>
+            <button 
+              onClick={() => setActiveTab('scenarios')} 
+              className={`px-4 py-2 rounded-lg ${activeTab === 'scenarios' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
+            >
+              Scenarios
+            </button>
+          </div>
+        </div>
       </header>
-      <div style={{ backgroundColor: "white", padding: "24px", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
-        <p style={{ color: "#6b7280" }}>Content coming soon. This is the Financial Optimization section.</p>
-      </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      ) : (
+        <>
+          {/* Overview Section */}
+          {activeTab === 'overview' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {/* Cash Position Card */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Cash Position</h3>
+                </div>
+                <p className={`text-3xl font-bold mb-4 ${currentCash >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {currentCash.toLocaleString()} UGX
+                </p>
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={cashFlowData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`${value} UGX`, 'Amount']} />
+                      <Bar dataKey="value" fill="#3B82F6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  {currentCash >= 0 ? 'Healthy cash position' : 'Warning: Negative cash position'}
+                </p>
+              </div>
+
+              {/* Expenses Card */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-red-100 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                    </svg>
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Expense Breakdown</h3>
+                </div>
+                <p className="text-3xl font-bold mb-4 text-gray-900">
+                  {totalExpenses.toLocaleString()} UGX
+                </p>
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={expenseBreakdown}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`${value} UGX`, 'Amount']} />
+                      <Area type="monotone" dataKey="value" stroke="#EF4444" fill="#FEE2E2" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  Top {expenseBreakdown.length} expense categories
+                </p>
+              </div>
+
+              {/* Outstanding Payments Card */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-yellow-100 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Outstanding Payments</h3>
+                </div>
+                <p className="text-3xl font-bold mb-4 text-yellow-600">
+                  {data.supplyItems.reduce((sum, item) => sum + (item.balance || 0), 0).toLocaleString()} UGX
+                </p>
+                <div className="space-y-2">
+                  {data.supplyItems
+                    .filter(item => item.balance > 0)
+                    .slice(0, 3)
+                    .map((item, index) => (
+                      <div key={index} className="flex justify-between">
+                        <p className="text-sm truncate">{item.name}</p>
+                        <p className="text-sm font-medium">{item.balance.toLocaleString()} UGX</p>
+                      </div>
+                    ))}
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  {data.supplyItems.filter(item => item.balance > 0).length} unpaid items
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* What-If Scenarios Section */}
+          <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">What-If Scenarios</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* New Hires Impact */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  New Hires Impact
+                </h3>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Number of New Hires</label>
+                  <input
+                    type="number"
+                    value={inputs.newHires}
+                    onChange={(e) => setInputs({...inputs, newHires: parseInt(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <div className="flex justify-between mb-1">
+                    <span className="text-sm">Current Monthly Payroll:</span>
+                    <span className="font-medium">{monthlyExpenses.toLocaleString()} UGX</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Projected Monthly Payroll:</span>
+                    <span className="font-medium text-purple-600">{projectedPayroll.toLocaleString()} UGX</span>
+                  </div>
+                </div>
+                {inputs.newHires > 0 && (
+                  <div className="mt-3 p-3 bg-blue-50 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      Hiring {inputs.newHires} new employees will increase monthly payroll by {(avgEmployeeCost * inputs.newHires).toLocaleString()} UGX.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Large Purchase Impact */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Large Purchase Impact
+                </h3>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Purchase Amount (UGX)</label>
+                  <input
+                    type="number"
+                    value={inputs.purchaseAmount}
+                    onChange={(e) => setInputs({...inputs, purchaseAmount: parseInt(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <div className="flex justify-between mb-1">
+                    <span className="text-sm">Current Cash:</span>
+                    <span className="font-medium">{currentCash.toLocaleString()} UGX</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Projected Cash:</span>
+                    <span className={`font-medium ${projectedCash >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {projectedCash.toLocaleString()} UGX
+                    </span>
+                  </div>
+                </div>
+                {inputs.purchaseAmount > 0 && (
+                  <div className={`mt-3 p-3 rounded-md ${projectedCash >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                    <p className={`text-sm ${projectedCash >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                      {projectedCash >= 0 
+                        ? 'This purchase will maintain a positive cash position.' 
+                        : 'Warning: This purchase will result in negative cash.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Break-Even Calculator Section */}
+          <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Break-Even Analysis</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Selling Price per Unit (UGX)</label>
+                  <input
+                    type="number"
+                    value={inputs.sellingPrice}
+                    onChange={(e) => setInputs({...inputs, sellingPrice: parseInt(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Production Cost per Unit:</span>
+                    <span className="font-medium">{productionCostPerUnit.toLocaleString()} UGX</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Fixed Costs:</span>
+                    <span className="font-medium">{fixedCosts.toLocaleString()} UGX</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Current Sales Volume:</span>
+                    <span className="font-medium">{totalSalesVolume} units</span>
+                  </div>
+                </div>
+              </div>
+
+              {inputs.sellingPrice > 0 && (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-3 text-center">Break-Even Point</h3>
+                  <div className="text-center mb-4">
+                    <p className="text-2xl font-bold text-green-600">
+                      {breakEvenPoint} units
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      needed to cover costs
+                    </p>
+                  </div>
+
+                  <div className={`p-3 rounded-md ${totalSalesVolume >= breakEvenPoint ? 'bg-green-50' : 'bg-yellow-50'}`}>
+                    <p className={`text-sm ${totalSalesVolume >= breakEvenPoint ? 'text-green-800' : 'text-yellow-800'}`}>
+                      {totalSalesVolume >= breakEvenPoint
+                        ? `You're currently ${totalSalesVolume - breakEvenPoint} units above break-even.`
+                        : `You need ${breakEvenPoint - totalSalesVolume} more units to reach break-even.`}
+                    </p>
+                  </div>
+
+                  {inputs.sellingPrice > 0 && productionCostPerUnit > 0 && (
+                    <div className="mt-4">
+                      <p className="text-sm font-medium mb-1">Profit Margin per Unit:</p>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div 
+                          className="bg-green-600 h-2.5 rounded-full" 
+                          style={{ width: `${((inputs.sellingPrice - productionCostPerUnit) / inputs.sellingPrice) * 100}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1 text-right">
+                        {Math.round(((inputs.sellingPrice - productionCostPerUnit) / inputs.sellingPrice) * 100)}%
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {inputs.sellingPrice > 0 && (
+              <div className="mt-6 h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={[
+                      { units: 0, cost: fixedCosts, revenue: 0 },
+                      { units: breakEvenPoint / 2, cost: fixedCosts + (productionCostPerUnit * breakEvenPoint / 2), revenue: inputs.sellingPrice * breakEvenPoint / 2 },
+                      { units: breakEvenPoint, cost: fixedCosts + (productionCostPerUnit * breakEvenPoint), revenue: inputs.sellingPrice * breakEvenPoint },
+                      { units: breakEvenPoint * 1.5, cost: fixedCosts + (productionCostPerUnit * breakEvenPoint * 1.5), revenue: inputs.sellingPrice * breakEvenPoint * 1.5 }
+                    ]}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="units" label={{ value: 'Units Sold', position: 'insideBottomRight', offset: -5 }} />
+                    <YAxis label={{ value: 'UGX', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip formatter={(value) => [`${value} UGX`, 'Amount']} />
+                    <Area type="monotone" dataKey="cost" stackId="1" stroke="#EF4444" fill="#FEE2E2" name="Total Cost" />
+                    <Area type="monotone" dataKey="revenue" stackId="2" stroke="#10B981" fill="#D1FAE5" name="Revenue" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </section>
+
+          {/* Tax Liability Estimator Section */}
+          <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Tax Liability Estimator</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Projected Revenue (UGX)</label>
+                  <input
+                    type="number"
+                    value={inputs.projectedRevenue}
+                    onChange={(e) => setInputs({...inputs, projectedRevenue: parseInt(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Historical Tax Rate:</span>
+                    <span className="font-medium">{Math.round(avgTaxRate * 100)}%</span>
+                  </div>
+                  {data.nssfPayments.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-sm">Average NSSF Payment:</span>
+                      <span className="font-medium">
+                        {data.nssfPayments.reduce((sum, payment) => sum + payment.amount_spent, 0) / data.nssfPayments.length).toLocaleString()} UGX
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {inputs.projectedRevenue > 0 && (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-3 text-center">Projected Tax Obligations</h3>
+                  
+                  <div className="space-y-2 mb-4">
+                    <div className="flex justify-between">
+                      <span className="text-sm">URA Tax ({Math.round(avgTaxRate * 100)}%):</span>
+                      <span className="font-medium">{projectedTax.toLocaleString()} UGX</span>
+                    </div>
+                    {data.nssfPayments.length > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-sm">NSSF Contribution:</span>
+                        <span className="font-medium">{projectedNSSF.toLocaleString()} UGX</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-gray-200 pt-3">
+                    <div className="flex justify-between font-semibold">
+                      <span>Total Estimated Tax:</span>
+                      <span className="text-indigo-600">{(projectedTax + projectedNSSF).toLocaleString()} UGX</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 bg-blue-50 p-3 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      Based on historical data. Set aside {(projectedTax + projectedNSSF).toLocaleString()} UGX for tax obligations.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {inputs.projectedRevenue > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-medium mb-2">Tax Payment History</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[...data.taxPayments, ...data.nssfPayments]
+                        .sort((a, b) => new Date(a.date) - new Date(b.date))
+                        .map(payment => ({
+                          date: new Date(payment.date).toLocaleDateString(),
+                          amount: payment.amount_spent,
+                          type: payment.item
+                        }))
+                      }
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`${value} UGX`, 'Amount']} />
+                      <Bar dataKey="amount" fill="#6366F1" name="Amount">
+                        {[...data.taxPayments, ...data.nssfPayments].map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.item === 'Tax' ? '#6366F1' : '#8B5CF6'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </div>
   );
 }
