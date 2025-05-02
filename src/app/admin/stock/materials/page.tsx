@@ -252,7 +252,7 @@ const MaterialsPage = () => {
           <TableHeader>
             <TableRow className="bg-blue-50">
               <TableHead className="text-center">Name</TableHead>
-              <TableHead className="text-center">Cost</TableHead>
+              <TableHead className="text-center">Cost(UGX)</TableHead>
               <TableHead className="text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
