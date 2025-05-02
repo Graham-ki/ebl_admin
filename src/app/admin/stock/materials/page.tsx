@@ -38,6 +38,7 @@ interface Material {
   name: string;
   amount_available: number;
   unit: number;
+  cost:number;
   amount_used?: number;
 }
 
@@ -75,6 +76,7 @@ const MaterialsPage = () => {
     name: "",
     amount_available: 0,
     unit: 0,
+    cost:0,
   });
 
   useEffect(() => {
@@ -86,7 +88,7 @@ const MaterialsPage = () => {
     setLoading(true);
     const { data: materialsData, error } = await supabase
       .from("materials")
-      .select("id, amount_available, unit, name");
+      .select("id, amount_available, unit, name,cost");
     if (error) {
       console.error("Error fetching materials:", error);
     } else {
@@ -140,13 +142,13 @@ const MaterialsPage = () => {
   };
 
   const handleAddMaterial = async () => {
-    const { name, amount_available, unit } = newMaterial;
+    const { name, amount_available, unit,cost } = newMaterial;
     if (!name || amount_available < 0 || unit < 0) {
       alert("Please enter valid details.");
       return;
     }
 
-    const { error } = await supabase.from("materials").insert([{ name, amount_available, unit }]);
+    const { error } = await supabase.from("materials").insert([{ name, amount_available, unit,cost }]);
     if (error) {
       console.error("Error adding material:", error);
       alert("Failed to add material.");
@@ -154,7 +156,7 @@ const MaterialsPage = () => {
     }
 
     setIsAdding(false);
-    setNewMaterial({ name: "", amount_available: 0, unit: 0 });
+    setNewMaterial({ name: "", amount_available: 0, unit: 0,cost:0 });
     fetchMaterials();
     alert("✅ Material added successfully!");
   };
@@ -167,10 +169,10 @@ const MaterialsPage = () => {
   const handleUpdateMaterial = async () => {
     if (!editMaterial) return;
 
-    const { id, name, amount_available, unit } = editMaterial;
+    const { id, name, amount_available, unit,cost } = editMaterial;
     const { error } = await supabase
       .from("materials")
-      .update({ name, amount_available, unit })
+      .update({ name, amount_available, unit,cost })
       .eq("id", id);
 
     if (error) {
@@ -250,6 +252,7 @@ const MaterialsPage = () => {
           <TableHeader>
             <TableRow className="bg-blue-50">
               <TableHead className="text-center">Name</TableHead>
+              <TableHead className="text-center">Cost</TableHead>
               <TableHead className="text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -258,6 +261,7 @@ const MaterialsPage = () => {
               materials.map((material) => (
                 <TableRow key={material.id}>
                   <TableCell className="text-center">{material.name}</TableCell>
+                  <TableCell className="text-center">{material.cost}</TableCell>
                   <TableCell className="text-center flex justify-center gap-2">
                     <Button size="sm" onClick={() => handleViewDetails(material)}>📄 Details</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleEditMaterial(material)}>✏️ Edit</Button>
@@ -282,6 +286,7 @@ const MaterialsPage = () => {
           </DialogHeader>
           <div className="space-y-4">
             <Input placeholder="Material Name" value={newMaterial.name} onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })} />
+            <Input placeholder="Cost" value={newMaterial.cost} onChange={(e) => setNewMaterial({ ...newMaterial, cost: e.target.value })} />
             <Input type="number" placeholder="Amount Available" value={newMaterial.amount_available || ""} onChange={(e) => setNewMaterial({ ...newMaterial, amount_available: parseFloat(e.target.value) })} />
             <Input type="number" placeholder="Unit Per Box" value={newMaterial.unit || ""} onChange={(e) => setNewMaterial({ ...newMaterial, unit: parseFloat(e.target.value) })} />
           </div>
