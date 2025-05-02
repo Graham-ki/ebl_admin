@@ -38,7 +38,7 @@ interface Material {
   name: string;
   amount_available: number;
   unit: number;
-  cost:number;
+  cost:string;
   amount_used?: number;
 }
 
@@ -76,7 +76,7 @@ const MaterialsPage = () => {
     name: "",
     amount_available: 0,
     unit: 0,
-    cost:0,
+    cost:"",
   });
 
   useEffect(() => {
@@ -156,7 +156,7 @@ const MaterialsPage = () => {
     }
 
     setIsAdding(false);
-    setNewMaterial({ name: "", amount_available: 0, unit: 0,cost:0 });
+    setNewMaterial({ name: "", amount_available: 0, unit: 0,cost:"" });
     fetchMaterials();
     alert("✅ Material added successfully!");
   };
@@ -305,6 +305,7 @@ const MaterialsPage = () => {
           </DialogHeader>
           <div className="space-y-4">
             <Input placeholder="Material Name" value={editMaterial?.name || ""} onChange={(e) => setEditMaterial({ ...editMaterial!, name: e.target.value })} />
+            <Input placeholder="Cost" value={editMaterial?.cost || ""} onChange={(e) => setEditMaterial({ ...editMaterial!, cost: e.target.value })} />
             <Input type="number" placeholder="Amount Available" value={editMaterial?.amount_available || 0} onChange={(e) => setEditMaterial({ ...editMaterial!, amount_available: +e.target.value })} />
             <Input type="number" placeholder="Unit Per Box" value={editMaterial?.unit || 0} onChange={(e) => setEditMaterial({ ...editMaterial!, unit: +e.target.value })} />
           </div>
