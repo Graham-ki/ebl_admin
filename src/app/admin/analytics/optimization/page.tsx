@@ -2,33 +2,83 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { createClient } from "@supabase/supabase-js";
+
+interface SupplyItem {
+  name: string;
+  quantity: number;
+  price: number;
+  total_cost: number;
+  amount_paid: number;
+  balance: number;
+  purchase_date: string;
+}
+
+interface Expense {
+  item: string;
+  amount_spent: number;
+  date: string;
+}
+
+interface Finance {
+  amount_available: number;
+  date: string;
+}
+
+interface Material {
+  name: string;
+  unit: number;
+  cost: number;
+}
+
+interface Product {
+  title: string;
+  maQuantity: number;
+}
+
+interface OrderItem {
+  order: number;
+  quantity: number;
+}
+
+interface Employee {
+  name: string;
+  role: string;
+  start_date: string;
+  salary: number;
+  status: string;
+}
+
 export default function Optimization() {
   const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
-    supplyItems: [],
-    expenses: [],
-    finances: [],
-    materials: [],
-    products: [],
-    approvedOrderItems: [],
-    taxPayments: [],
-    nssfPayments: []
+    supplyItems: [] as SupplyItem[],
+    expenses: [] as Expense[],
+    finances: [] as Finance[],
+    materials: [] as Material[],
+    products: [] as Product[],
+    approvedOrderItems: [] as OrderItem[],
+    taxPayments: [] as Expense[],
+    nssfPayments: [] as Expense[],
+    otherTaxPayments: [] as Expense[],
+    employees: [] as Employee[]
   });
+  
   const [inputs, setInputs] = useState({
     newHires: 0,
     purchaseAmount: 0,
     sellingPrice: 0,
-    projectedRevenue: 0
+    projectedRevenue: 0,
+    newHireSalary: 0
   });
 
   useEffect(() => {
@@ -43,7 +93,9 @@ export default function Optimization() {
         { data: materials },
         { data: products },
         { data: taxPayments },
-        { data: nssfPayments }
+        { data: nssfPayments },
+        { data: otherTaxPayments },
+        { data: employees }
       ] = await Promise.all([
         supabase.from('supply_items').select('*'),
         supabase.from('expenses').select('*'),
@@ -51,7 +103,9 @@ export default function Optimization() {
         supabase.from('Materials').select('*'),
         supabase.from('product').select('*'),
         supabase.from('expenses').select('*').eq('item', 'Tax'),
-        supabase.from('expenses').select('*').eq('item', 'NSSF')
+        supabase.from('expenses').select('*').eq('item', 'NSSF'),
+        supabase.from('expenses').select('*').ilike('item', '%tax%').neq('item', 'Tax').neq('item', 'NSSF'),
+        supabase.from('employees').select('*')
       ]);
 
       // Fetch approved orders separately
@@ -60,7 +114,7 @@ export default function Optimization() {
         .select('id')
         .eq('status', 'Approved');
       
-      let approvedOrderItems = [];
+      let approvedOrderItems: OrderItem[] = [];
       if (approvedOrders && approvedOrders.length > 0) {
         const orderIds = approvedOrders.map(order => order.id);
         const { data: items } = await supabase
@@ -78,7 +132,9 @@ export default function Optimization() {
         products: products || [],
         approvedOrderItems,
         taxPayments: taxPayments || [],
-        nssfPayments: nssfPayments || []
+        nssfPayments: nssfPayments || [],
+        otherTaxPayments: otherTaxPayments || [],
+        employees: employees || []
       });
       setLoading(false);
     };
@@ -91,14 +147,18 @@ export default function Optimization() {
   const totalExpenses = data.expenses.reduce((sum, item) => sum + (item.amount_spent || 0), 0);
   const currentCash = totalAvailable - totalExpenses;
 
+  // Employee calculations
+  const activeEmployees = data.employees.filter(e => e.status === 'active');
+  const totalMonthlySalary = activeEmployees.reduce((sum, emp) => sum + (emp.salary || 0), 0);
+  const avgEmployeeSalary = activeEmployees.length > 0 ? totalMonthlySalary / activeEmployees.length : 0;
+
   // What-if scenario calculations
   const monthlyExpenses = data.expenses
     .filter(e => new Date(e.date) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
     .reduce((sum, item) => sum + (item.amount_spent || 0), 0);
   
-  const avgEmployeeCost = monthlyExpenses * 0.3; // 30% of expenses as payroll estimate
-  const projectedPayroll = monthlyExpenses + (inputs.newHires * avgEmployeeCost);
-  const projectedCash = currentCash - inputs.purchaseAmount - (inputs.newHires * avgEmployeeCost);
+  const projectedPayroll = totalMonthlySalary + (inputs.newHires * (inputs.newHireSalary || avgEmployeeSalary));
+  const projectedCash = currentCash - inputs.purchaseAmount - (inputs.newHires * (inputs.newHireSalary || avgEmployeeSalary));
 
   // Break-even calculations
   const productionCostPerUnit = data.materials.reduce((sum, material) => 
@@ -119,6 +179,11 @@ export default function Optimization() {
   const projectedNSSF = data.nssfPayments.length > 0 
     ? data.nssfPayments[0]?.amount_spent || 100000
     : 100000;
+  
+  const otherTaxesTotal = data.otherTaxPayments.reduce((sum, tax) => sum + (tax.amount_spent || 0), 0);
+  const avgOtherTaxes = data.otherTaxPayments.length > 0 
+    ? otherTaxesTotal / data.otherTaxPayments.length 
+    : 0;
 
   // Prepare data for charts
   const cashFlowData = [
@@ -137,9 +202,17 @@ export default function Optimization() {
         acc.push({ name: item.item, value: item.amount_spent });
       }
       return acc;
-    }, [])
+    }, [] as {name: string, value: number}[])
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
+
+  const taxPaymentData = [...data.taxPayments, ...data.nssfPayments, ...data.otherTaxPayments]
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .map(payment => ({
+      date: new Date(payment.date).toLocaleDateString(),
+      amount: payment.amount_spent,
+      type: payment.item
+    }));
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -239,33 +312,44 @@ export default function Optimization() {
                 </p>
               </div>
 
-              {/* Outstanding Payments Card */}
+              {/* Employees & Payroll Card */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-yellow-100 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                   </div>
-                  <h3 className="font-semibold text-gray-900">Outstanding Payments</h3>
+                  <h3 className="font-semibold text-gray-900">Employees & Payroll</h3>
                 </div>
-                <p className="text-3xl font-bold mb-4 text-yellow-600">
-                  {data.supplyItems.reduce((sum, item) => sum + (item.balance || 0), 0).toLocaleString()} UGX
+                <p className="text-3xl font-bold mb-1 text-gray-900">
+                  {activeEmployees.length}
                 </p>
+                <p className="text-sm text-gray-500 mb-4">Active employees</p>
                 <div className="space-y-2">
-                  {data.supplyItems
-                    .filter(item => item.balance > 0)
-                    .slice(0, 3)
-                    .map((item, index) => (
-                      <div key={index} className="flex justify-between">
-                        <p className="text-sm truncate">{item.name}</p>
-                        <p className="text-sm font-medium">{item.balance.toLocaleString()} UGX</p>
-                      </div>
-                    ))}
+                  <div className="flex justify-between">
+                    <span className="text-sm">Total Monthly Payroll:</span>
+                    <span className="font-medium">{totalMonthlySalary.toLocaleString()} UGX</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Average Salary:</span>
+                    <span className="font-medium">{avgEmployeeSalary.toLocaleString()} UGX</span>
+                  </div>
                 </div>
-                <p className="text-sm text-gray-500 mt-2">
-                  {data.supplyItems.filter(item => item.balance > 0).length} unpaid items
-                </p>
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <p className="text-sm text-gray-500">Recent hires:</p>
+                  <div className="space-y-1">
+                    {data.employees
+                      .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
+                      .slice(0, 2)
+                      .map((emp, index) => (
+                        <div key={index} className="flex justify-between text-sm">
+                          <span className="truncate">{emp.name}</span>
+                          <span>{emp.salary.toLocaleString()} UGX</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -299,10 +383,19 @@ export default function Optimization() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Salary per Hire (UGX)</label>
+                  <input
+                    type="number"
+                    value={inputs.newHireSalary || avgEmployeeSalary}
+                    onChange={(e) => setInputs({...inputs, newHireSalary: parseInt(e.target.value) || avgEmployeeSalary})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
                 <div className="bg-gray-50 p-3 rounded-md">
                   <div className="flex justify-between mb-1">
                     <span className="text-sm">Current Monthly Payroll:</span>
-                    <span className="font-medium">{monthlyExpenses.toLocaleString()} UGX</span>
+                    <span className="font-medium">{totalMonthlySalary.toLocaleString()} UGX</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Projected Monthly Payroll:</span>
@@ -312,7 +405,7 @@ export default function Optimization() {
                 {inputs.newHires > 0 && (
                   <div className="mt-3 p-3 bg-blue-50 rounded-md">
                     <p className="text-sm text-blue-800">
-                      Hiring {inputs.newHires} new employees will increase monthly payroll by {(avgEmployeeCost * inputs.newHires).toLocaleString()} UGX.
+                      Hiring {inputs.newHires} new employees at {(inputs.newHireSalary || avgEmployeeSalary).toLocaleString()} UGX each will increase monthly payroll by {(inputs.newHires * (inputs.newHireSalary || avgEmployeeSalary)).toLocaleString()} UGX.
                     </p>
                   </div>
                 )}
@@ -496,6 +589,14 @@ export default function Optimization() {
                       </span>
                     </div>
                   )}
+                  {data.otherTaxPayments.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-sm">Other Taxes (Avg):</span>
+                      <span className="font-medium">
+                        {avgOtherTaxes.toLocaleString()} UGX
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -514,18 +615,24 @@ export default function Optimization() {
                         <span className="font-medium">{projectedNSSF.toLocaleString()} UGX</span>
                       </div>
                     )}
+                    {data.otherTaxPayments.length > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-sm">Other Taxes:</span>
+                        <span className="font-medium">{avgOtherTaxes.toLocaleString()} UGX</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="border-t border-gray-200 pt-3">
                     <div className="flex justify-between font-semibold">
                       <span>Total Estimated Tax:</span>
-                      <span className="text-indigo-600">{(projectedTax + projectedNSSF).toLocaleString()} UGX</span>
+                      <span className="text-indigo-600">{(projectedTax + projectedNSSF + avgOtherTaxes).toLocaleString()} UGX</span>
                     </div>
                   </div>
 
                   <div className="mt-3 bg-blue-50 p-3 rounded-md">
                     <p className="text-sm text-blue-800">
-                      Based on historical data. Set aside {(projectedTax + projectedNSSF).toLocaleString()} UGX for tax obligations.
+                      Based on historical data. Set aside {(projectedTax + projectedNSSF + avgOtherTaxes).toLocaleString()} UGX for tax obligations.
                     </p>
                   </div>
                 </div>
@@ -537,23 +644,21 @@ export default function Optimization() {
                 <h3 className="text-sm font-medium mb-2">Tax Payment History</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={[...data.taxPayments, ...data.nssfPayments]
-                        .sort((a, b) => new Date(a.date) - new Date(b.date))
-                        .map(payment => ({
-                          date: new Date(payment.date).toLocaleDateString(),
-                          amount: payment.amount_spent,
-                          type: payment.item
-                        }))
-                      }
-                    >
+                    <BarChart data={taxPaymentData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
                       <Tooltip formatter={(value) => [`${value} UGX`, 'Amount']} />
-                      <Bar dataKey="amount" fill="#6366F1" name="Amount">
-                        {[...data.taxPayments, ...data.nssfPayments].map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.item === 'Tax' ? '#6366F1' : '#8B5CF6'} />
+                      <Bar dataKey="amount" name="Amount">
+                        {taxPaymentData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={
+                              entry.type === 'Tax' ? '#6366F1' : 
+                              entry.type === 'NSSF' ? '#8B5CF6' : 
+                              '#A78BFA'
+                            } 
+                          />
                         ))}
                       </Bar>
                     </BarChart>
