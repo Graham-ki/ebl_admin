@@ -252,7 +252,7 @@ const MaterialsPage = () => {
           <TableHeader>
             <TableRow className="bg-blue-50">
               <TableHead className="text-center">Name</TableHead>
-              <TableHead className="text-center">Cost(UGX)</TableHead>
+              <TableHead className="text-center">Unit Cost(UGX)</TableHead>
               <TableHead className="text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -286,7 +286,7 @@ const MaterialsPage = () => {
           </DialogHeader>
           <div className="space-y-4">
             <Input placeholder="Material Name" value={newMaterial.name} onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })} />
-            <Input placeholder="Cost" value={newMaterial.cost} onChange={(e) => setNewMaterial({ ...newMaterial, cost: e.target.value })} />
+            <Input placeholder="Unit Cost" value={newMaterial.cost} onChange={(e) => setNewMaterial({ ...newMaterial, cost: e.target.value })} />
             <Input type="number" placeholder="Amount Available" value={newMaterial.amount_available || ""} onChange={(e) => setNewMaterial({ ...newMaterial, amount_available: parseFloat(e.target.value) })} />
             <Input type="number" placeholder="Unit Per Box" value={newMaterial.unit || ""} onChange={(e) => setNewMaterial({ ...newMaterial, unit: parseFloat(e.target.value) })} />
           </div>
