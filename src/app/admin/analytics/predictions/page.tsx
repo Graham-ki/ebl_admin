@@ -30,11 +30,13 @@ interface OrderItem {
   order: number;
   product: number;
   quantity: number;
+  created_at:string;
 }
 
 interface SupplyItem {
   purchase_date: string;
   balance: number;
+  created_at:string;
 }
 
 export default function Predictions() {
@@ -63,11 +65,11 @@ export default function Predictions() {
         { data: orderItems },
         { data: supplyItems }
       ] = await Promise.all([
-        supabase.from('finance').select('date, amount_available').order('created_at',{ascending:false}),
+        supabase.from('finance').select('date, amount_available,created_at').order('created_at',{ascending:false}),
         supabase.from('expenses').select('date, amount_spent, item').order('date',{ascending:false}),
         supabase.from('order').select('*').order('created_at',{ascending:false}),
         supabase.from('order_items').select('*'),
-        supabase.from('supply_items').select('purchase_date, balance').order('created_at',{ascending:false})
+        supabase.from('supply_items').select('purchase_date, balance,created_at').order('created_at',{ascending:false})
       ]);
 
       setData({
@@ -99,7 +101,7 @@ export default function Predictions() {
     
     // Process finance records (additions to cash)
     data.financeRecords.forEach(record => {
-      const dateStr = new Date(record.date).toISOString().split('T')[0];
+      const dateStr = new Date(record.created_at).toISOString().split('T')[0];
       dailyRecords[dateStr] = (dailyRecords[dateStr] || 0) + record.amount_available;
     });
     
@@ -178,7 +180,7 @@ export default function Predictions() {
 
     // Process sales from orders
     data.orders.forEach(order => {
-      const date = new Date(order.date);
+      const date = new Date(order.created_at);
       const month = date.toLocaleString('default', { month: 'long' });
       
       if (!monthlyData[month]) {
