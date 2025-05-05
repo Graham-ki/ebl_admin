@@ -81,7 +81,7 @@ export default function Optimization() {
     sellingPrice: 0,
     projectedRevenue: 0,
     newHireSalary: 0,
-    fixedCosts: 5000000 // Default value that can be changed by user
+    fixedCosts: 5000000
   });
 
   useEffect(() => {
