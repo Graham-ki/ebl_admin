@@ -21,6 +21,7 @@ interface Expense {
   item: string;
   amount_spent: number;
   date: string;
+  department?: string;
 }
 
 interface Finance {
@@ -70,7 +71,8 @@ export default function Optimization() {
     taxPayments: [] as Expense[],
     nssfPayments: [] as Expense[],
     otherTaxPayments: [] as Expense[],
-    employees: [] as Employee[]
+    employees: [] as Employee[],
+    salaryPayments: [] as Expense[]
   });
   
   const [inputs, setInputs] = useState({
@@ -78,7 +80,8 @@ export default function Optimization() {
     purchaseAmount: 0,
     sellingPrice: 0,
     projectedRevenue: 0,
-    newHireSalary: 0
+    newHireSalary: 0,
+    fixedCosts: 5000000 // Default value that can be changed by user
   });
 
   useEffect(() => {
@@ -92,9 +95,6 @@ export default function Optimization() {
         { data: finances },
         { data: materials },
         { data: products },
-        { data: taxPayments },
-        { data: nssfPayments },
-        { data: otherTaxPayments },
         { data: employees }
       ] = await Promise.all([
         supabase.from('supply_items').select('*'),
@@ -102,13 +102,36 @@ export default function Optimization() {
         supabase.from('finance').select('*'),
         supabase.from('Materials').select('*'),
         supabase.from('product').select('*'),
-        supabase.from('expenses').select('*').eq('item', 'Tax'),
-        supabase.from('expenses').select('*').eq('item', 'NSSF'),
-        supabase.from('expenses').select('*').ilike('item', '%tax%').neq('item', 'Tax').neq('item', 'NSSF'),
         supabase.from('employees').select('*')
       ]);
 
-      // Fetch approved orders separately
+      // Fetch salary payments from expenses
+      const { data: salaryPayments } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('item', 'Salary');
+
+      // Fetch tax payments with department information
+      const { data: taxPayments } = await supabase
+        .from('expenses')
+        .select('*')
+        .or('item.eq.Tax,department.eq.URA');
+
+      const { data: nssfPayments } = await supabase
+        .from('expenses')
+        .select('*')
+        .or('item.eq.NSSF,department.eq.NSSF');
+
+      const { data: otherTaxPayments } = await supabase
+        .from('expenses')
+        .select('*')
+        .ilike('item', '%tax%')
+        .neq('item', 'Tax')
+        .neq('item', 'NSSF')
+        .neq('department', 'URA')
+        .neq('department', 'NSSF');
+
+      // Fetch approved orders and their items
       const { data: approvedOrders } = await supabase
         .from('order')
         .select('id')
@@ -134,7 +157,8 @@ export default function Optimization() {
         taxPayments: taxPayments || [],
         nssfPayments: nssfPayments || [],
         otherTaxPayments: otherTaxPayments || [],
-        employees: employees || []
+        employees: employees || [],
+        salaryPayments: salaryPayments || []
       });
       setLoading(false);
     };
@@ -148,9 +172,9 @@ export default function Optimization() {
   const currentCash = totalAvailable - totalExpenses;
 
   // Employee calculations
-  const activeEmployees = data.employees.filter(e => e.status === 'active');
-  const totalMonthlySalary = activeEmployees.reduce((sum, emp) => sum + (emp.salary || 0), 0);
-  const avgEmployeeSalary = activeEmployees.length > 0 ? totalMonthlySalary / activeEmployees.length : 0;
+  const totalEmployees = data.employees.length;
+  const totalMonthlySalary = data.salaryPayments.reduce((sum, payment) => sum + (payment.amount_spent || 0), 0);
+  const avgEmployeeSalary = totalEmployees > 0 ? totalMonthlySalary / totalEmployees : 0;
 
   // What-if scenario calculations
   const monthlyExpenses = data.expenses
@@ -164,25 +188,28 @@ export default function Optimization() {
   const productionCostPerUnit = data.materials.reduce((sum, material) => 
     sum + ((material.unit || 0) * (material.cost || 0)), 0);
   
-  const fixedCosts = 5000000; // Example fixed cost
   const totalSalesVolume = data.approvedOrderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
   const breakEvenPoint = inputs.sellingPrice > 0 
-    ? Math.ceil(fixedCosts / (inputs.sellingPrice - productionCostPerUnit))
+    ? Math.ceil(inputs.fixedCosts / (inputs.sellingPrice - productionCostPerUnit))
     : 0;
 
   // Tax calculations
+  const totalTaxPayments = data.taxPayments.reduce((sum, payment) => sum + (payment.amount_spent || 0), 0);
+  const totalNSSFPayments = data.nssfPayments.reduce((sum, payment) => sum + (payment.amount_spent || 0), 0);
+  const totalOtherTaxPayments = data.otherTaxPayments.reduce((sum, tax) => sum + (tax.amount_spent || 0), 0);
+  
+  // Calculate average tax rates based on historical data
   const avgTaxRate = data.taxPayments.length > 0 
-    ? data.taxPayments.reduce((sum, payment) => sum + (payment.amount_spent || 0), 0) / 10000000
+    ? totalTaxPayments / (data.finances.reduce((sum, f) => sum + (f.amount_available || 0), 1) 
     : 0.18;
   
   const projectedTax = inputs.projectedRevenue * avgTaxRate;
   const projectedNSSF = data.nssfPayments.length > 0 
-    ? data.nssfPayments[0]?.amount_spent || 100000
+    ? totalNSSFPayments / data.nssfPayments.length
     : 100000;
   
-  const otherTaxesTotal = data.otherTaxPayments.reduce((sum, tax) => sum + (tax.amount_spent || 0), 0);
   const avgOtherTaxes = data.otherTaxPayments.length > 0 
-    ? otherTaxesTotal / data.otherTaxPayments.length 
+    ? totalOtherTaxPayments / data.otherTaxPayments.length 
     : 0;
 
   // Prepare data for charts
@@ -211,7 +238,9 @@ export default function Optimization() {
     .map(payment => ({
       date: new Date(payment.date).toLocaleDateString(),
       amount: payment.amount_spent || 0,
-      type: payment.item
+      type: payment.department?.includes('URA') ? 'URA Tax' : 
+            payment.department?.includes('NSSF') ? 'NSSF' : 
+            payment.item
     }));
 
   return (
@@ -323,9 +352,9 @@ export default function Optimization() {
                   <h3 className="font-semibold text-gray-900">Employees & Payroll</h3>
                 </div>
                 <p className="text-3xl font-bold mb-1 text-gray-900">
-                  {activeEmployees.length}
+                  {totalEmployees}
                 </p>
-                <p className="text-sm text-gray-500 mb-4">Active employees</p>
+                <p className="text-sm text-gray-500 mb-4">Total employees</p>
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-sm">Total Monthly Payroll:</span>
@@ -476,14 +505,20 @@ export default function Optimization() {
                   />
                 </div>
 
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fixed Costs (UGX)</label>
+                  <input
+                    type="number"
+                    value={inputs.fixedCosts}
+                    onChange={(e) => setInputs({...inputs, fixedCosts: parseInt(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-sm">Production Cost per Unit:</span>
                     <span className="font-medium">{productionCostPerUnit.toLocaleString()} UGX</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm">Fixed Costs:</span>
-                    <span className="font-medium">{fixedCosts.toLocaleString()} UGX</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Current Sales Volume:</span>
@@ -535,10 +570,10 @@ export default function Optimization() {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
                     data={[
-                      { units: 0, cost: fixedCosts, revenue: 0 },
-                      { units: breakEvenPoint / 2, cost: fixedCosts + (productionCostPerUnit * breakEvenPoint / 2), revenue: inputs.sellingPrice * breakEvenPoint / 2 },
-                      { units: breakEvenPoint, cost: fixedCosts + (productionCostPerUnit * breakEvenPoint), revenue: inputs.sellingPrice * breakEvenPoint },
-                      { units: breakEvenPoint * 1.5, cost: fixedCosts + (productionCostPerUnit * breakEvenPoint * 1.5), revenue: inputs.sellingPrice * breakEvenPoint * 1.5 }
+                      { units: 0, cost: inputs.fixedCosts, revenue: 0 },
+                      { units: breakEvenPoint / 2, cost: inputs.fixedCosts + (productionCostPerUnit * breakEvenPoint / 2), revenue: inputs.sellingPrice * breakEvenPoint / 2 },
+                      { units: breakEvenPoint, cost: inputs.fixedCosts + (productionCostPerUnit * breakEvenPoint), revenue: inputs.sellingPrice * breakEvenPoint },
+                      { units: breakEvenPoint * 1.5, cost: inputs.fixedCosts + (productionCostPerUnit * breakEvenPoint * 1.5), revenue: inputs.sellingPrice * breakEvenPoint * 1.5 }
                     ]}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
@@ -585,7 +620,7 @@ export default function Optimization() {
                     <div className="flex justify-between">
                       <span className="text-sm">Average NSSF Payment:</span>
                       <span className="font-medium">
-                        {(data.nssfPayments.reduce((sum, payment) => sum + (payment.amount_spent || 0), 0) / data.nssfPayments.length).toLocaleString()} UGX
+                        {projectedNSSF.toLocaleString()} UGX
                       </span>
                     </div>
                   )}
@@ -654,7 +689,7 @@ export default function Optimization() {
                           <Cell 
                             key={`cell-${index}`} 
                             fill={
-                              entry.type === 'Tax' ? '#6366F1' : 
+                              entry.type === 'URA Tax' ? '#6366F1' : 
                               entry.type === 'NSSF' ? '#8B5CF6' : 
                               '#A78BFA'
                             } 
