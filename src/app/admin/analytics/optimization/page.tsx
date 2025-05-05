@@ -88,7 +88,6 @@ export default function Optimization() {
     const fetchData = async () => {
       setLoading(true);
       
-      // Fetch all data in parallel
       const [
         { data: supplyItems }, 
         { data: expenses }, 
@@ -105,13 +104,11 @@ export default function Optimization() {
         supabase.from('employees').select('*')
       ]);
 
-      // Fetch salary payments from expenses
       const { data: salaryPayments } = await supabase
         .from('expenses')
         .select('*')
         .eq('item', 'Salary');
 
-      // Fetch tax payments with department information
       const { data: taxPayments } = await supabase
         .from('expenses')
         .select('*')
@@ -131,7 +128,6 @@ export default function Optimization() {
         .neq('department', 'URA')
         .neq('department', 'NSSF');
 
-      // Fetch approved orders and their items
       const { data: approvedOrders } = await supabase
         .from('order')
         .select('id')
@@ -166,7 +162,7 @@ export default function Optimization() {
     fetchData();
   }, []);
 
-  // Current cash position calculation
+  // Current cash position
   const totalAvailable = data.finances.reduce((sum, item) => sum + (item.amount_available || 0), 0);
   const totalExpenses = data.expenses.reduce((sum, item) => sum + (item.amount_spent || 0), 0);
   const currentCash = totalAvailable - totalExpenses;
@@ -176,7 +172,7 @@ export default function Optimization() {
   const totalMonthlySalary = data.salaryPayments.reduce((sum, payment) => sum + (payment.amount_spent || 0), 0);
   const avgEmployeeSalary = totalEmployees > 0 ? totalMonthlySalary / totalEmployees : 0;
 
-  // What-if scenario calculations
+  // What-if scenarios
   const monthlyExpenses = data.expenses
     .filter(e => new Date(e.date) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
     .reduce((sum, item) => sum + (item.amount_spent || 0), 0);
@@ -198,9 +194,9 @@ export default function Optimization() {
   const totalNSSFPayments = data.nssfPayments.reduce((sum, payment) => sum + (payment.amount_spent || 0), 0);
   const totalOtherTaxPayments = data.otherTaxPayments.reduce((sum, tax) => sum + (tax.amount_spent || 0), 0);
   
-  // Calculate average tax rates based on historical data
-  const avgTaxRate = data.taxPayments.length > 0 
-    ? totalTaxPayments / (data.finances.reduce((sum, f) => sum + (f.amount_available || 0), 1) 
+  const totalFinances = data.finances.reduce((sum, f) => sum + (f.amount_available || 0), 0);
+  const avgTaxRate = data.taxPayments.length > 0 && totalFinances > 0 
+    ? totalTaxPayments / totalFinances
     : 0.18;
   
   const projectedTax = inputs.projectedRevenue * avgTaxRate;
@@ -212,7 +208,7 @@ export default function Optimization() {
     ? totalOtherTaxPayments / data.otherTaxPayments.length 
     : 0;
 
-  // Prepare data for charts
+  // Chart data preparation
   const cashFlowData = [
     { name: 'Available', value: totalAvailable },
     { name: 'Expenses', value: totalExpenses },
@@ -245,7 +241,6 @@ export default function Optimization() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header */}
       <header className="mb-8">
         <div className="flex items-center justify-between">
           <div>
@@ -280,10 +275,8 @@ export default function Optimization() {
         </div>
       ) : (
         <>
-          {/* Overview Section */}
           {activeTab === 'overview' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              {/* Cash Position Card */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-blue-100 rounded-lg">
@@ -312,7 +305,6 @@ export default function Optimization() {
                 </p>
               </div>
 
-              {/* Expenses Card */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-red-100 rounded-lg">
@@ -341,7 +333,6 @@ export default function Optimization() {
                 </p>
               </div>
 
-              {/* Employees & Payroll Card */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-purple-100 rounded-lg">
@@ -383,7 +374,6 @@ export default function Optimization() {
             </div>
           )}
 
-          {/* What-If Scenarios Section */}
           <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-purple-100 rounded-lg">
@@ -395,7 +385,6 @@ export default function Optimization() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* New Hires Impact */}
               <div className="border border-gray-200 rounded-lg p-4">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -440,7 +429,6 @@ export default function Optimization() {
                 )}
               </div>
 
-              {/* Large Purchase Impact */}
               <div className="border border-gray-200 rounded-lg p-4">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -482,7 +470,6 @@ export default function Optimization() {
             </div>
           </section>
 
-          {/* Break-Even Calculator Section */}
           <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-green-100 rounded-lg">
@@ -588,7 +575,6 @@ export default function Optimization() {
             )}
           </section>
 
-          {/* Tax Liability Estimator Section */}
           <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-indigo-100 rounded-lg">
