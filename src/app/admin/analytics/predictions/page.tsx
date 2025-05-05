@@ -69,7 +69,7 @@ export default function Predictions() {
       ] = await Promise.all([
         supabase.from('finance').select('created_at, amount_available').order('created_at'),
         supabase.from('expenses').select('created_at, amount_spent, category').order('created_at'),
-        supabase.from('orders').select('id, created_at, status').order('created_at'),
+        supabase.from('order').select('id, created_at, status').order('created_at'),
         supabase.from('order_items').select('order_id, product_id, quantity'),
         supabase.from('supply_items').select('purchase_date, balance').order('purchase_date')
       ]);
@@ -160,7 +160,7 @@ export default function Predictions() {
       
       // Adjust for confirmed orders in the pipeline (using quantity * selling price)
       const orderAdjustment = data.orders
-        .filter(order => order.status === 'confirmed')
+        .filter(order => order.status === 'Approved')
         .filter(order => {
           const orderDate = new Date(order.created_at);
           return orderDate > today && orderDate <= date;
