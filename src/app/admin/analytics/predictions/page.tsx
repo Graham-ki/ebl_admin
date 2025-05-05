@@ -14,9 +14,9 @@ interface FinanceRecord {
 }
 
 interface ExpenseRecord {
-  created_at: string;
+  date: string;
   amount_spent: number;
-  category: string;
+  item: string;
 }
 
 interface Order {
@@ -26,7 +26,7 @@ interface Order {
 }
 
 interface OrderItem {
-  order_id: number;
+  order: number;
   quantity: number;
 }
 
@@ -66,7 +66,7 @@ export default function Predictions() {
       .map(order => order.id);
     
     return data.orderItems
-      .filter(item => approvedOrderIds.includes(item.order_id))
+      .filter(item => approvedOrderIds.includes(item.order))
       .reduce((sum, item) => sum + (item.quantity || 0), 0);
   }, [data.orders, data.orderItems]);
 
@@ -81,7 +81,7 @@ export default function Predictions() {
         const date = new Date(order.created_at);
         const monthYear = `${date.getFullYear()}-${date.getMonth() + 1}`;
         
-        const orderItems = data.orderItems.filter(oi => oi.order_id === order.id);
+        const orderItems = data.orderItems.filter(oi => oi.order === order.id);
         const orderQuantity = orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
         
         monthlySales[monthYear] = (monthlySales[monthYear] || 0) + orderQuantity;
@@ -102,7 +102,7 @@ export default function Predictions() {
 
     // Group expenses by month
     data.expenses.forEach(expense => {
-      const date = new Date(expense.created_at);
+      const date = new Date(expense.date);
       const monthYear = `${date.getFullYear()}-${date.getMonth() + 1}`;
       monthlyExpenses[monthYear] = (monthlyExpenses[monthYear] || 0) + (expense.amount_spent || 0);
     });
@@ -128,9 +128,9 @@ export default function Predictions() {
         { data: supplyItems }
       ] = await Promise.all([
         supabase.from('finance').select('created_at, amount_available').order('created_at'),
-        supabase.from('expenses').select('created_at, amount_spent, category').order('created_at'),
+        supabase.from('expenses').select('date, amount_spent, category').order('date'),
         supabase.from('order').select('id, created_at, status').order('created_at'),
-        supabase.from('order_items').select('order_id, quantity'),
+        supabase.from('order_items').select('order, quantity'),
         supabase.from('supply_items').select('purchase_date, balance').order('purchase_date')
       ]);
 
@@ -311,7 +311,7 @@ export default function Predictions() {
                 <BarChart
                   data={Object.entries(
                     data.expenses.reduce((acc, expense) => {
-                      const date = new Date(expense.created_at);
+                      const date = new Date(expense.date);
                       const monthYear = `${date.getFullYear()}-${date.getMonth() + 1}`;
                       acc[monthYear] = (acc[monthYear] || 0) + (expense.amount_spent || 0);
                       return acc;
