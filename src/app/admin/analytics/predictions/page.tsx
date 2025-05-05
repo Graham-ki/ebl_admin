@@ -128,7 +128,7 @@ export default function Predictions() {
         { data: supplyItems }
       ] = await Promise.all([
         supabase.from('finance').select('created_at, amount_available').order('created_at'),
-        supabase.from('expenses').select('date, amount_spent, category').order('date'),
+        supabase.from('expenses').select('date, amount_spent, item').order('date'),
         supabase.from('order').select('id, created_at, status').order('created_at'),
         supabase.from('order_items').select('order, quantity'),
         supabase.from('supply_items').select('purchase_date, balance').order('purchase_date')
@@ -186,7 +186,7 @@ export default function Predictions() {
               {data.expenses.reduce((sum, e) => sum + (e.amount_spent || 0), 0).toLocaleString()} UGX
             </p>
             <p className="text-sm text-gray-600 mt-1">
-              Sum of all entries in expenses table
+              Total expenses
             </p>
           </div>
           <div className="bg-blue-50 p-4 rounded-lg">
@@ -218,7 +218,7 @@ export default function Predictions() {
               {totalSalesVolume.toLocaleString()} units
             </p>
             <p className="text-sm text-gray-600 mt-1">
-              Sum of quantities from all approved orders
+              Number of boxes from all approved orders
             </p>
           </div>
           
@@ -248,7 +248,7 @@ export default function Predictions() {
               {data.expenses.reduce((sum, e) => sum + (e.amount_spent || 0), 0).toLocaleString()} UGX
             </p>
             <p className="text-sm text-gray-600 mt-1">
-              Sum of all expense records
+              Total expense records
             </p>
           </div>
           
