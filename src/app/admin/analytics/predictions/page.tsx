@@ -14,29 +14,26 @@ interface FinanceRecord {
 }
 
 interface ExpenseRecord {
-  date: string;
+  created_at: string;
   amount_spent: number;
-  item: string;
+  category: string;
 }
 
 interface Order {
   id: number;
   created_at: string;
   status: string;
-  total_amount: number;
 }
 
 interface OrderItem {
-  order: number;
-  product: number;
+  order_id: number;
+  product_id: number;
   quantity: number;
-  created_at:string;
 }
 
 interface SupplyItem {
   purchase_date: string;
   balance: number;
-  created_at:string;
 }
 
 export default function Predictions() {
@@ -51,7 +48,12 @@ export default function Predictions() {
     expenses: [] as ExpenseRecord[],
     orders: [] as Order[],
     orderItems: [] as OrderItem[],
-    supplyItems: [] as SupplyItem[]
+    supplyItems: [] as SupplyItem[],
+    sellingPrice: 0 // User will input this
+  });
+
+  const [inputs, setInputs] = useState({
+    sellingPrice: 0
   });
 
   useEffect(() => {
@@ -65,11 +67,11 @@ export default function Predictions() {
         { data: orderItems },
         { data: supplyItems }
       ] = await Promise.all([
-        supabase.from('finance').select('date, amount_available,created_at').order('created_at',{ascending:false}),
-        supabase.from('expenses').select('date, amount_spent, item').order('date',{ascending:false}),
-        supabase.from('order').select('*').order('created_at',{ascending:false}),
-        supabase.from('order_items').select('*'),
-        supabase.from('supply_items').select('purchase_date, balance,created_at').order('created_at',{ascending:false})
+        supabase.from('finance').select('created_at, amount_available').order('created_at'),
+        supabase.from('expenses').select('created_at, amount_spent, category').order('created_at'),
+        supabase.from('orders').select('id, created_at, status').order('created_at'),
+        supabase.from('order_items').select('order_id, product_id, quantity'),
+        supabase.from('supply_items').select('purchase_date, balance').order('purchase_date')
       ]);
 
       setData({
@@ -77,7 +79,8 @@ export default function Predictions() {
         expenses: expenses || [],
         orders: orders || [],
         orderItems: orderItems || [],
-        supplyItems: supplyItems || []
+        supplyItems: supplyItems || [],
+        sellingPrice: 0
       });
       setLoading(false);
     };
@@ -107,7 +110,7 @@ export default function Predictions() {
     
     // Process expenses (subtractions from cash)
     data.expenses.forEach(expense => {
-      const dateStr = new Date(expense.date).toISOString().split('T')[0];
+      const dateStr = new Date(expense.created_at).toISOString().split('T')[0];
       dailyRecords[dateStr] = (dailyRecords[dateStr] || 0) - expense.amount_spent;
     });
     
@@ -155,14 +158,19 @@ export default function Predictions() {
       // Base projection
       let projectedAmount = lastAmount + (avgDailyChange * i);
       
-      // Adjust for confirmed orders in the pipeline
+      // Adjust for confirmed orders in the pipeline (using quantity * selling price)
       const orderAdjustment = data.orders
-        .filter(order => order.status === 'Approved')
+        .filter(order => order.status === 'confirmed')
         .filter(order => {
           const orderDate = new Date(order.created_at);
           return orderDate > today && orderDate <= date;
         })
-        .reduce((sum, order) => sum + order.total_amount, 0);
+        .reduce((sum, order) => {
+          const items = data.orderItems.filter(oi => oi.order_id === order.id);
+          const orderValue = items.reduce((itemSum, item) => 
+            itemSum + (item.quantity * inputs.sellingPrice), 0);
+          return sum + orderValue;
+        }, 0);
 
       forecast.push({
         date: dateStr,
@@ -172,27 +180,29 @@ export default function Predictions() {
     }
 
     return [...runningHistory.slice(-30), ...forecast];
-  }, [data.financeRecords, data.expenses, data.orders, currentCash]);
+  }, [data.financeRecords, data.expenses, data.orders, data.orderItems, currentCash, inputs.sellingPrice]);
 
   // 2. Seasonal Trend Analysis
   const seasonalTrends = useMemo(() => {
     const monthlyData: Record<string, { sales: number; expenses: number }> = {};
 
-    // Process sales from orders
+    // Process sales from orders (using quantity * selling price)
     data.orders.forEach(order => {
       const date = new Date(order.created_at);
       const month = date.toLocaleString('default', { month: 'long' });
+      const items = data.orderItems.filter(oi => oi.order_id === order.id);
+      const orderValue = items.reduce((sum, item) => sum + (item.quantity * inputs.sellingPrice), 0);
       
       if (!monthlyData[month]) {
         monthlyData[month] = { sales: 0, expenses: 0 };
       }
       
-      monthlyData[month].sales += order.total_amount;
+      monthlyData[month].sales += orderValue;
     });
 
     // Process expenses
     data.expenses.forEach(expense => {
-      const date = new Date(expense.date);
+      const date = new Date(expense.created_at);
       const month = date.toLocaleString('default', { month: 'long' });
       
       if (!monthlyData[month]) {
@@ -208,7 +218,7 @@ export default function Predictions() {
       sales: values.sales,
       expenses: values.expenses
     }));
-  }, [data.orders, data.expenses]);
+  }, [data.orders, data.orderItems, data.expenses, inputs.sellingPrice]);
 
   // 3. Working Capital Projections
   const workingCapitalProjection = useMemo(() => {
@@ -272,21 +282,53 @@ export default function Predictions() {
         <p className="text-gray-600">Data-driven forecasts for better financial planning</p>
       </header>
 
+      {/* Selling Price Input */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
+        <h2 className="text-lg font-medium mb-4">Sales Price Configuration</h2>
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Enter Average Selling Price per Unit (UGX)
+            </label>
+            <input
+              type="number"
+              value={inputs.sellingPrice}
+              onChange={(e) => setInputs({...inputs, sellingPrice: Number(e.target.value) || 0})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter price per unit"
+            />
+          </div>
+          <div className="text-sm text-gray-500 mt-2">
+            {inputs.sellingPrice > 0 ? (
+              <span className="text-green-600">Price set: {inputs.sellingPrice.toLocaleString()} UGX/unit</span>
+            ) : (
+              <span className="text-yellow-600">Please enter selling price for accurate forecasts</span>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-8">
         {/* Current Financial Position */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Current Financial Position</h2>
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-medium text-green-800 mb-1">Available Cash</h3>
+              <h3 className="font-medium text-green-800 mb-1">Available Funds</h3>
               <p className="text-2xl font-bold">
                 {data.financeRecords.reduce((sum, r) => sum + r.amount_available, 0).toLocaleString()} UGX
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                Total funds available from all finance records
               </p>
             </div>
             <div className="bg-red-50 p-4 rounded-lg">
               <h3 className="font-medium text-red-800 mb-1">Total Expenses</h3>
               <p className="text-2xl font-bold">
                 {data.expenses.reduce((sum, e) => sum + e.amount_spent, 0).toLocaleString()} UGX
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                Sum of all expenses recorded in the system
               </p>
             </div>
             <div className="bg-blue-50 p-4 rounded-lg">
@@ -295,6 +337,13 @@ export default function Predictions() {
                 currentCash >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
                 {currentCash.toLocaleString()} UGX
+              </p>
+              <p className={`text-sm mt-1 ${
+                currentCash >= 0 ? 'text-gray-600' : 'text-red-600'
+              }`}>
+                {currentCash >= 0 
+                  ? 'Healthy cash position (Available funds > Expenses)'
+                  : 'Warning: Negative cash position. Consider reducing expenses or increasing revenue'}
               </p>
             </div>
           </div>
@@ -343,6 +392,15 @@ export default function Predictions() {
                   .filter(f => f.type === '30-day')
                   .slice(-1)[0]?.amount.toLocaleString() || 'N/A'} UGX
               </p>
+              {cashFlowForecast.some(f => f.type === '30-day' && f.amount < 0) ? (
+                <p className="text-sm text-red-600 mt-1">
+                  Negative cash projected. Consider delaying expenses or accelerating receivables.
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600 mt-1">
+                  Based on current trends and confirmed orders
+                </p>
+              )}
             </div>
             <div className="bg-indigo-50 p-4 rounded-lg">
               <h3 className="font-medium text-indigo-800 mb-1">60-Day Projection</h3>
@@ -351,6 +409,15 @@ export default function Predictions() {
                   .filter(f => f.type === '60-day')
                   .slice(-1)[0]?.amount.toLocaleString() || 'N/A'} UGX
               </p>
+              {cashFlowForecast.some(f => f.type === '60-day' && f.amount < 0) ? (
+                <p className="text-sm text-red-600 mt-1">
+                  Potential cash shortfall. Review upcoming expenses and sales pipeline.
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600 mt-1">
+                  Projection includes expected sales and expenses
+                </p>
+              )}
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
               <h3 className="font-medium text-purple-800 mb-1">90-Day Projection</h3>
@@ -359,6 +426,15 @@ export default function Predictions() {
                   .filter(f => f.type === '90-day')
                   .slice(-1)[0]?.amount.toLocaleString() || 'N/A'} UGX
               </p>
+              {cashFlowForecast.some(f => f.type === '90-day' && f.amount < 0) ? (
+                <p className="text-sm text-red-600 mt-1">
+                  Long-term cash issue predicted. Explore financing options or cost reductions.
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600 mt-1">
+                  Long-term outlook based on current business trends
+                </p>
+              )}
             </div>
           </div>
         </section>
@@ -405,6 +481,9 @@ export default function Predictions() {
                     curr.sales > max.sales ? curr : max
                   ).sales.toLocaleString()} UGX
                 </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Best month for sales. Consider increasing inventory and marketing during this period.
+                </p>
               </div>
               <div className="bg-red-50 p-4 rounded-lg">
                 <h4 className="text-red-800 font-medium mb-1">Highest Expenses Month</h4>
@@ -418,7 +497,22 @@ export default function Predictions() {
                     curr.expenses > max.expenses ? curr : max
                   ).expenses.toLocaleString()} UGX
                 </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Month with highest costs. Review expenses and plan cash reserves accordingly.
+                </p>
               </div>
+            </div>
+            <div className="mt-4 bg-yellow-50 p-4 rounded-lg">
+              <h4 className="text-yellow-800 font-medium mb-1">Seasonal Profitability</h4>
+              {seasonalTrends.some(m => m.sales < m.expenses) ? (
+                <p className="text-red-600">
+                  Warning: Some months show expenses exceeding sales. Consider cost-cutting measures during these periods.
+                </p>
+              ) : (
+                <p className="text-green-600">
+                  Positive cash flow projected for all months based on historical trends.
+                </p>
+              )}
             </div>
           </div>
         </section>
@@ -477,6 +571,13 @@ export default function Predictions() {
               }`}>
                 {workingCapitalProjection.current.toLocaleString()} UGX
               </p>
+              <p className={`text-sm mt-1 ${
+                workingCapitalProjection.current >= 0 ? 'text-gray-600' : 'text-red-600'
+              }`}>
+                {workingCapitalProjection.current >= 0 
+                  ? 'Healthy working capital position'
+                  : 'Warning: Negative working capital. May indicate liquidity issues'}
+              </p>
             </div>
             <div className="bg-blue-50 p-4 rounded-lg">
               <h3 className="font-medium text-blue-800 mb-1">Projected Growth (12mo)</h3>
@@ -487,6 +588,11 @@ export default function Predictions() {
                   Math.abs(workingCapitalProjection.current) * 100
                 ).toFixed(1)}%
               </p>
+              <p className="text-sm text-gray-600 mt-1">
+                {workingCapitalProjection.projection[11].workingCapital > workingCapitalProjection.current 
+                  ? 'Positive growth projected'
+                  : 'Negative growth projected. Review business strategy'}
+              </p>
             </div>
             <div className="bg-red-50 p-4 rounded-lg">
               <h3 className="font-medium text-red-800 mb-1">Potential Shortfall</h3>
@@ -494,6 +600,11 @@ export default function Predictions() {
                 {Math.min(
                   ...workingCapitalProjection.projection.map(p => p.workingCapital)
                 ).toLocaleString()} UGX
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                {Math.min(...workingCapitalProjection.projection.map(p => p.workingCapital)) >= 0 
+                  ? 'No projected shortfalls'
+                  : 'Negative working capital projected. Plan for financing needs'}
               </p>
             </div>
           </div>
