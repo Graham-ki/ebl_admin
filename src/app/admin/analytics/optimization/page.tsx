@@ -197,9 +197,9 @@ export default function Optimization() {
     .reduce((acc, item) => {
       const existing = acc.find(i => i.name === item.item);
       if (existing) {
-        existing.value += item.amount_spent;
+        existing.value += item.amount_spent || 0;
       } else {
-        acc.push({ name: item.item, value: item.amount_spent });
+        acc.push({ name: item.item, value: item.amount_spent || 0 });
       }
       return acc;
     }, [] as {name: string, value: number}[])
@@ -210,7 +210,7 @@ export default function Optimization() {
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .map(payment => ({
       date: new Date(payment.date).toLocaleDateString(),
-      amount: payment.amount_spent,
+      amount: payment.amount_spent || 0,
       type: payment.item
     }));
 
@@ -585,7 +585,7 @@ export default function Optimization() {
                     <div className="flex justify-between">
                       <span className="text-sm">Average NSSF Payment:</span>
                       <span className="font-medium">
-                        {data.nssfPayments.reduce((sum, payment) => sum + payment.amount_spent, 0) / data.nssfPayments.length).toLocaleString()} UGX
+                        {(data.nssfPayments.reduce((sum, payment) => sum + (payment.amount_spent || 0), 0) / data.nssfPayments.length).toLocaleString()} UGX
                       </span>
                     </div>
                   )}
