@@ -172,51 +172,74 @@ export default function Optimization() {
 if (approvedOrders && approvedOrders.length > 0) {
   const orderIds = approvedOrders.map(order => order.id);
   console.log('Fetching order items for order IDs:', orderIds);
-  
-  // Try common foreign key column names
-  const possibleForeignKeyNames = ['order_id', 'order', 'orderId', 'orderID'];
-  
-  for (const fkName of possibleForeignKeyNames) {
+
+  try {
+    // First try the standard .in() method
+    const { data: items, error } = await supabase
+      .from('order_item')
+      .select('*')
+      .in('order', orderIds);
+
+    if (error) throw error;
+    
+    approvedOrderItems = items || [];
+    console.log('Found order items using .in():', approvedOrderItems);
+  } catch (error) {
+    console.error('Standard .in() failed, trying alternative methods:', error);
+    
+    // Fallback 1: Using .or() with multiple .eq()
     try {
-      const { data: items, error } = await supabase
+      const orConditions = orderIds.map(id => `order.eq.${id}`).join(',');
+      const { data: items, error: orError } = await supabase
         .from('order_item')
         .select('*')
-        .in(fkName, orderIds);
+        .or(orConditions);
+
+      if (orError) throw orError;
       
-      if (error) throw error;
+      approvedOrderItems = items || [];
+      console.log('Found order items using .or():', approvedOrderItems);
+    } catch (orError) {
+      console.error('.or() method failed, trying raw filter:', orError);
       
-      if (items && items.length > 0) {
-        approvedOrderItems = items;
-        console.log(`Found order items using "${fkName}" field:`, approvedOrderItems);
-        break; // Exit loop if successful
-      }
-    } catch (error) {
-      console.error(`Error fetching with "${fkName}":`, error);
-      
-      // Last attempt - try raw filter
-      if (fkName === possibleForeignKeyNames[possibleForeignKeyNames.length - 1]) {
+      // Fallback 2: Using raw filter syntax
+      try {
+        const { data: items, error: rawError } = await supabase
+          .from('order_item')
+          .select('*')
+          .filter('order', 'in', `(${orderIds.join(',')})`);
+
+        if (rawError) throw rawError;
+        
+        approvedOrderItems = items || [];
+        console.log('Found order items using raw filter:', approvedOrderItems);
+      } catch (rawError) {
+        console.error('Raw filter failed, trying manual filtering:', rawError);
+        
+        // Final Fallback: Fetch all and filter client-side
         try {
-          const { data: items } = await supabase
+          const { data: allItems, error: allError } = await supabase
             .from('order_item')
-            .select('*')
-            .filter('order', 'in', `(${orderIds.join(',')})`);
+            .select('*');
+
+          if (allError) throw allError;
           
-          if (items && items.length > 0) {
-            approvedOrderItems = items;
-            console.log('Found order items using raw filter:', approvedOrderItems);
-          }
+          approvedOrderItems = allItems?.filter(item => 
+            orderIds.includes(item.order)
+          ) || [];
+          console.log('Filtered order items client-side:', approvedOrderItems);
         } catch (finalError) {
-          console.error('Final attempt failed:', finalError);
+          console.error('All methods failed:', finalError);
         }
       }
     }
   }
-  
+
   if (approvedOrderItems.length === 0) {
-    console.warn('No order items found after trying all field name variations');
+    console.warn('No order items found after trying all methods');
   }
 }
-
+        
         setData({
           supplyItems: supplyItems || [],
           expenses: expenses || [],
