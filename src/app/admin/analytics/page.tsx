@@ -6,26 +6,42 @@ export default function AnalyticsDashboard() {
     {
       title: "Cash Flow",
       description: "Track income and expenses over time",
-      icon: <TrendingUp className="w-6 h-6 text-blue-500" />,
+      icon: <TrendingUp className="w-6 h-6" />,
       link: "analytics/cash-flow",
+      bgColor: "bg-blue-50",
+      borderColor: "border-blue-200",
+      textColor: "text-blue-600",
+      iconColor: "text-blue-500"
     },
     {
       title: "Financial Health",
       description: "Key indicators of your business health",
-      icon: <HeartPulse className="w-6 h-6 text-green-500" />,
+      icon: <HeartPulse className="w-6 h-6" />,
       link: "analytics/financial-health",
+      bgColor: "bg-green-50",
+      borderColor: "border-green-200",
+      textColor: "text-green-600",
+      iconColor: "text-green-500"
     },
     {
       title: "Vendor Analysis",
       description: "Evaluate supplier performance",
-      icon: <BarChart2 className="w-6 h-6 text-orange-500" />,
+      icon: <BarChart2 className="w-6 h-6" />,
       link: "analytics/vendor-analysis",
+      bgColor: "bg-orange-50",
+      borderColor: "border-orange-200",
+      textColor: "text-orange-600",
+      iconColor: "text-orange-500"
     },
     {
       title: "Financial Optimization",
       description: "Maximize efficiency",
-      icon: <Wallet className="w-6 h-6 text-teal-500" />,
+      icon: <Wallet className="w-6 h-6" />,
       link: "analytics/optimization",
+      bgColor: "bg-teal-50",
+      borderColor: "border-teal-200",
+      textColor: "text-teal-600",
+      iconColor: "text-teal-500"
     },
   ];
 
@@ -36,20 +52,22 @@ export default function AnalyticsDashboard() {
         <p className="text-gray-600 mt-2">Insights to drive your financial decisions</p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {cards.map((card, index) => (
           <a
             key={index}
             href={card.link}
-            className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 hover:border-blue-100"
+            className={`p-6 rounded-xl shadow-sm hover:shadow-md transition-all border ${card.bgColor} ${card.borderColor} hover:border-opacity-70`}
           >
             <div className="flex items-start gap-4">
-              <div className="p-2 bg-gray-50 rounded-lg">{card.icon}</div>
+              <div className={`p-3 rounded-lg ${card.iconColor} ${card.bgColor.replace('50', '100')}`}>
+                {card.icon}
+              </div>
               <div>
-                <h3 className="font-semibold text-gray-900">{card.title}</h3>
+                <h3 className={`font-semibold ${card.textColor}`}>{card.title}</h3>
                 <p className="text-gray-600 text-sm mt-1">{card.description}</p>
               </div>
-              <ArrowRight className="ml-auto w-5 h-5 text-gray-400" />
+              <ArrowRight className={`ml-auto w-5 h-5 ${card.textColor} opacity-70`} />
             </div>
           </a>
         ))}
