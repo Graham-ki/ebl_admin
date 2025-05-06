@@ -3,7 +3,8 @@
 
 import { useState, useEffect } from 'react';
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
+  ResponsiveContainer, Cell, Legend
 } from 'recharts';
 import { createClient } from "@supabase/supabase-js";
 
@@ -26,7 +27,7 @@ interface Expense {
 
 interface Finance {
   amount_available: number;
-  date: string;
+  created_at: string;
 }
 
 interface Material {
@@ -41,8 +42,11 @@ interface Product {
 }
 
 interface OrderItem {
-  order: number;
+  id?: number;
+  order_id: number;
+  product_id: number;
   quantity: number;
+  price?: number;
 }
 
 interface Employee {
@@ -88,75 +92,133 @@ export default function Optimization() {
     const fetchData = async () => {
       setLoading(true);
       
-      const [
-        { data: supplyItems }, 
-        { data: expenses }, 
-        { data: finances },
-        { data: materials },
-        { data: products },
-        { data: employees }
-      ] = await Promise.all([
-        supabase.from('supply_items').select('*'),
-        supabase.from('expenses').select('*'),
-        supabase.from('finance').select('*'),
-        supabase.from('Materials').select('*'),
-        supabase.from('product').select('*'),
-        supabase.from('employees').select('*')
-      ]);
+      try {
+        console.log('Starting data fetch...');
+        
+        const [
+          { data: supplyItems, error: supplyError }, 
+          { data: expenses, error: expensesError }, 
+          { data: finances, error: financeError },
+          { data: materials, error: materialsError },
+          { data: products, error: productsError },
+          { data: employees, error: employeesError }
+        ] = await Promise.all([
+          supabase.from('supply_items').select('*'),
+          supabase.from('expenses').select('*'),
+          supabase.from('finance').select('*'),
+          supabase.from('Materials').select('*'),
+          supabase.from('product').select('*'),
+          supabase.from('employees').select('*')
+        ]);
 
-      const { data: salaryPayments } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('item', 'Salary');
+        // Log any errors from initial fetches
+        if (supplyError) console.error('Supply items error:', supplyError);
+        if (expensesError) console.error('Expenses error:', expensesError);
+        if (financeError) console.error('Finance error:', financeError);
+        if (materialsError) console.error('Materials error:', materialsError);
+        if (productsError) console.error('Products error:', productsError);
+        if (employeesError) console.error('Employees error:', employeesError);
 
-      const { data: taxPayments } = await supabase
-        .from('expenses')
-        .select('*')
-        .or('item.eq.Tax,department.eq.URA');
-
-      const { data: nssfPayments } = await supabase
-        .from('expenses')
-        .select('*')
-        .or('item.eq.NSSF,department.eq.NSSF');
-
-      const { data: otherTaxPayments } = await supabase
-        .from('expenses')
-        .select('*')
-        .ilike('item', '%tax%')
-        .neq('item', 'Tax')
-        .neq('item', 'NSSF')
-        .neq('department', 'URA')
-        .neq('department', 'NSSF');
-
-      const { data: approvedOrders } = await supabase
-        .from('order')
-        .select('id')
-        .eq('status', 'Approved');
-      
-      let approvedOrderItems: OrderItem[] = [];
-      if (approvedOrders && approvedOrders.length > 0) {
-        const orderIds = approvedOrders.map(order => order.id);
-        const { data: items } = await supabase
-          .from('order_items')
+        // Fetch salary payments
+        const { data: salaryPayments, error: salaryError } = await supabase
+          .from('expenses')
           .select('*')
-          .in('order', orderIds);
-        approvedOrderItems = items || [];
-      }
+          .eq('item', 'Salary');
+        
+        if (salaryError) console.error('Salary payments error:', salaryError);
 
-      setData({
-        supplyItems: supplyItems || [],
-        expenses: expenses || [],
-        finances: finances || [],
-        materials: materials || [],
-        products: products || [],
-        approvedOrderItems,
-        taxPayments: taxPayments || [],
-        nssfPayments: nssfPayments || [],
-        otherTaxPayments: otherTaxPayments || [],
-        employees: employees || [],
-        salaryPayments: salaryPayments || []
-      });
-      setLoading(false);
+        // Fetch tax payments
+        const { data: taxPayments, error: taxError } = await supabase
+          .from('expenses')
+          .select('*')
+          .or('item.eq.Tax,department.eq.URA');
+        
+        if (taxError) console.error('Tax payments error:', taxError);
+
+        // Fetch NSSF payments
+        const { data: nssfPayments, error: nssfError } = await supabase
+          .from('expenses')
+          .select('*')
+          .or('item.eq.NSSF,department.eq.NSSF');
+        
+        if (nssfError) console.error('NSSF payments error:', nssfError);
+
+        // Fetch other tax payments
+        const { data: otherTaxPayments, error: otherTaxError } = await supabase
+          .from('expenses')
+          .select('*')
+          .ilike('item', '%tax%')
+          .neq('item', 'Tax')
+          .neq('item', 'NSSF')
+          .neq('department', 'URA')
+          .neq('department', 'NSSF');
+        
+        if (otherTaxError) console.error('Other tax payments error:', otherTaxError);
+
+        // Fetch approved orders and their items
+        console.log('Fetching approved orders...');
+        const { data: approvedOrders, error: ordersError } = await supabase
+          .from('order')
+          .select('id')
+          .eq('status', 'Approved');
+        
+        if (ordersError) {
+          console.error('Approved orders error:', ordersError);
+        } else {
+          console.log('Found approved orders:', approvedOrders);
+        }
+
+        let approvedOrderItems: OrderItem[] = [];
+        if (approvedOrders && approvedOrders.length > 0) {
+          const orderIds = approvedOrders.map(order => order.id);
+          console.log('Fetching order items for order IDs:', orderIds);
+          
+          // Try both 'order' and 'order_id' as foreign key names
+          const { data: items, error: itemsError } = await supabase
+            .from('order_items')
+            .select('*')
+            .in('order_id', orderIds);
+          
+          if (itemsError) {
+            console.error('Order items error (tried order_id):', itemsError);
+            // Try alternative field name
+            const { data: itemsAlt, error: itemsAltError } = await supabase
+              .from('order_items')
+              .select('*')
+              .in('order', orderIds);
+            
+            if (itemsAltError) {
+              console.error('Order items error (tried order):', itemsAltError);
+            } else {
+              approvedOrderItems = itemsAlt || [];
+              console.log('Found order items (using "order" field):', approvedOrderItems);
+            }
+          } else {
+            approvedOrderItems = items || [];
+            console.log('Found order items (using "order_id" field):', approvedOrderItems);
+          }
+        }
+
+        setData({
+          supplyItems: supplyItems || [],
+          expenses: expenses || [],
+          finances: finances || [],
+          materials: materials || [],
+          products: products || [],
+          approvedOrderItems,
+          taxPayments: taxPayments || [],
+          nssfPayments: nssfPayments || [],
+          otherTaxPayments: otherTaxPayments || [],
+          employees: employees || [],
+          salaryPayments: salaryPayments || []
+        });
+
+        console.log('Data fetch completed. Approved order items count:', approvedOrderItems.length);
+      } catch (error) {
+        console.error('Error in fetchData:', error);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchData();
@@ -185,6 +247,11 @@ export default function Optimization() {
     sum + ((material.unit || 0) * (material.cost || 0)), 0);
   
   const totalSalesVolume = data.approvedOrderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  console.log('Calculating sales volume:', {
+    approvedOrderItemsCount: data.approvedOrderItems.length,
+    totalSalesVolume
+  });
+  
   const breakEvenPoint = inputs.sellingPrice > 0 
     ? Math.ceil(inputs.fixedCosts / (inputs.sellingPrice - productionCostPerUnit))
     : 0;
@@ -238,6 +305,49 @@ export default function Optimization() {
             payment.department?.includes('NSSF') ? 'NSSF' : 
             payment.item
     }));
+
+  // Enhanced break-even chart data with proper labels
+  const breakEvenChartData = [
+    { 
+      units: 0, 
+      cost: inputs.fixedCosts, 
+      revenue: 0,
+      label: `Fixed Costs: ${inputs.fixedCosts.toLocaleString()} UGX` 
+    },
+    { 
+      units: breakEvenPoint / 2, 
+      cost: inputs.fixedCosts + (productionCostPerUnit * breakEvenPoint / 2), 
+      revenue: inputs.sellingPrice * breakEvenPoint / 2,
+      label: `Midpoint: ${(inputs.sellingPrice * breakEvenPoint / 2).toLocaleString()} UGX Revenue`
+    },
+    { 
+      units: breakEvenPoint, 
+      cost: inputs.fixedCosts + (productionCostPerUnit * breakEvenPoint), 
+      revenue: inputs.sellingPrice * breakEvenPoint,
+      label: `Break-even: ${breakEvenPoint} units, ${(inputs.sellingPrice * breakEvenPoint).toLocaleString()} UGX`
+    },
+    { 
+      units: breakEvenPoint * 1.5, 
+      cost: inputs.fixedCosts + (productionCostPerUnit * breakEvenPoint * 1.5), 
+      revenue: inputs.sellingPrice * breakEvenPoint * 1.5,
+      label: `Profit Zone: ${(inputs.sellingPrice * breakEvenPoint * 0.5).toLocaleString()} UGX Profit`
+    }
+  ];
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-sm">
+          <p className="font-semibold">{label} units</p>
+          <p className="text-sm text-gray-600">{payload[0].payload.label}</p>
+          <p className="text-red-500">Cost: {payload[0].value.toLocaleString()} UGX</p>
+          <p className="text-green-500">Revenue: {payload[1].value.toLocaleString()} UGX</p>
+          <p className="text-blue-500">Profit: {(payload[1].value - payload[0].value).toLocaleString()} UGX</p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -556,19 +666,35 @@ export default function Optimization() {
               <div className="mt-6 h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
-                    data={[
-                      { units: 0, cost: inputs.fixedCosts, revenue: 0 },
-                      { units: breakEvenPoint / 2, cost: inputs.fixedCosts + (productionCostPerUnit * breakEvenPoint / 2), revenue: inputs.sellingPrice * breakEvenPoint / 2 },
-                      { units: breakEvenPoint, cost: inputs.fixedCosts + (productionCostPerUnit * breakEvenPoint), revenue: inputs.sellingPrice * breakEvenPoint },
-                      { units: breakEvenPoint * 1.5, cost: inputs.fixedCosts + (productionCostPerUnit * breakEvenPoint * 1.5), revenue: inputs.sellingPrice * breakEvenPoint * 1.5 }
-                    ]}
+                    data={breakEvenChartData}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="units" label={{ value: 'Units Sold', position: 'insideBottomRight', offset: -5 }} />
-                    <YAxis label={{ value: 'UGX', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip formatter={(value) => [`${value} UGX`, 'Amount']} />
-                    <Area type="monotone" dataKey="cost" stackId="1" stroke="#EF4444" fill="#FEE2E2" name="Total Cost" />
-                    <Area type="monotone" dataKey="revenue" stackId="2" stroke="#10B981" fill="#D1FAE5" name="Revenue" />
+                    <XAxis 
+                      dataKey="units" 
+                      label={{ value: 'Units Sold', position: 'insideBottomRight', offset: -5 }} 
+                    />
+                    <YAxis 
+                      label={{ value: 'UGX', angle: -90, position: 'insideLeft' }} 
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Area 
+                      type="monotone" 
+                      dataKey="cost" 
+                      stackId="1" 
+                      stroke="#EF4444" 
+                      fill="#FEE2E2" 
+                      name="Total Cost" 
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="revenue" 
+                      stackId="2" 
+                      stroke="#10B981" 
+                      fill="#D1FAE5" 
+                      name="Revenue" 
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
