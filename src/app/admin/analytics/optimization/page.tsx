@@ -43,7 +43,7 @@ interface Product {
 
 interface OrderItem {
   id?: number;
-  order_id: number;
+  order: number;
   product_id: number;
   quantity: number;
   price?: number;
@@ -106,7 +106,7 @@ export default function Optimization() {
           supabase.from('supply_items').select('*'),
           supabase.from('expenses').select('*'),
           supabase.from('finance').select('*'),
-          supabase.from('Materials').select('*'),
+          supabase.from('materials').select('*'),
           supabase.from('product').select('*'),
           supabase.from('employees').select('*')
         ]);
@@ -175,15 +175,15 @@ export default function Optimization() {
           
           // Try both 'order' and 'order_id' as foreign key names
           const { data: items, error: itemsError } = await supabase
-            .from('order_items')
+            .from('order_item')
             .select('*')
-            .in('order_id', orderIds);
+            .in('order', orderIds);
           
           if (itemsError) {
             console.error('Order items error (tried order_id):', itemsError);
             // Try alternative field name
             const { data: itemsAlt, error: itemsAltError } = await supabase
-              .from('order_items')
+              .from('order_item')
               .select('*')
               .in('order', orderIds);
             
