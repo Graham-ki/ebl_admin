@@ -169,35 +169,53 @@ export default function Optimization() {
         }
 
         let approvedOrderItems: OrderItem[] = [];
-        if (approvedOrders && approvedOrders.length > 0) {
-          const orderIds = approvedOrders.map(order => order.id);
-          console.log('Fetching order items for order IDs:', orderIds);
-          
-          // Try both 'order' and 'order_id' as foreign key names
-          const { data: items, error: itemsError } = await supabase
+if (approvedOrders && approvedOrders.length > 0) {
+  const orderIds = approvedOrders.map(order => order.id);
+  console.log('Fetching order items for order IDs:', orderIds);
+  
+  // Try common foreign key column names
+  const possibleForeignKeyNames = ['order_id', 'order', 'orderId', 'orderID'];
+  
+  for (const fkName of possibleForeignKeyNames) {
+    try {
+      const { data: items, error } = await supabase
+        .from('order_item')
+        .select('*')
+        .in(fkName, orderIds);
+      
+      if (error) throw error;
+      
+      if (items && items.length > 0) {
+        approvedOrderItems = items;
+        console.log(`Found order items using "${fkName}" field:`, approvedOrderItems);
+        break; // Exit loop if successful
+      }
+    } catch (error) {
+      console.error(`Error fetching with "${fkName}":`, error);
+      
+      // Last attempt - try raw filter
+      if (fkName === possibleForeignKeyNames[possibleForeignKeyNames.length - 1]) {
+        try {
+          const { data: items } = await supabase
             .from('order_item')
             .select('*')
-            .in('order', orderIds);
+            .filter('order', 'in', `(${orderIds.join(',')})`);
           
-          if (itemsError) {
-            console.error('Order items error (tried order_id):', itemsError);
-            // Try alternative field name
-            const { data: itemsAlt, error: itemsAltError } = await supabase
-              .from('order_item')
-              .select('*')
-              .in('order', orderIds);
-            
-            if (itemsAltError) {
-              console.error('Order items error (tried order):', itemsAltError);
-            } else {
-              approvedOrderItems = itemsAlt || [];
-              console.log('Found order items (using "order" field):', approvedOrderItems);
-            }
-          } else {
-            approvedOrderItems = items || [];
-            console.log('Found order items (using "order_id" field):', approvedOrderItems);
+          if (items && items.length > 0) {
+            approvedOrderItems = items;
+            console.log('Found order items using raw filter:', approvedOrderItems);
           }
+        } catch (finalError) {
+          console.error('Final attempt failed:', finalError);
         }
+      }
+    }
+  }
+  
+  if (approvedOrderItems.length === 0) {
+    console.warn('No order items found after trying all field name variations');
+  }
+}
 
         setData({
           supplyItems: supplyItems || [],
