@@ -7,7 +7,6 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine
 } from 'recharts';
 import { createClient } from "@supabase/supabase-js";
-import regression from 'regression';
 
 interface FinanceRecord {
   created_at: string;
@@ -36,31 +35,24 @@ interface SupplyItem {
   balance: number;
 }
 
-// Simple linear regression prediction function
-const predictFutureValues = (historicalData: {x: number, y: number}[], periods: number) => {
-  if (historicalData.length < 2) return [];
+// Simple linear trend calculation without external dependencies
+const calculateTrend = (data: number[]) => {
+  if (data.length < 2) return data;
   
-  const result = regression.linear(historicalData.map((d, i) => [i, d.y]));
-  const forecast = [];
+  const n = data.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
   
-  for (let i = 0; i < historicalData.length + periods; i++) {
-    forecast.push({
-      x: historicalData[0].x + i * (historicalData[1].x - historicalData[0].x),
-      y: result.predict(i)[1]
-    });
-  }
-  
-  return forecast;
-};
-
-// Moving average function for smoothing
-const calculateMovingAverage = (data: number[], windowSize: number) => {
-  return data.map((val, idx, arr) => {
-    const start = Math.max(0, idx - windowSize + 1);
-    const end = idx + 1;
-    const subset = arr.slice(start, end);
-    return subset.reduce((a, b) => a + b, 0) / subset.length;
+  data.forEach((y, x) => {
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumXX += x * x;
   });
+  
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  
+  return data.map((_, i) => intercept + slope * i);
 };
 
 export default function Predictions() {
@@ -142,39 +134,22 @@ export default function Predictions() {
     };
   }, [data]);
 
-  // Generate predictions
-  const predictions = useMemo(() => {
+  // Generate trend data for charts
+  const trendData = useMemo(() => {
     const forecastPeriods = 3; // Predict next 3 periods
     
-    // Prepare data for regression
-    const financeData = processedData.finances.map((d, i) => ({
-      x: d.date.getTime(),
-      y: d.amount
-    }));
-    
-    const expenseData = processedData.expenses.map((d, i) => ({
-      x: d.date.getTime(),
-      y: d.amount
-    }));
-    
-    const salesData = processedData.sales.map((d, i) => ({
-      x: d.date.getTime(),
-      y: d.quantity
-    }));
-    
-    // Generate predictions
-    const financePrediction = predictFutureValues(financeData, forecastPeriods);
-    const expensePrediction = predictFutureValues(expenseData, forecastPeriods);
-    const salesPrediction = predictFutureValues(salesData, forecastPeriods);
+    const financeTrend = calculateTrend(processedData.finances.map(d => d.amount));
+    const expenseTrend = calculateTrend(processedData.expenses.map(d => d.amount));
+    const salesTrend = calculateTrend(processedData.sales.map(d => d.quantity));
     
     return {
-      finances: financePrediction,
-      expenses: expensePrediction,
-      sales: salesPrediction
+      finances: financeTrend,
+      expenses: expenseTrend,
+      sales: salesTrend
     };
   }, [processedData]);
 
-  // Calculate current cash position (Total Available - Total Expenses)
+  // Calculate current cash position
   const currentCash = useMemo(() => {
     const totalAvailable = data.financeRecords.reduce(
       (sum, record) => sum + (record.amount_available || 0), 0);
@@ -183,7 +158,7 @@ export default function Predictions() {
     return totalAvailable - totalExpenses;
   }, [data.financeRecords, data.expenses]);
 
-  // Calculate total sales volume from approved orders
+  // Calculate total sales volume
   const totalSalesVolume = useMemo(() => {
     const approvedOrderIds = data.orders
       .filter(order => order.status === 'Approved')
@@ -268,47 +243,26 @@ export default function Predictions() {
     );
   }
 
-  // Combine historical and predicted data for charts
-  const combinedFinanceData = [
-    ...processedData.finances.map(d => ({
-      date: d.monthYear,
-      amount: d.amount,
-      type: 'Actual'
-    })),
-    ...predictions.finances.slice(processedData.finances.length).map((d, i) => ({
-      date: new Date(d.x).toISOString().slice(0, 7),
-      amount: d.y,
-      type: 'Forecast'
-    }))
-  ];
+  // Combine historical and trend data for charts
+  const financeChartData = processedData.finances.map((d, i) => ({
+    date: d.monthYear,
+    actual: d.amount,
+    trend: trendData.finances[i]
+  }));
 
-  const combinedExpenseData = [
-    ...processedData.expenses.map(d => ({
-      date: d.monthYear,
-      amount: d.amount,
-      type: 'Actual'
-    })),
-    ...predictions.expenses.slice(processedData.expenses.length).map((d, i) => ({
-      date: new Date(d.x).toISOString().slice(0, 7),
-      amount: d.y,
-      type: 'Forecast'
-    }))
-  ];
+  const expenseChartData = processedData.expenses.map((d, i) => ({
+    date: d.monthYear,
+    actual: d.amount,
+    trend: trendData.expenses[i]
+  }));
 
-  const combinedSalesData = [
-    ...processedData.sales.map(d => ({
-      date: d.monthYear,
-      quantity: d.quantity,
-      type: 'Actual'
-    })),
-    ...predictions.sales.slice(processedData.sales.length).map((d, i) => ({
-      date: new Date(d.x).toISOString().slice(0, 7),
-      quantity: d.y,
-      type: 'Forecast'
-    }))
-  ];
+  const salesChartData = processedData.sales.map((d, i) => ({
+    date: d.monthYear,
+    actual: d.quantity,
+    trend: trendData.sales[i]
+  }));
 
-  // Find the last date in the historical data to separate actual from forecast
+  // Find the last date in the historical data
   const lastHistoricalDate = processedData.finances.length > 0 
     ? processedData.finances[processedData.finances.length - 1].monthYear
     : '';
@@ -320,9 +274,9 @@ export default function Predictions() {
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          Financial Predictions & Projections Dashboard
+          Financial Predictions Dashboard
         </h1>
-        <p className="text-gray-600">Data-driven financial forecasts and business insights</p>
+        <p className="text-gray-600">Data-driven financial insights and trend analysis</p>
       </header>
 
       {/* Key Metrics */}
@@ -374,143 +328,171 @@ export default function Predictions() {
         </div>
       </div>
 
-      {/* Financial Projections */}
+      {/* Financial Trends */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Cash Flow Projection */}
+        {/* Cash Flow Trend */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Cash Flow Projection</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Cash Flow Trend</h2>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={combinedFinanceData}>
+              <LineChart data={financeChartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
                 <YAxis />
                 <Tooltip 
-                  formatter={(value: number) => [`${value.toLocaleString()} UGX`, 'Amount']}
+                  formatter={(value: number, name: string) => [
+                    `${value.toLocaleString()} UGX`, 
+                    name === 'actual' ? 'Actual' : 'Trend'
+                  ]}
                   labelFormatter={(label) => `Period: ${label}`}
                 />
                 <Legend />
                 <Line 
                   type="monotone" 
-                  dataKey="amount" 
-                  name="Cash Flow"
+                  dataKey="actual" 
+                  name="Actual"
                   stroke="#3b82f6" 
                   strokeWidth={2}
                   dot={{ r: 4 }}
                   activeDot={{ r: 6 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="trend" 
+                  name="Trend"
+                  stroke="#10b981" 
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
                 />
                 {lastHistoricalDate && (
                   <ReferenceLine 
                     x={lastHistoricalDate} 
                     stroke="#ef4444" 
                     label={{ 
-                      value: 'Forecast Start', 
+                      value: 'Current', 
                       position: 'top',
                       fill: '#ef4444'
                     }} 
-                    strokeDasharray="5 5"
                   />
                 )}
               </LineChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-4 text-sm text-gray-600">
-            <p>Projected cash flow based on historical trends. {predictions.finances.length > processedData.finances.length ? 
-              `Forecast predicts ${predictions.finances[predictions.finances.length - 1].y.toLocaleString()} UGX in ${predictions.finances[predictions.finances.length - 1].x.toISOString().slice(0, 7)}.` : 
-              'Insufficient data for projection.'}</p>
+            <p>Trend analysis based on historical cash flow data. {growthRates.financeGrowth >= 0 ? 
+              `Growing at ${growthRates.financeGrowth.toFixed(1)}% monthly` : 
+              `Declining at ${Math.abs(growthRates.financeGrowth).toFixed(1)}% monthly`}</p>
           </div>
         </div>
 
-        {/* Expense Projection */}
+        {/* Expense Trend */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Expense Projection</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Expense Trend</h2>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={combinedExpenseData}>
+              <AreaChart data={expenseChartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
                 <YAxis />
                 <Tooltip 
-                  formatter={(value: number) => [`${value.toLocaleString()} UGX`, 'Amount']}
+                  formatter={(value: number, name: string) => [
+                    `${value.toLocaleString()} UGX`, 
+                    name === 'actual' ? 'Actual' : 'Trend'
+                  ]}
                   labelFormatter={(label) => `Period: ${label}`}
                 />
                 <Legend />
                 <Area 
                   type="monotone" 
-                  dataKey="amount" 
-                  name="Expenses"
+                  dataKey="actual" 
+                  name="Actual"
                   stroke="#ef4444" 
                   fill="#fecaca"
                   strokeWidth={2}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="trend" 
+                  name="Trend"
+                  stroke="#f59e0b" 
+                  fill="#fef3c7"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
                 />
                 {lastHistoricalDate && (
                   <ReferenceLine 
                     x={lastHistoricalDate} 
                     stroke="#ef4444" 
                     label={{ 
-                      value: 'Forecast Start', 
+                      value: 'Current', 
                       position: 'top',
                       fill: '#ef4444'
                     }} 
-                    strokeDasharray="5 5"
                   />
                 )}
               </AreaChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-4 text-sm text-gray-600">
-            <p>Projected expenses based on historical patterns. {predictions.expenses.length > processedData.expenses.length ? 
-              `Forecast predicts expenses of ${predictions.expenses[predictions.expenses.length - 1].y.toLocaleString()} UGX in ${predictions.expenses[predictions.expenses.length - 1].x.toISOString().slice(0, 7)}.` : 
-              'Insufficient data for projection.'}</p>
+            <p>Expense trend analysis showing {burnRate > processedData.expenses[0]?.amount ? 
+              'increasing' : 'decreasing'} monthly expenses.</p>
           </div>
         </div>
       </div>
 
-      {/* Sales Projections */}
+      {/* Sales Analysis */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Sales Projections</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Sales Analysis</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={combinedSalesData}>
+                <BarChart data={salesChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip 
-                    formatter={(value: number) => [`${value.toLocaleString()} units`, 'Quantity']}
+                    formatter={(value: number, name: string) => [
+                      `${value.toLocaleString()} units`, 
+                      name === 'actual' ? 'Actual' : 'Trend'
+                    ]}
                     labelFormatter={(label) => `Period: ${label}`}
                   />
                   <Legend />
                   <Bar 
-                    dataKey="quantity" 
-                    name="Sales Volume"
+                    dataKey="actual" 
+                    name="Actual Sales"
                     fill="#8b5cf6"
+                  />
+                  <Bar 
+                    dataKey="trend" 
+                    name="Trend"
+                    fill="#a78bfa"
+                    opacity={0.7}
                   />
                   {lastHistoricalDate && (
                     <ReferenceLine 
                       x={lastHistoricalDate} 
                       stroke="#8b5cf6" 
                       label={{ 
-                        value: 'Forecast Start', 
+                        value: 'Current', 
                         position: 'top',
                         fill: '#8b5cf6'
                       }} 
-                      strokeDasharray="5 5"
                     />
                   )}
                 </BarChart>
               </ResponsiveContainer>
             </div>
             <div className="mt-4 text-sm text-gray-600">
-              <p>Projected sales volume based on historical data. {predictions.sales.length > processedData.sales.length ? 
-                `Forecast predicts ${predictions.sales[predictions.sales.length - 1].y.toLocaleString()} units in ${predictions.sales[predictions.sales.length - 1].x.toISOString().slice(0, 7)}.` : 
-                'Insufficient data for projection.'}</p>
+              <p>Sales trend showing {growthRates.salesGrowth >= 0 ? 
+                `growth of ${growthRates.salesGrowth.toFixed(1)}%` : 
+                `decline of ${Math.abs(growthRates.salesGrowth).toFixed(1)}%`} month-over-month.</p>
             </div>
           </div>
           
           <div>
-            <h3 className="font-medium mb-2">Growth Insights</h3>
+            <h3 className="font-medium mb-2">Sales Insights</h3>
             <div className="space-y-4">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h4 className="font-medium text-blue-800 mb-1">Current Growth Rate</h4>
@@ -525,11 +507,11 @@ export default function Predictions() {
               </div>
               
               <div className="bg-purple-50 p-4 rounded-lg">
-                <h4 className="font-medium text-purple-800 mb-1">Peak Season Analysis</h4>
+                <h4 className="font-medium text-purple-800 mb-1">Peak Performance</h4>
                 {processedData.sales.length > 0 && (
                   <>
                     <p className="text-xl font-bold text-purple-600">
-                      {Math.max(...processedData.sales.map(s => s.quantity)).toLocaleString()} units
+                      {Math.max(...processedData.sales.map(s => s.actual)).toLocaleString()} units
                     </p>
                     <p className="text-sm text-gray-600 mt-1">
                       Highest monthly sales volume achieved
@@ -539,18 +521,20 @@ export default function Predictions() {
               </div>
               
               <div className="bg-green-50 p-4 rounded-lg">
-                <h4 className="font-medium text-green-800 mb-1">Projected Next Month</h4>
-                {predictions.sales.length > processedData.sales.length ? (
+                <h4 className="font-medium text-green-800 mb-1">Recent Performance</h4>
+                {processedData.sales.length > 0 && (
                   <>
-                    <p className="text-xl font-bold text-green-600">
-                      {predictions.sales[processedData.sales.length].y.toLocaleString()} units
+                    <p className={`text-xl font-bold ${
+                      processedData.sales[processedData.sales.length - 1].actual >= 
+                      processedData.sales[processedData.sales.length - 2]?.actual ? 
+                      'text-green-600' : 'text-red-600'
+                    }`}>
+                      {processedData.sales[processedData.sales.length - 1].actual.toLocaleString()} units
                     </p>
                     <p className="text-sm text-gray-600 mt-1">
-                      Expected sales volume for next period
+                      Last month's sales volume
                     </p>
                   </>
-                ) : (
-                  <p className="text-sm text-gray-600">Insufficient data for projection</p>
                 )}
               </div>
             </div>
@@ -558,9 +542,9 @@ export default function Predictions() {
         </div>
       </div>
 
-      {/* Financial Health Assessment */}
+      {/* Financial Health */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Financial Health Assessment</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Financial Health</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-blue-50 p-4 rounded-lg">
@@ -601,24 +585,43 @@ export default function Predictions() {
           </div>
         </div>
         
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        {/* Financial Health Alert */}
+        <div className={`p-4 rounded-lg ${
+          runway < 3 ? 'bg-red-50 border-l-4 border-red-400' :
+          runway < 6 ? 'bg-yellow-50 border-l-4 border-yellow-400' :
+          'bg-green-50 border-l-4 border-green-400'
+        }`}>
           <div className="flex">
             <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
+              {runway < 3 ? (
+                <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              ) : runway < 6 ? (
+                <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              )}
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">
-                {runway < 3 ? 'Critical Alert' : runway < 6 ? 'Warning' : 'Recommendation'}
+              <h3 className={`text-sm font-medium ${
+                runway < 3 ? 'text-red-800' : runway < 6 ? 'text-yellow-800' : 'text-green-800'
+              }`}>
+                {runway < 3 ? 'Critical Alert' : runway < 6 ? 'Warning' : 'Good Status'}
               </h3>
-              <div className="mt-2 text-sm text-yellow-700">
+              <div className={`mt-2 text-sm ${
+                runway < 3 ? 'text-red-700' : runway < 6 ? 'text-yellow-700' : 'text-green-700'
+              }`}>
                 <p>
                   {runway < 3 ? 
-                    'Immediate action required: Cash runway is critically low. Consider reducing expenses or securing additional funding.' :
+                    'Immediate action required: Cash runway is critically low.' :
                     runway < 6 ? 
-                    'Monitor closely: Cash position may become tight in the near future. Review expense projections.' :
-                    'Healthy cash position detected. Consider investment opportunities to accelerate growth.'}
+                    'Monitor closely: Cash position may become tight in the near future.' :
+                    'Healthy cash position detected. Current runway is sufficient.'}
                 </p>
               </div>
             </div>
