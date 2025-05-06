@@ -16,28 +16,10 @@ export default function AnalyticsDashboard() {
       link: "analytics/financial-health",
     },
     {
-      title: "Recommendations",
-      description: "Personalized financial advice",
-      icon: <Lightbulb className="w-6 h-6 text-yellow-500" />,
-      link: "analytics/recommendations",
-    },
-    {
-      title: "Predictions",
-      description: "Forecast future trends",
-      icon: <PieChart className="w-6 h-6 text-purple-500" />,
-      link: "analytics/predictions",
-    },
-    {
       title: "Vendor Analysis",
       description: "Evaluate supplier performance",
       icon: <BarChart2 className="w-6 h-6 text-orange-500" />,
       link: "analytics/vendor-analysis",
-    },
-    {
-      title: "Alerts",
-      description: "Critical notifications",
-      icon: <AlertTriangle className="w-6 h-6 text-red-500" />,
-      link: "analytics/alerts",
     },
     {
       title: "Financial Optimization",
