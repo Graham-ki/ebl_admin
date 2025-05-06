@@ -35,7 +35,7 @@ interface SupplyItem {
   balance: number;
 }
 
-// Simple linear trend calculation without external dependencies
+// Simple linear trend calculation
 const calculateTrend = (data: number[]) => {
   if (data.length < 2) return data;
   
@@ -136,8 +136,6 @@ export default function Predictions() {
 
   // Generate trend data for charts
   const trendData = useMemo(() => {
-    const forecastPeriods = 3; // Predict next 3 periods
-    
     const financeTrend = calculateTrend(processedData.finances.map(d => d.amount));
     const expenseTrend = calculateTrend(processedData.expenses.map(d => d.amount));
     const salesTrend = calculateTrend(processedData.sales.map(d => d.quantity));
@@ -149,6 +147,25 @@ export default function Predictions() {
     };
   }, [processedData]);
 
+  // Prepare chart data with consistent property names
+  const financeChartData = processedData.finances.map((d, i) => ({
+    date: d.monthYear,
+    actual: d.amount,
+    trend: trendData.finances[i]
+  }));
+
+  const expenseChartData = processedData.expenses.map((d, i) => ({
+    date: d.monthYear,
+    actual: d.amount,
+    trend: trendData.expenses[i]
+  }));
+
+  const salesChartData = processedData.sales.map((d, i) => ({
+    date: d.monthYear,
+    actual: d.quantity,
+    trend: trendData.sales[i]
+  }));
+
   // Calculate current cash position
   const currentCash = useMemo(() => {
     const totalAvailable = data.financeRecords.reduce(
@@ -158,20 +175,9 @@ export default function Predictions() {
     return totalAvailable - totalExpenses;
   }, [data.financeRecords, data.expenses]);
 
-  // Calculate total sales volume
-  const totalSalesVolume = useMemo(() => {
-    const approvedOrderIds = data.orders
-      .filter(order => order.status === 'Approved')
-      .map(order => order.id);
-    
-    return data.orderItems
-      .filter(item => approvedOrderIds.includes(item.order))
-      .reduce((sum, item) => sum + (item.quantity || 0), 0);
-  }, [data.orders, data.orderItems]);
-
   // Calculate burn rate (average monthly expenses)
   const burnRate = useMemo(() => {
-    if (processedData.expenses.length < 2) return 0;
+    if (processedData.expenses.length < 1) return 0;
     const totalExpenses = processedData.expenses.reduce((sum, e) => sum + e.amount, 0);
     return totalExpenses / processedData.expenses.length;
   }, [processedData.expenses]);
@@ -191,12 +197,12 @@ export default function Predictions() {
     const financeGrowth = 
       (processedData.finances[processedData.finances.length - 1].amount - 
        processedData.finances[0].amount) / 
-      processedData.finances[0].amount * 100;
+      Math.max(1, processedData.finances[0].amount) * 100;
     
     const salesGrowth = 
       (processedData.sales[processedData.sales.length - 1].quantity - 
        processedData.sales[0].quantity) / 
-      processedData.sales[0].quantity * 100;
+      Math.max(1, processedData.sales[0].quantity) * 100;
     
     return {
       financeGrowth,
@@ -242,25 +248,6 @@ export default function Predictions() {
       </div>
     );
   }
-
-  // Combine historical and trend data for charts
-  const financeChartData = processedData.finances.map((d, i) => ({
-    date: d.monthYear,
-    actual: d.amount,
-    trend: trendData.finances[i]
-  }));
-
-  const expenseChartData = processedData.expenses.map((d, i) => ({
-    date: d.monthYear,
-    actual: d.amount,
-    trend: trendData.expenses[i]
-  }));
-
-  const salesChartData = processedData.sales.map((d, i) => ({
-    date: d.monthYear,
-    actual: d.quantity,
-    trend: trendData.sales[i]
-  }));
 
   // Find the last date in the historical data
   const lastHistoricalDate = processedData.finances.length > 0 
@@ -434,7 +421,7 @@ export default function Predictions() {
             </ResponsiveContainer>
           </div>
           <div className="mt-4 text-sm text-gray-600">
-            <p>Expense trend analysis showing {burnRate > processedData.expenses[0]?.amount ? 
+            <p>Expense trend showing {burnRate > processedData.expenses[0]?.amount ? 
               'increasing' : 'decreasing'} monthly expenses.</p>
           </div>
         </div>
@@ -508,10 +495,10 @@ export default function Predictions() {
               
               <div className="bg-purple-50 p-4 rounded-lg">
                 <h4 className="font-medium text-purple-800 mb-1">Peak Performance</h4>
-                {processedData.sales.length > 0 && (
+                {salesChartData.length > 0 && (
                   <>
                     <p className="text-xl font-bold text-purple-600">
-                      {Math.max(...processedData.sales.map(s => s.actual)).toLocaleString()} units
+                      {Math.max(...salesChartData.map(s => s.actual)).toLocaleString()} units
                     </p>
                     <p className="text-sm text-gray-600 mt-1">
                       Highest monthly sales volume achieved
@@ -522,14 +509,14 @@ export default function Predictions() {
               
               <div className="bg-green-50 p-4 rounded-lg">
                 <h4 className="font-medium text-green-800 mb-1">Recent Performance</h4>
-                {processedData.sales.length > 0 && (
+                {salesChartData.length > 0 && (
                   <>
                     <p className={`text-xl font-bold ${
-                      processedData.sales[processedData.sales.length - 1].actual >= 
-                      processedData.sales[processedData.sales.length - 2]?.actual ? 
+                      salesChartData[salesChartData.length - 1].actual >= 
+                      (salesChartData[salesChartData.length - 2]?.actual || 0) ? 
                       'text-green-600' : 'text-red-600'
                     }`}>
-                      {processedData.sales[processedData.sales.length - 1].actual.toLocaleString()} units
+                      {salesChartData[salesChartData.length - 1].actual.toLocaleString()} units
                     </p>
                     <p className="text-sm text-gray-600 mt-1">
                       Last month's sales volume
