@@ -69,157 +69,26 @@ export default function Predictions() {
     orderItems: [] as OrderItem[],
     supplyItems: [] as SupplyItem[]
   });
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Process and format data for predictions
-  const processedData = useMemo(() => {
-    // Group financial data by month
-    const monthlyFinances = data.financeRecords.reduce((acc, record) => {
-      const date = new Date(record.created_at);
-      const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      acc[monthYear] = (acc[monthYear] || 0) + (record.amount_available || 0);
-      return acc;
-    }, {} as Record<string, number>);
-
-    // Group expenses by month
-    const monthlyExpenses = data.expenses.reduce((acc, expense) => {
-      const date = new Date(expense.date);
-      const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      acc[monthYear] = (acc[monthYear] || 0) + (expense.amount_spent || 0);
-      return acc;
-    }, {} as Record<string, number>);
-
-    // Group sales by month
-    const monthlySales: Record<string, number> = {};
-    data.orders
-      .filter(order => order.status === 'Approved')
-      .forEach(order => {
-        const date = new Date(order.created_at);
-        const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        
-        const orderItems = data.orderItems.filter(oi => oi.order === order.id);
-        const orderQuantity = orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
-        
-        monthlySales[monthYear] = (monthlySales[monthYear] || 0) + orderQuantity;
-      });
-
-    // Convert to arrays and sort by date
-    const financeArray = Object.entries(monthlyFinances)
-      .map(([monthYear, amount]) => ({
-        monthYear,
-        amount,
-        date: new Date(monthYear)
-      }))
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    const expensesArray = Object.entries(monthlyExpenses)
-      .map(([monthYear, amount]) => ({
-        monthYear,
-        amount,
-        date: new Date(monthYear)
-      }))
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    const salesArray = Object.entries(monthlySales)
-      .map(([monthYear, quantity]) => ({
-        monthYear,
-        quantity,
-        date: new Date(monthYear)
-      }))
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    return {
-      finances: financeArray,
-      expenses: expensesArray,
-      sales: salesArray
-    };
+  // Debugging logs
+  useEffect(() => {
+    console.log('Current data state:', data);
   }, [data]);
 
-  // Generate trend data for charts
-  const trendData = useMemo(() => {
-    const financeTrend = calculateTrend(processedData.finances.map(d => d.amount));
-    const expenseTrend = calculateTrend(processedData.expenses.map(d => d.amount));
-    const salesTrend = calculateTrend(processedData.sales.map(d => d.quantity));
-    
-    return {
-      finances: financeTrend,
-      expenses: expenseTrend,
-      sales: salesTrend
-    };
-  }, [processedData]);
-
-  // Prepare chart data with consistent property names
-  const financeChartData = processedData.finances.map((d, i) => ({
-    date: d.monthYear,
-    actual: d.amount,
-    trend: trendData.finances[i]
-  }));
-
-  const expenseChartData = processedData.expenses.map((d, i) => ({
-    date: d.monthYear,
-    actual: d.amount,
-    trend: trendData.expenses[i]
-  }));
-
-  const salesChartData = processedData.sales.map((d, i) => ({
-    date: d.monthYear,
-    actual: d.quantity,
-    trend: trendData.sales[i]
-  }));
-
-  // Calculate current cash position
-  const currentCash = useMemo(() => {
-    const totalAvailable = data.financeRecords.reduce(
-      (sum, record) => sum + (record.amount_available || 0), 0);
-    const totalExpenses = data.expenses.reduce(
-      (sum, expense) => sum + (expense.amount_spent || 0), 0);
-    return totalAvailable - totalExpenses;
-  }, [data.financeRecords, data.expenses]);
-
-  // Calculate burn rate (average monthly expenses)
-  const burnRate = useMemo(() => {
-    if (processedData.expenses.length < 1) return 0;
-    const totalExpenses = processedData.expenses.reduce((sum, e) => sum + e.amount, 0);
-    return totalExpenses / processedData.expenses.length;
-  }, [processedData.expenses]);
-
-  // Calculate runway (how many months until funds run out)
-  const runway = useMemo(() => {
-    if (burnRate <= 0) return Infinity;
-    return currentCash / burnRate;
-  }, [currentCash, burnRate]);
-
-  // Calculate growth rates
-  const growthRates = useMemo(() => {
-    if (processedData.finances.length < 2 || processedData.sales.length < 2) {
-      return { financeGrowth: 0, salesGrowth: 0 };
-    }
-    
-    const financeGrowth = 
-      (processedData.finances[processedData.finances.length - 1].amount - 
-       processedData.finances[0].amount) / 
-      Math.max(1, processedData.finances[0].amount) * 100;
-    
-    const salesGrowth = 
-      (processedData.sales[processedData.sales.length - 1].quantity - 
-       processedData.sales[0].quantity) / 
-      Math.max(1, processedData.sales[0].quantity) * 100;
-    
-    return {
-      financeGrowth,
-      salesGrowth
-    };
-  }, [processedData]);
-
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = async () => {
+    try {
       setLoading(true);
+      setFetchError(null);
+      
+      console.log('Starting data fetch...');
       
       const [
-        { data: financeRecords },
-        { data: expenses },
-        { data: orders },
-        { data: orderItems },
-        { data: supplyItems }
+        { data: financeRecords, error: financeError },
+        { data: expenses, error: expensesError },
+        { data: orders, error: ordersError },
+        { data: orderItems, error: orderItemsError },
+        { data: supplyItems, error: supplyItemsError }
       ] = await Promise.all([
         supabase.from('finance').select('created_at, amount_available').order('created_at'),
         supabase.from('expenses').select('date, amount_spent, item').order('date'),
@@ -228,6 +97,26 @@ export default function Predictions() {
         supabase.from('supply_items').select('purchase_date, balance').order('purchase_date')
       ]);
 
+      // Log errors if any
+      if (financeError) console.error('Finance fetch error:', financeError);
+      if (expensesError) console.error('Expenses fetch error:', expensesError);
+      if (ordersError) console.error('Orders fetch error:', ordersError);
+      if (orderItemsError) console.error('Order items fetch error:', orderItemsError);
+      if (supplyItemsError) console.error('Supply items fetch error:', supplyItemsError);
+
+      // Additional debug query for order relationships
+      const { data: orderRelations, error: relationsError } = await supabase
+        .from('order')
+        .select(`
+          id,
+          status,
+          order_items:order_items(quantity)
+        `)
+        .eq('status', 'Approved');
+      
+      console.log('Order relationships:', orderRelations);
+      if (relationsError) console.error('Relations error:', relationsError);
+
       setData({
         financeRecords: financeRecords || [],
         expenses: expenses || [],
@@ -235,11 +124,285 @@ export default function Predictions() {
         orderItems: orderItems || [],
         supplyItems: supplyItems || []
       });
-      setLoading(false);
-    };
 
+      console.log('Data fetch completed');
+    } catch (err) {
+      console.error('Failed to fetch data:', err);
+      setFetchError('Failed to load data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, []);
+
+  // Process and format data for predictions with validation
+  const processedData = useMemo(() => {
+    console.log('Processing data...');
+    
+    try {
+      // Validate order items
+      const validOrderItems = data.orderItems.filter(item => 
+        typeof item.order === 'number' && typeof item.quantity === 'number'
+      );
+      
+      if (validOrderItems.length !== data.orderItems.length) {
+        console.warn('Invalid order items filtered out:', 
+          data.orderItems.length - validOrderItems.length);
+      }
+
+      // Group financial data by month
+      const monthlyFinances = data.financeRecords.reduce((acc, record) => {
+        try {
+          const date = new Date(record.created_at);
+          const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          acc[monthYear] = (acc[monthYear] || 0) + (record.amount_available || 0);
+          return acc;
+        } catch (e) {
+          console.error('Error processing finance record:', record, e);
+          return acc;
+        }
+      }, {} as Record<string, number>);
+
+      // Group expenses by month
+      const monthlyExpenses = data.expenses.reduce((acc, expense) => {
+        try {
+          const date = new Date(expense.date);
+          const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          acc[monthYear] = (acc[monthYear] || 0) + (expense.amount_spent || 0);
+          return acc;
+        } catch (e) {
+          console.error('Error processing expense:', expense, e);
+          return acc;
+        }
+      }, {} as Record<string, number>);
+
+      // Group sales by month - with enhanced debugging
+      const monthlySales: Record<string, number> = {};
+      const approvedOrders = data.orders.filter(order => {
+        const status = order.status?.trim().toLowerCase();
+        return status === 'approved';
+      });
+
+      console.log('Approved orders:', approvedOrders);
+      console.log('All order items:', validOrderItems);
+
+      approvedOrders.forEach(order => {
+        try {
+          const date = new Date(order.created_at);
+          const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          const orderItems = validOrderItems.filter(oi => oi.order === order.id);
+          console.log(`Items for order ${order.id}:`, orderItems);
+          
+          const orderQuantity = orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+          
+          monthlySales[monthYear] = (monthlySales[monthYear] || 0) + orderQuantity;
+        } catch (e) {
+          console.error('Error processing order:', order, e);
+        }
+      });
+
+      console.log('Monthly sales:', monthlySales);
+
+      // Convert to arrays and sort by date
+      const financeArray = Object.entries(monthlyFinances)
+        .map(([monthYear, amount]) => ({
+          monthYear,
+          amount,
+          date: new Date(monthYear)
+        }))
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+      const expensesArray = Object.entries(monthlyExpenses)
+        .map(([monthYear, amount]) => ({
+          monthYear,
+          amount,
+          date: new Date(monthYear)
+        }))
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+      const salesArray = Object.entries(monthlySales)
+        .map(([monthYear, quantity]) => ({
+          monthYear,
+          quantity,
+          date: new Date(monthYear)
+        }))
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+      return {
+        finances: financeArray,
+        expenses: expensesArray,
+        sales: salesArray
+      };
+    } catch (error) {
+      console.error('Error processing data:', error);
+      return {
+        finances: [],
+        expenses: [],
+        sales: []
+      };
+    }
+  }, [data]);
+
+  // Generate trend data for charts
+  const trendData = useMemo(() => {
+    try {
+      const financeTrend = calculateTrend(processedData.finances.map(d => d.amount));
+      const expenseTrend = calculateTrend(processedData.expenses.map(d => d.amount));
+      const salesTrend = calculateTrend(processedData.sales.map(d => d.quantity));
+      
+      return {
+        finances: financeTrend,
+        expenses: expenseTrend,
+        sales: salesTrend
+      };
+    } catch (error) {
+      console.error('Error calculating trends:', error);
+      return {
+        finances: [],
+        expenses: [],
+        sales: []
+      };
+    }
+  }, [processedData]);
+
+  // Calculate current cash position with validation
+  const currentCash = useMemo(() => {
+    try {
+      const totalAvailable = data.financeRecords.reduce(
+        (sum, record) => sum + (record.amount_available || 0), 0);
+      const totalExpenses = data.expenses.reduce(
+        (sum, expense) => sum + (expense.amount_spent || 0), 0);
+      return totalAvailable - totalExpenses;
+    } catch (error) {
+      console.error('Error calculating current cash:', error);
+      return 0;
+    }
+  }, [data.financeRecords, data.expenses]);
+
+  // Calculate total sales volume from approved orders with enhanced debugging
+  const totalSalesVolume = useMemo(() => {
+    console.log('Calculating total sales volume...');
+    
+    try {
+      // 1. Get all approved order IDs (case-insensitive check)
+      const approvedOrderIds = data.orders
+        .filter(order => {
+          const status = order.status?.trim().toLowerCase();
+          const isApproved = status === 'approved';
+          if (!isApproved) {
+            console.log(`Order ${order.id} has status '${order.status}' - not approved`);
+          }
+          return isApproved;
+        })
+        .map(order => order.id);
+
+      console.log('Approved order IDs:', approvedOrderIds);
+
+      // 2. Sum quantities for these orders
+      const itemsForApprovedOrders = data.orderItems.filter(item => {
+        const isIncluded = approvedOrderIds.includes(item.order);
+        if (!isIncluded) {
+          console.log(`Order item for order ${item.order} not included - order not approved`);
+        }
+        return isIncluded;
+      });
+
+      console.log('Order items for approved orders:', itemsForApprovedOrders);
+
+      const total = itemsForApprovedOrders.reduce((sum, item) => {
+        const quantity = item.quantity || 0;
+        if (isNaN(quantity)) {
+          console.warn('Invalid quantity for order item:', item);
+          return sum;
+        }
+        return sum + quantity;
+      }, 0);
+
+      console.log('Total sales volume calculated:', total);
+      return total;
+    } catch (error) {
+      console.error('Error calculating sales volume:', error);
+      return 0;
+    }
+  }, [data.orders, data.orderItems]);
+
+  // Calculate burn rate (average monthly expenses)
+  const burnRate = useMemo(() => {
+    try {
+      if (processedData.expenses.length < 1) return 0;
+      const totalExpenses = processedData.expenses.reduce((sum, e) => sum + e.amount, 0);
+      return totalExpenses / processedData.expenses.length;
+    } catch (error) {
+      console.error('Error calculating burn rate:', error);
+      return 0;
+    }
+  }, [processedData.expenses]);
+
+  // Calculate runway (how many months until funds run out)
+  const runway = useMemo(() => {
+    try {
+      if (burnRate <= 0) return Infinity;
+      return currentCash / burnRate;
+    } catch (error) {
+      console.error('Error calculating runway:', error);
+      return Infinity;
+    }
+  }, [currentCash, burnRate]);
+
+  // Calculate growth rates with validation
+  const growthRates = useMemo(() => {
+    try {
+      if (processedData.finances.length < 2 || processedData.sales.length < 2) {
+        return { financeGrowth: 0, salesGrowth: 0 };
+      }
+      
+      const financeGrowth = 
+        (processedData.finances[processedData.finances.length - 1].amount - 
+         processedData.finances[0].amount) / 
+        Math.max(1, processedData.finances[0].amount) * 100;
+      
+      const salesGrowth = 
+        (processedData.sales[processedData.sales.length - 1].quantity - 
+         processedData.sales[0].quantity) / 
+        Math.max(1, processedData.sales[0].quantity) * 100;
+      
+      return {
+        financeGrowth: isNaN(financeGrowth) ? 0 : financeGrowth,
+        salesGrowth: isNaN(salesGrowth) ? 0 : salesGrowth
+      };
+    } catch (error) {
+      console.error('Error calculating growth rates:', error);
+      return { financeGrowth: 0, salesGrowth: 0 };
+    }
+  }, [processedData]);
+
+  // Prepare chart data with consistent property names
+  const financeChartData = processedData.finances.map((d, i) => ({
+    date: d.monthYear,
+    actual: d.amount,
+    trend: trendData.finances[i] || 0
+  }));
+
+  const expenseChartData = processedData.expenses.map((d, i) => ({
+    date: d.monthYear,
+    actual: d.amount,
+    trend: trendData.expenses[i] || 0
+  }));
+
+  const salesChartData = processedData.sales.map((d, i) => ({
+    date: d.monthYear,
+    actual: d.quantity,
+    trend: trendData.sales[i] || 0
+  }));
+
+  // Find the last date in the historical data
+  const lastHistoricalDate = processedData.finances.length > 0 
+    ? processedData.finances[processedData.finances.length - 1].monthYear
+    : '';
 
   if (loading) {
     return (
@@ -249,10 +412,22 @@ export default function Predictions() {
     );
   }
 
-  // Find the last date in the historical data
-  const lastHistoricalDate = processedData.finances.length > 0 
-    ? processedData.finances[processedData.finances.length - 1].monthYear
-    : '';
+  if (fetchError) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="bg-red-50 p-6 rounded-lg max-w-md">
+          <h2 className="text-xl font-bold text-red-600 mb-2">Error Loading Data</h2>
+          <p className="text-red-800">{fetchError}</p>
+          <button 
+            onClick={fetchData}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -265,6 +440,45 @@ export default function Predictions() {
         </h1>
         <p className="text-gray-600">Data-driven financial insights and trend analysis</p>
       </header>
+
+      {/* Debug Panel */}
+      <div className="bg-yellow-50 p-4 rounded-lg mb-8 border border-yellow-200">
+        <h3 className="font-bold text-yellow-800 mb-2">Debug Information</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <h4 className="font-medium">Approved Orders</h4>
+            <div className="text-xs overflow-auto max-h-40 bg-white p-2 rounded">
+              {data.orders.filter(o => o.status?.trim().toLowerCase() === 'approved').length > 0 ? (
+                <pre>{JSON.stringify(
+                  data.orders.filter(o => o.status?.trim().toLowerCase() === 'approved'),
+                  null, 2
+                )}</pre>
+              ) : (
+                <p className="text-red-500">No approved orders found</p>
+              )}
+            </div>
+          </div>
+          <div>
+            <h4 className="font-medium">Order Items</h4>
+            <div className="text-xs overflow-auto max-h-40 bg-white p-2 rounded">
+              <pre>{JSON.stringify(data.orderItems, null, 2)}</pre>
+            </div>
+          </div>
+          <div>
+            <h4 className="font-medium">Sales Calculation</h4>
+            <div className="text-sm">
+              <p>Approved Orders: {data.orders.filter(o => o.status?.trim().toLowerCase() === 'approved').length}</p>
+              <p>Order Items: {data.orderItems.length}</p>
+              <p>Matched Items: {data.orderItems.filter(oi => 
+                data.orders.some(o => 
+                  o.id === oi.order && o.status?.trim().toLowerCase() === 'approved'
+                )
+              ).length}</p>
+              <p className="font-bold mt-2">Total Sales Volume: {totalSalesVolume} units</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
