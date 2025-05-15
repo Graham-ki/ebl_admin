@@ -660,7 +660,7 @@ if (approvedOrders && approvedOrders.length > 0) {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm">Current Sales Volume:</span>
-                    <span className="font-medium">{totalSalesVolume} units</span>
+                    <span className="font-medium">{totalSalesVolume} boxes</span>
                   </div>
                 </div>
               </div>
@@ -670,7 +670,7 @@ if (approvedOrders && approvedOrders.length > 0) {
                   <h3 className="font-semibold mb-3 text-center">Break-Even Point</h3>
                   <div className="text-center mb-4">
                     <p className="text-2xl font-bold text-green-600">
-                      {breakEvenPoint} units
+                      {breakEvenPoint} boxes
                     </p>
                     <p className="text-sm text-gray-600">
                       needed to cover costs
