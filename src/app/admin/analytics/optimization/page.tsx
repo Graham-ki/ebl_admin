@@ -713,7 +713,7 @@ if (approvedOrders && approvedOrders.length > 0) {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
                       dataKey="units" 
-                      label={{ value: 'Units Sold', position: 'insideBottomRight', offset: -5 }} 
+                      label={{ value: 'Boxes Sold', position: 'insideBottomRight', offset: -5 }} 
                     />
                     <YAxis 
                       label={{ value: 'UGX', angle: -90, position: 'insideLeft' }} 
