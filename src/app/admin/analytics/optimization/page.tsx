@@ -655,7 +655,7 @@ if (approvedOrders && approvedOrders.length > 0) {
 
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-sm">Production Cost per Unit:</span>
+                    <span className="text-sm">Production Cost per box:</span>
                     <span className="font-medium">{productionCostPerUnit.toLocaleString()} UGX</span>
                   </div>
                   <div className="flex justify-between">
@@ -680,14 +680,14 @@ if (approvedOrders && approvedOrders.length > 0) {
                   <div className={`p-3 rounded-md ${totalSalesVolume >= breakEvenPoint ? 'bg-green-50' : 'bg-yellow-50'}`}>
                     <p className={`text-sm ${totalSalesVolume >= breakEvenPoint ? 'text-green-800' : 'text-yellow-800'}`}>
                       {totalSalesVolume >= breakEvenPoint
-                        ? `You're currently ${totalSalesVolume - breakEvenPoint} units above break-even.`
-                        : `You need ${breakEvenPoint - totalSalesVolume} more units to reach break-even.`}
+                        ? `You're currently ${totalSalesVolume - breakEvenPoint} boxes above break-even.`
+                        : `You need ${breakEvenPoint - totalSalesVolume} more boxes to reach break-even.`}
                     </p>
                   </div>
 
                   {inputs.sellingPrice > 0 && productionCostPerUnit > 0 && (
                     <div className="mt-4">
-                      <p className="text-sm font-medium mb-1">Profit Margin per Unit:</p>
+                      <p className="text-sm font-medium mb-1">Profit Margin per box:</p>
                       <div className="w-full bg-gray-200 rounded-full h-2.5">
                         <div 
                           className="bg-green-600 h-2.5 rounded-full" 
