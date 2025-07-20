@@ -8,16 +8,17 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Predefined expense categories
+// Updated expense categories
 const EXPENSE_CATEGORIES = [
-  "Labour",
-  "Salary",
-  "Wage",
-  "Repairs",
-  "Stock",
+  "Vehicle",
+  "Machinery",
+  "Transport",
   "Allowance",
-  "Utility/Welfare",
-  "Other"
+  "Field",
+  "Construction",
+  "Drawings",
+  "Food",
+  "Hires"
 ];
 
 export default function ExpensesLedgerPage() {
@@ -40,6 +41,7 @@ export default function ExpensesLedgerPage() {
   const [subModes, setSubModes] = useState<string[]>([]);
   const [existingItems, setExistingItems] = useState<string[]>([]);
   const [showNotice, setShowNotice] = useState(true);
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   useEffect(() => {
     fetchExpenses(filter);
@@ -202,9 +204,8 @@ export default function ExpensesLedgerPage() {
       setFormData((prev) => ({ ...prev, account: "" }));
     }
 
-    // Reset customItem when selecting a non-"Other" category
-    if (name === "item" && value !== "Other") {
-      setFormData(prev => ({ ...prev, customItem: "" }));
+    if (name === "item") {
+      setShowCustomInput(value === "Other");
     }
   };
 
@@ -251,6 +252,7 @@ export default function ExpensesLedgerPage() {
       account: "" 
     });
     setEditExpense(null);
+    setShowCustomInput(false);
   };
 
   const handleEdit = (expense: any) => {
@@ -265,6 +267,7 @@ export default function ExpensesLedgerPage() {
       mode_of_payment: expense.mode_of_payment,
       account: expense.account,
     });
+    setShowCustomInput(!isExistingItem);
     fetchSubModes(expense.mode_of_payment);
   };
 
@@ -436,7 +439,7 @@ export default function ExpensesLedgerPage() {
                 </svg>
                 <div>
                   <p className="text-sm text-blue-800 font-medium">
-                    Please endeavor to select from the existing items list, to enable organized data
+                    Please select from the predefined items or choose "Other" to add a new item
                   </p>
                 </div>
               </div>
@@ -454,41 +457,65 @@ export default function ExpensesLedgerPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
-            <select
-              name="item"
-              value={formData.item}
-              onChange={handleInputChange}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Select an item</option>
-              {/* Predefined categories */}
-              <optgroup label="Common Categories">
-                {EXPENSE_CATEGORIES.filter(cat => cat !== "Other").map(category => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </optgroup>
-              {/* Existing items from database */}
-              <optgroup label="Previously Used Items">
-                {existingItems
-                  .filter(item => !EXPENSE_CATEGORIES.includes(item))
-                  .map((item, index) => (
-                    <option key={`existing-${index}`} value={item}>{item}</option>
-                  ))}
-              </optgroup>
-              {/* Option to add new item */}
-              <option value="Other">Other (specify below)</option>
-            </select>
-            {formData.item === "Other" && (
-              <div className="mt-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Item/Reason</label>
+            {!showCustomInput ? (
+              <>
+                <select
+                  name="item"
+                  value={formData.item}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select an item</option>
+                  {/* Predefined categories */}
+                  <optgroup label="Expense Categories">
+                    {EXPENSE_CATEGORIES.map(category => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </optgroup>
+                  {/* Existing items from database */}
+                  {existingItems.length > 0 && (
+                    <optgroup label="Previously Used Items">
+                      {existingItems
+                        .filter(item => !EXPENSE_CATEGORIES.includes(item))
+                        .map((item, index) => (
+                          <option key={`existing-${index}`} value={item}>{item}</option>
+                        ))}
+                    </optgroup>
+                  )}
+                  {/* Option to add new item */}
+                  <option value="Other">Other (specify below)</option>
+                </select>
+                {formData.item === "Other" && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomInput(true)}
+                    className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    + Add custom item
+                  </button>
+                )}
+              </>
+            ) : (
+              <div>
                 <input
                   type="text"
                   name="customItem"
-                  placeholder="Specify new item name"
+                  placeholder="Enter new item name"
                   value={formData.customItem}
                   onChange={handleInputChange}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCustomInput(false);
+                    setFormData(prev => ({ ...prev, item: "", customItem: "" }));
+                  }}
+                  className="mt-2 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  ← Back to item list
+                </button>
               </div>
             )}
           </div>
@@ -565,6 +592,7 @@ export default function ExpensesLedgerPage() {
                   mode_of_payment: "", 
                   account: "" 
                 });
+                setShowCustomInput(false);
               }}
               className="mr-2 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
             >
@@ -594,9 +622,9 @@ export default function ExpensesLedgerPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr className="text-left border-b border-gray-200">
-                  <th className="p-4 font-medium text-gray-500">Item</th>
+                  <th className="p-4 font-medium text-gray-500">Item/Reason</th>
                   <th className="p-4 font-medium text-gray-500 text-right">Amount</th>
-                  <th className="p-4 font-medium text-gray-500">Department</th>
+                  <th className="p-4 font-medium text-gray-500">Department/Name</th>
                   <th className="p-4 font-medium text-gray-500">Source Account</th>
                   <th className="p-4 font-medium text-gray-500">Details</th>
                   <th className="p-4 font-medium text-gray-500">Added By</th>
