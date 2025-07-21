@@ -8,7 +8,36 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Updated expense categories
+// Define types
+type Expense = {
+  id: string;
+  item: string;
+  amount_spent: number;
+  department: string;
+  mode_of_payment: string;
+  account: string | null;
+  submittedby: string;
+  date: string;
+};
+
+type GroupedExpenses = Record<string, Expense[]>;
+
+type ItemTotal = {
+  item: string;
+  total: number;
+  count: number;
+  entries: Expense[];
+};
+
+type FormData = {
+  item: string;
+  customItem: string;
+  amount_spent: number;
+  department: string;
+  mode_of_payment: string;
+  account: string;
+};
+
 const EXPENSE_CATEGORIES = [
   "Vehicle",
   "Machinery",
@@ -22,13 +51,13 @@ const EXPENSE_CATEGORIES = [
 ];
 
 export default function ExpensesLedgerPage() {
-  const [expenses, setExpenses] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [balanceForward, setBalanceForward] = useState(0);
   const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all">("all");
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     item: "",
     customItem: "",
     amount_spent: 0,
@@ -36,7 +65,7 @@ export default function ExpensesLedgerPage() {
     mode_of_payment: "",
     account: "",
   });
-  const [editExpense, setEditExpense] = useState<any>(null);
+  const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [modes, setModes] = useState<string[]>([]);
   const [subModes, setSubModes] = useState<string[]>([]);
   const [existingItems, setExistingItems] = useState<string[]>([]);
@@ -62,12 +91,13 @@ export default function ExpensesLedgerPage() {
       return;
     }
     
-    const uniqueItems = Array.from(new Set(data.map((item: any) => item.item)));
-    setExistingItems(uniqueItems);
+    if (data) {
+      const uniqueItems = Array.from(new Set(data.map((item: { item: string }) => item.item)));
+      setExistingItems(uniqueItems);
+    }
   };
 
   const fetchBalanceForward = async () => {
-    // Get total amount available
     const { data: financeData, error: financeError } = await supabase
       .from("finance")
       .select("amount_available");
@@ -77,9 +107,9 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    const totalAmountAvailable = financeData.reduce((sum: number, entry: any) => sum + (entry.amount_available || 0), 0);
+    const totalAmountAvailable = financeData?.reduce((sum: number, entry: { amount_available: number }) => 
+      sum + (entry.amount_available || 0), 0) || 0;
 
-    // Get total expenses
     const { data: expensesData, error: expensesError } = await supabase
       .from("expenses")
       .select("amount_spent");
@@ -89,9 +119,9 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    const totalExpenses = expensesData.reduce((sum: number, entry: any) => sum + (entry.amount_spent || 0), 0);
+    const totalExpenses = expensesData?.reduce((sum: number, entry: { amount_spent: number }) => 
+      sum + (entry.amount_spent || 0), 0) || 0;
 
-    // Calculate balance forward
     const balance = totalAmountAvailable - totalExpenses;
     setBalanceForward(balance);
   };
@@ -106,8 +136,10 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    const uniqueModes = Array.from(new Set(data.map((entry: any) => entry.mode_of_payment)));
-    setModes(uniqueModes);
+    if (data) {
+      const uniqueModes = Array.from(new Set(data.map((entry: { mode_of_payment: string }) => entry.mode_of_payment)));
+      setModes(uniqueModes);
+    }
   };
 
   const fetchSubModes = async (mode: string) => {
@@ -116,9 +148,10 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
+    const column = mode === "Bank" ? "bank_name" : "mode_of_mobilemoney";
     const { data, error } = await supabase
       .from("finance")
-      .select(mode === "Bank" ? "bank_name" : "mode_of_mobilemoney")
+      .select(column)
       .eq("mode_of_payment", mode);
 
     if (error) {
@@ -126,11 +159,12 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    const uniqueSubModes = Array.from(
-      new Set(data.map((entry: any) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney)))
-    ).filter((subMode): subMode is string => !!subMode);
-
-    setSubModes(uniqueSubModes);
+    if (data) {
+      const uniqueSubModes = Array.from(
+        new Set(data.map((entry: any) => entry[column]))
+        .filter((subMode): subMode is string => !!subMode);
+      setSubModes(uniqueSubModes);
+    }
   };
 
   const fetchExpenses = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
@@ -172,8 +206,8 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    setExpenses(data || []);
-    calculateTotalExpenses(data || []);
+    setExpenses(data as Expense[] || []);
+    calculateTotalExpenses(data as Expense[] || []);
     setLoading(false);
   };
 
@@ -187,22 +221,23 @@ export default function ExpensesLedgerPage() {
       return;
     }
 
-    const total = data.reduce((sum: number, entry: any) => sum + (entry.amount_paid || 0), 0);
+    const total = data?.reduce((sum: number, entry: { amount_paid: number }) => 
+      sum + (entry.amount_paid || 0), 0) || 0;
     setTotalIncome(total);
   };
 
-  const calculateTotalExpenses = (data: any[]) => {
-    const total = data.reduce((sum: number, entry: any) => sum + (entry.amount_spent || 0), 0);
+  const calculateTotalExpenses = (data: Expense[]) => {
+    const total = data.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
     setTotalExpenses(total);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData(prev => ({ ...prev, [name]: value }));
 
     if (name === "mode_of_payment") {
       fetchSubModes(value);
-      setFormData((prev) => ({ ...prev, account: "" }));
+      setFormData(prev => ({ ...prev, account: "" }));
     }
 
     if (name === "item") {
@@ -211,7 +246,6 @@ export default function ExpensesLedgerPage() {
   };
 
   const submitExpense = async () => {
-    // Determine the final item name (use customItem if "Other" was selected)
     const finalItem = formData.item === "Other" ? formData.customItem : formData.item;
     
     if (!finalItem || !formData.amount_spent || !formData.department || !formData.mode_of_payment) {
@@ -243,7 +277,7 @@ export default function ExpensesLedgerPage() {
     alert("Expense successfully submitted!");
     fetchExpenses(filter);
     fetchBalanceForward();
-    fetchExistingItems(); // Refresh the items list
+    fetchExistingItems();
     setFormData({ 
       item: "", 
       customItem: "", 
@@ -256,9 +290,8 @@ export default function ExpensesLedgerPage() {
     setShowCustomInput(false);
   };
 
-  const handleEdit = (expense: any) => {
+  const handleEdit = (expense: Expense) => {
     setEditExpense(expense);
-    // Check if the expense item is in our existing items or predefined categories
     const isExistingItem = existingItems.includes(expense.item) || EXPENSE_CATEGORIES.includes(expense.item);
     setFormData({
       item: isExistingItem ? expense.item : "Other",
@@ -266,7 +299,7 @@ export default function ExpensesLedgerPage() {
       amount_spent: expense.amount_spent,
       department: expense.department,
       mode_of_payment: expense.mode_of_payment,
-      account: expense.account,
+      account: expense.account || "",
     });
     setShowCustomInput(!isExistingItem);
     fetchSubModes(expense.mode_of_payment);
@@ -284,12 +317,12 @@ export default function ExpensesLedgerPage() {
       alert("Expense successfully deleted!");
       fetchExpenses(filter);
       fetchBalanceForward();
-      fetchExistingItems(); // Refresh the items list
+      fetchExistingItems();
     }
   };
 
   const exportToCSV = () => {
-    const csvData = expenses.map((expense: any) => ({
+    const csvData = expenses.map((expense) => ({
       Item: expense.item,
       "Amount Spent": expense.amount_spent,
       Department: expense.department,
@@ -306,7 +339,6 @@ export default function ExpensesLedgerPage() {
 
     const csvBlob = new Blob([csvHeaders + csvRows], { type: "text/csv;charset=utf-8" });
     
-    // Create download link and trigger click
     const link = document.createElement("a");
     link.href = URL.createObjectURL(csvBlob);
     link.download = "expenses.csv";
@@ -315,17 +347,15 @@ export default function ExpensesLedgerPage() {
     document.body.removeChild(link);
   };
 
-  // Group expenses by item
-  const groupedExpenses = expenses.reduce((acc, expense) => {
+  const groupedExpenses = expenses.reduce((acc: GroupedExpenses, expense) => {
     if (!acc[expense.item]) {
       acc[expense.item] = [];
     }
     acc[expense.item].push(expense);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {});
 
-  // Calculate totals for each item
-  const itemTotals = Object.entries(groupedExpenses).map(([item, entries]) => ({
+  const itemTotals: ItemTotal[] = Object.entries(groupedExpenses).map(([item, entries]) => ({
     item,
     total: entries.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0),
     count: entries.length,
@@ -338,7 +368,6 @@ export default function ExpensesLedgerPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Modern header with gradient */}
       <div className="mb-8 text-center">
         <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-red-600 to-orange-500 bg-clip-text text-transparent">
           Expenses Ledger
@@ -348,7 +377,6 @@ export default function ExpensesLedgerPage() {
         </p>
       </div>
 
-      {/* Financial summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-4 shadow-md text-white">
           <div className="flex items-center justify-between">
@@ -387,7 +415,6 @@ export default function ExpensesLedgerPage() {
         </div>
       </div>
 
-      {/* Filters and Export Button */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div className="flex flex-wrap gap-2">
           <button
@@ -442,7 +469,6 @@ export default function ExpensesLedgerPage() {
         </button>
       </div>
 
-      {/* Add/Edit Expense Form */}
       <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h2 className="text-lg font-semibold mb-4 flex items-center">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -451,7 +477,6 @@ export default function ExpensesLedgerPage() {
           {editExpense ? "Edit Expense" : "Add New Expense"}
         </h2>
 
-        {/* Dismissible notice */}
         {showNotice && (
           <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
             <div className="flex justify-between items-start">
@@ -489,13 +514,11 @@ export default function ExpensesLedgerPage() {
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Select an item</option>
-                  {/* Predefined categories */}
                   <optgroup label="Expense Categories">
                     {EXPENSE_CATEGORIES.map(category => (
                       <option key={category} value={category}>{category}</option>
                     ))}
                   </optgroup>
-                  {/* Existing items from database */}
                   {existingItems.length > 0 && (
                     <optgroup label="Previously Used Items">
                       {existingItems
@@ -505,7 +528,6 @@ export default function ExpensesLedgerPage() {
                         ))}
                     </optgroup>
                   )}
-                  {/* Option to add new item */}
                   <option value="Other">Other (specify below)</option>
                 </select>
                 {formData.item === "Other" && (
@@ -630,7 +652,6 @@ export default function ExpensesLedgerPage() {
         </div>
       </div>
 
-      {/* Expenses Summary Table */}
       {loading ? (
         <div className="flex justify-center items-center h-64 rounded-lg bg-gray-50 border border-gray-100">
           <div className="flex flex-col items-center">
@@ -685,7 +706,7 @@ export default function ExpensesLedgerPage() {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-200">
-                                {entries.map((expense: any) => (
+                                {entries.map((expense) => (
                                   <tr key={expense.id} className="hover:bg-gray-50">
                                     <td className="p-3 text-sm font-mono text-red-600">
                                       UGX {expense.amount_spent?.toLocaleString()}
