@@ -162,7 +162,7 @@ export default function ExpensesLedgerPage() {
     if (data) {
       const uniqueSubModes = Array.from(
         new Set(data.map((entry: any) => entry[column]))
-        .filter((subMode): subMode is string => !!subMode)
+        .filter((subMode): subMode is string => !!subMode),
       setSubModes(uniqueSubModes);
     }
   };
