@@ -42,6 +42,7 @@ export default function ExpensesLedgerPage() {
   const [existingItems, setExistingItems] = useState<string[]>([]);
   const [showNotice, setShowNotice] = useState(true);
   const [showCustomInput, setShowCustomInput] = useState(false);
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
   useEffect(() => {
     fetchExpenses(filter);
@@ -109,28 +110,28 @@ export default function ExpensesLedgerPage() {
     setModes(uniqueModes);
   };
 
- const fetchSubModes = async (mode: string) => {
-  if (mode === "cash") {
-    setSubModes([]);
-    return;
-  }
+  const fetchSubModes = async (mode: string) => {
+    if (mode === "cash") {
+      setSubModes([]);
+      return;
+    }
 
-  const { data, error } = await supabase
-    .from("finance")
-    .select(mode === "Bank" ? "bank_name" : "mode_of_mobilemoney")
-    .eq("mode_of_payment", mode);
+    const { data, error } = await supabase
+      .from("finance")
+      .select(mode === "Bank" ? "bank_name" : "mode_of_mobilemoney")
+      .eq("mode_of_payment", mode);
 
-  if (error) {
-    alert("Error fetching submodes: " + error.message);
-    return;
-  }
+    if (error) {
+      alert("Error fetching submodes: " + error.message);
+      return;
+    }
 
-  const uniqueSubModes = Array.from(
-    new Set(data.map((entry: any) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney)))
-  ).filter((subMode): subMode is string => !!subMode);
+    const uniqueSubModes = Array.from(
+      new Set(data.map((entry: any) => (mode === "Bank" ? entry.bank_name : entry.mode_of_mobilemoney)))
+    ).filter((subMode): subMode is string => !!subMode);
 
-  setSubModes(uniqueSubModes);
-};
+    setSubModes(uniqueSubModes);
+  };
 
   const fetchExpenses = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
     setLoading(true);
@@ -312,6 +313,27 @@ export default function ExpensesLedgerPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Group expenses by item
+  const groupedExpenses = expenses.reduce((acc, expense) => {
+    if (!acc[expense.item]) {
+      acc[expense.item] = [];
+    }
+    acc[expense.item].push(expense);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  // Calculate totals for each item
+  const itemTotals = Object.entries(groupedExpenses).map(([item, entries]) => ({
+    item,
+    total: entries.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0),
+    count: entries.length,
+    entries
+  }));
+
+  const toggleItemDetails = (item: string) => {
+    setExpandedItem(expandedItem === item ? null : item);
   };
 
   return (
@@ -608,7 +630,7 @@ export default function ExpensesLedgerPage() {
         </div>
       </div>
 
-      {/* Expenses Table */}
+      {/* Expenses Summary Table */}
       {loading ? (
         <div className="flex justify-center items-center h-64 rounded-lg bg-gray-50 border border-gray-100">
           <div className="flex flex-col items-center">
@@ -623,50 +645,87 @@ export default function ExpensesLedgerPage() {
               <thead className="bg-gray-50">
                 <tr className="text-left border-b border-gray-200">
                   <th className="p-4 font-medium text-gray-500">Item/Reason</th>
-                  <th className="p-4 font-medium text-gray-500 text-right">Amount</th>
-                  <th className="p-4 font-medium text-gray-500">Department/Name</th>
-                  <th className="p-4 font-medium text-gray-500">Source Account</th>
-                  <th className="p-4 font-medium text-gray-500">Details</th>
-                  <th className="p-4 font-medium text-gray-500">Added By</th>
-                  <th className="p-4 font-medium text-gray-500">Date</th>
+                  <th className="p-4 font-medium text-gray-500 text-right">Total Amount</th>
+                  <th className="p-4 font-medium text-gray-500">Number of Entries</th>
                   <th className="p-4 font-medium text-gray-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {expenses.map((expense: any) => (
-                  <tr key={expense.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-4 font-medium">{expense.item}</td>
-                    <td className="p-4 text-right font-mono text-red-600">
-                      UGX {expense.amount_spent?.toLocaleString()}
-                    </td>
-                    <td className="p-4">{expense.department}</td>
-                    <td className="p-4">{expense.mode_of_payment}</td>
-                    <td className="p-4">{expense.account || 'N/A'}</td>
-                    <td className="p-4">{expense.submittedby}</td>
-                    <td className="p-4 text-sm text-gray-500">
-                      {new Date(expense.date).toLocaleDateString()}
-                    </td>
-                    <td className="p-4">
-                      <div className="flex gap-2">
+                {itemTotals.map(({ item, total, count, entries }) => (
+                  <>
+                    <tr key={item} className="hover:bg-gray-50 transition-colors">
+                      <td className="p-4 font-medium">{item}</td>
+                      <td className="p-4 text-right font-mono text-red-600">
+                        UGX {total.toLocaleString()}
+                      </td>
+                      <td className="p-4">{count}</td>
+                      <td className="p-4">
                         <button
-                          onClick={() => handleEdit(expense)}
-                          className="p-2 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors"
+                          onClick={() => toggleItemDetails(item)}
+                          className="px-3 py-1 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors text-sm"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
+                          {expandedItem === item ? 'Hide Details' : 'Show Details'}
                         </button>
-                        <button
-                          onClick={() => handleDelete(expense.id)}
-                          className="p-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
+                    {expandedItem === item && (
+                      <tr className="bg-gray-50">
+                        <td colSpan={4} className="p-4">
+                          <div className="overflow-x-auto">
+                            <table className="w-full bg-white rounded-lg overflow-hidden">
+                              <thead className="bg-gray-100">
+                                <tr>
+                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Amount</th>
+                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Department</th>
+                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Source Account</th>
+                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Details</th>
+                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Added By</th>
+                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Date</th>
+                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200">
+                                {entries.map((expense: any) => (
+                                  <tr key={expense.id} className="hover:bg-gray-50">
+                                    <td className="p-3 text-sm font-mono text-red-600">
+                                      UGX {expense.amount_spent?.toLocaleString()}
+                                    </td>
+                                    <td className="p-3 text-sm">{expense.department}</td>
+                                    <td className="p-3 text-sm">{expense.mode_of_payment}</td>
+                                    <td className="p-3 text-sm">{expense.account || 'N/A'}</td>
+                                    <td className="p-3 text-sm">{expense.submittedby}</td>
+                                    <td className="p-3 text-sm text-gray-500">
+                                      {new Date(expense.date).toLocaleDateString()}
+                                    </td>
+                                    <td className="p-3">
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => handleEdit(expense)}
+                                          className="p-1.5 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors"
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                          </svg>
+                                        </button>
+                                        <button
+                                          onClick={() => handleDelete(expense.id)}
+                                          className="p-1.5 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors"
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>
