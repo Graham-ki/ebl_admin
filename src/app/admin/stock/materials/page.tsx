@@ -38,22 +38,23 @@ interface Material {
   name: string;
   amount_available: number;
   unit: number;
-  cost:string;
+  cost: string;
   amount_used?: number;
 }
 
-interface MaterialDetails {
-  amount_available: number;
-  amount_used: number;
-  boxes_expected: number;
-  boxes_produced: number;
-  percentage_damage: number;
+interface MaterialMovement {
+  date: string;
+  inflow: number;
+  outflow: number;
+  damages: number;
+  balance: number;
 }
 
 interface MaterialEntry {
   id: number;
-  material_name: string;
+  material_id: string;
   quantity: number;
+  damage: number;
   action: string;
   date: string;
   created_by: string;
@@ -67,7 +68,7 @@ const MaterialsPage = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [viewMaterial, setViewMaterial] = useState<Material | null>(null);
-  const [materialDetails, setMaterialDetails] = useState<MaterialDetails | null>(null);
+  const [materialMovements, setMaterialMovements] = useState<MaterialMovement[]>([]);
   const [materialEntries, setMaterialEntries] = useState<MaterialEntry[]>([]);
   const [filter, setFilter] = useState("all");
   const [customDate, setCustomDate] = useState("");
@@ -76,7 +77,7 @@ const MaterialsPage = () => {
     name: "",
     amount_available: 0,
     unit: 0,
-    cost:"",
+    cost: "",
   });
 
   useEffect(() => {
@@ -88,7 +89,7 @@ const MaterialsPage = () => {
     setLoading(true);
     const { data: materialsData, error } = await supabase
       .from("materials")
-      .select("id, amount_available, unit, name,cost");
+      .select("id, amount_available, unit, name, cost");
     if (error) {
       console.error("Error fetching materials:", error);
     } else {
@@ -100,7 +101,7 @@ const MaterialsPage = () => {
   const fetchMaterialEntries = async () => {
     let query = supabase
       .from("material_entries")
-      .select("id, material_id, quantity, action, date, created_by");
+      .select("id, material_id, quantity, damage, action, date, created_by");
 
     if (filter === "daily") {
       const today = new Date().toISOString().split("T")[0];
@@ -142,13 +143,13 @@ const MaterialsPage = () => {
   };
 
   const handleAddMaterial = async () => {
-    const { name, amount_available, unit,cost } = newMaterial;
+    const { name, amount_available, unit, cost } = newMaterial;
     if (!name || amount_available < 0 || unit < 0) {
       alert("Please enter valid details.");
       return;
     }
 
-    const { error } = await supabase.from("materials").insert([{ name, amount_available, unit,cost }]);
+    const { error } = await supabase.from("materials").insert([{ name, amount_available, unit, cost }]);
     if (error) {
       console.error("Error adding material:", error);
       alert("Failed to add material.");
@@ -156,7 +157,7 @@ const MaterialsPage = () => {
     }
 
     setIsAdding(false);
-    setNewMaterial({ name: "", amount_available: 0, unit: 0,cost:"" });
+    setNewMaterial({ name: "", amount_available: 0, unit: 0, cost: "" });
     fetchMaterials();
     alert("✅ Material added successfully!");
   };
@@ -169,10 +170,10 @@ const MaterialsPage = () => {
   const handleUpdateMaterial = async () => {
     if (!editMaterial) return;
 
-    const { id, name, amount_available, unit,cost } = editMaterial;
+    const { id, name, amount_available, unit, cost } = editMaterial;
     const { error } = await supabase
       .from("materials")
-      .update({ name, amount_available, unit,cost })
+      .update({ name, amount_available, unit, cost })
       .eq("id", id);
 
     if (error) {
@@ -201,36 +202,48 @@ const MaterialsPage = () => {
     setViewMaterial(material);
     setIsViewDetailsOpen(true);
 
-    const { data: latestMaterial } = await supabase
-      .from("materials")
-      .select("amount_available")
-      .eq("id", material.id)
-      .single();
-
-    const { data: entries } = await supabase
+    // Fetch all entries for this material
+    const { data: entries, error } = await supabase
       .from("material_entries")
-      .select("quantity")
+      .select("*")
       .eq("material_id", material.id)
-      .eq("action", "Taken to production");
+      .order("date", { ascending: true });
 
-    const amountUsed = entries?.reduce((sum, entry) => sum + entry.quantity, 0) || 0;
+    if (error) {
+      console.error("Error fetching material entries:", error);
+      return;
+    }
 
-    const { data: productEntries } = await supabase
-      .from("product_entries")
-      .select("quantity")
-      .eq("Created_by", "Store Manager");
+    // Calculate movements
+    const movements: MaterialMovement[] = [];
+    let balance = 0;
 
-    const boxesProduced = productEntries?.reduce((sum, entry) => sum + entry.quantity, 0) || 0;
-    const boxesExpected = amountUsed / material.unit;
-    const percentageDamage = ((boxesExpected - boxesProduced) / boxesExpected) * 100;
+    entries?.forEach(entry => {
+      const date = new Date(entry.date).toLocaleDateString();
+      
+      let inflow = 0;
+      let outflow = 0;
+      let damages = 0;
 
-    setMaterialDetails({
-      amount_available: latestMaterial?.amount_available ?? 0,
-      amount_used: amountUsed,
-      boxes_expected: boxesExpected || 0,
-      boxes_produced: boxesProduced,
-      percentage_damage: isNaN(percentageDamage) ? 0 : percentageDamage,
+      if (entry.action === "Received from store") {
+        inflow = entry.quantity;
+        balance += inflow;
+      } else if (entry.action === "Used in production" || entry.action === "Sold") {
+        outflow = entry.quantity;
+        damages = entry.damage || 0;
+        balance -= (outflow + damages);
+      }
+
+      movements.push({
+        date,
+        inflow,
+        outflow,
+        damages,
+        balance
+      });
     });
+
+    setMaterialMovements(movements);
   };
 
   return (
@@ -318,21 +331,40 @@ const MaterialsPage = () => {
 
       {/* View Details Dialog */}
       <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>📊 Details of {viewMaterial?.name}</DialogTitle>
+            <DialogTitle>📊 Material Movement - {viewMaterial?.name}</DialogTitle>
           </DialogHeader>
-          {materialDetails && (
+          <div className="max-h-[500px] overflow-y-auto">
             <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Inflow</TableHead>
+                  <TableHead className="text-right">Outflow</TableHead>
+                  <TableHead className="text-right">Damages</TableHead>
+                  <TableHead className="text-right">Balance</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
-                <TableRow><TableCell>Amount Available</TableCell><TableCell>{materialDetails.amount_available}</TableCell></TableRow>
-                <TableRow><TableCell>Amount Used</TableCell><TableCell>{materialDetails.amount_used}</TableCell></TableRow>
-                <TableRow><TableCell>Boxes Expected</TableCell><TableCell>{materialDetails.boxes_expected.toFixed(2)}</TableCell></TableRow>
-                <TableRow><TableCell>Boxes Produced</TableCell><TableCell>{materialDetails.boxes_produced}</TableCell></TableRow>
-                <TableRow><TableCell>Damage %</TableCell><TableCell>{materialDetails.percentage_damage.toFixed(2)}%</TableCell></TableRow>
+                {materialMovements.length > 0 ? (
+                  materialMovements.map((movement, index) => (
+                    <TableRow key={index}>
+                      <TableCell>{movement.date}</TableCell>
+                      <TableCell className="text-right text-green-600">{movement.inflow > 0 ? movement.inflow : '-'}</TableCell>
+                      <TableCell className="text-right text-red-600">{movement.outflow > 0 ? movement.outflow : '-'}</TableCell>
+                      <TableCell className="text-right text-orange-600">{movement.damages > 0 ? movement.damages : '-'}</TableCell>
+                      <TableCell className="text-right font-medium">{movement.balance}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-4">No movement data available</TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
-          )}
+          </div>
           <DialogFooter>
             <Button onClick={() => setIsViewDetailsOpen(false)}>Close</Button>
           </DialogFooter>
