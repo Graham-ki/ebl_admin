@@ -63,6 +63,21 @@ interface MaterialEntryWithName extends MaterialEntry {
   material_name: string;
 }
 
+interface ProductEntry {
+  id: number;
+  quantity: number;
+  created_at: string;
+}
+
+interface MaterialUsage {
+  date: string;
+  boxes: number;
+  bottles: number;
+  labels: number;
+  spirit: number;
+  flavor: number;
+}
+
 const MaterialsPage = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +88,8 @@ const MaterialsPage = () => {
   const [viewMaterial, setViewMaterial] = useState<Material | null>(null);
   const [materialTransactions, setMaterialTransactions] = useState<MaterialTransaction[]>([]);
   const [materialEntries, setMaterialEntries] = useState<MaterialEntryWithName[]>([]);
+  const [productEntries, setProductEntries] = useState<ProductEntry[]>([]);
+  const [materialUsage, setMaterialUsage] = useState<MaterialUsage[]>([]);
   const [filter, setFilter] = useState("all");
   const [customDate, setCustomDate] = useState("");
 
@@ -86,7 +103,14 @@ const MaterialsPage = () => {
   useEffect(() => {
     fetchMaterials();
     fetchMaterialEntries();
+    fetchProductEntries();
   }, [filter, customDate]);
+
+  useEffect(() => {
+    if (productEntries.length > 0) {
+      calculateMaterialUsage();
+    }
+  }, [productEntries]);
 
   const fetchMaterials = async () => {
     setLoading(true);
@@ -143,6 +167,61 @@ const MaterialsPage = () => {
     }));
 
     setMaterialEntries(mergedEntries);
+  };
+
+  const fetchProductEntries = async () => {
+    let query = supabase
+      .from("product_entries")
+      .select("id, quantity, created_at");
+
+    if (filter === "daily") {
+      const today = new Date().toISOString().split("T")[0];
+      query = query.gte("created_at", today);
+    } else if (filter === "monthly") {
+      const firstDayOfMonth = new Date();
+      firstDayOfMonth.setDate(1);
+      query = query.gte("created_at", firstDayOfMonth.toISOString());
+    } else if (filter === "yearly") {
+      const firstDayOfYear = new Date(new Date().getFullYear(), 0, 1);
+      query = query.gte("created_at", firstDayOfYear.toISOString());
+    } else if (filter === "custom" && customDate) {
+      query = query.eq("created_at", customDate);
+    }
+
+    const { data: entries, error } = await query;
+    if (error) {
+      console.error("Error fetching product entries:", error);
+      return;
+    }
+
+    setProductEntries(entries || []);
+  };
+
+  const calculateMaterialUsage = () => {
+    const groupedByDate: Record<string, ProductEntry[]> = {};
+    
+    productEntries.forEach(entry => {
+      const date = new Date(entry.created_at).toLocaleDateString();
+      if (!groupedByDate[date]) {
+        groupedByDate[date] = [];
+      }
+      groupedByDate[date].push(entry);
+    });
+
+    const usageData: MaterialUsage[] = Object.entries(groupedByDate).map(([date, entries]) => {
+      const totalBoxes = entries.reduce((sum, entry) => sum + entry.quantity, 0);
+      
+      return {
+        date,
+        boxes: totalBoxes,
+        bottles: totalBoxes * 24,
+        labels: totalBoxes * 24,
+        spirit: parseFloat((totalBoxes * 0.4).toFixed(2)),
+        flavor: parseFloat((totalBoxes * 0.17).toFixed(2))
+      };
+    });
+
+    setMaterialUsage(usageData);
   };
 
   const handleAddMaterial = async () => {
@@ -205,7 +284,6 @@ const MaterialsPage = () => {
     setViewMaterial(material);
     setIsViewDetailsOpen(true);
 
-    // Fetch all entries for this material
     const { data: entries, error } = await supabase
       .from("material_entries")
       .select("*")
@@ -217,7 +295,6 @@ const MaterialsPage = () => {
       return;
     }
 
-    // Calculate independent transactions
     const transactions: MaterialTransaction[] = entries?.map(entry => {
       const date = new Date(entry.date).toLocaleDateString();
       
@@ -372,12 +449,14 @@ const MaterialsPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Material Entries Section */}
+      {/* Material Usage Section */}
       <div className="mt-12">
-        <h2 className="text-2xl font-semibold mb-4">📘 Material Entries</h2>
+        <h2 className="text-2xl font-semibold mb-4">📊 Material Usage</h2>
         <div className="flex gap-2 mb-4">
           <Select onValueChange={setFilter}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by" /></SelectTrigger>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter by" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="daily">Daily</SelectItem>
@@ -391,6 +470,41 @@ const MaterialsPage = () => {
           )}
         </div>
 
+        <Table className="bg-white rounded-xl shadow-md mb-8">
+          <TableHeader>
+            <TableRow className="bg-blue-50">
+              <TableHead>Date</TableHead>
+              <TableHead className="text-right">Boxes</TableHead>
+              <TableHead className="text-right">Bottles</TableHead>
+              <TableHead className="text-right">Labels</TableHead>
+              <TableHead className="text-right">Spirit (L)</TableHead>
+              <TableHead className="text-right">Flavor (L)</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {materialUsage.length > 0 ? (
+              materialUsage.map((usage, index) => (
+                <TableRow key={index}>
+                  <TableCell>{usage.date}</TableCell>
+                  <TableCell className="text-right">{usage.boxes}</TableCell>
+                  <TableCell className="text-right">{usage.bottles}</TableCell>
+                  <TableCell className="text-right">{usage.labels}</TableCell>
+                  <TableCell className="text-right">{usage.spirit}</TableCell>
+                  <TableCell className="text-right">{usage.flavor}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-4">No material usage data available</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Material Entries Section */}
+      <div className="mt-8">
+        <h2 className="text-2xl font-semibold mb-4">📘 Material Entries</h2>
         <Table className="bg-white rounded-xl shadow-md">
           <TableHeader>
             <TableRow className="bg-blue-50">
