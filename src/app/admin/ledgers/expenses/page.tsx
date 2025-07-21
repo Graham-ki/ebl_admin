@@ -165,7 +165,7 @@ export default function ExpensesLedgerPage() {
         .filter((subMode): subMode is string => !!subMode),
       setSubModes(uniqueSubModes);
     }
-  };
+  }; 
 
   const fetchExpenses = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
     setLoading(true);
