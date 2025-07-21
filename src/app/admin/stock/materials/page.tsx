@@ -60,6 +60,10 @@ interface MaterialEntry {
   created_by: string;
 }
 
+interface MaterialEntryWithName extends MaterialEntry {
+  material_name: string;
+}
+
 const MaterialsPage = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +73,7 @@ const MaterialsPage = () => {
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [viewMaterial, setViewMaterial] = useState<Material | null>(null);
   const [materialMovements, setMaterialMovements] = useState<MaterialMovement[]>([]);
-  const [materialEntries, setMaterialEntries] = useState<MaterialEntry[]>([]);
+  const [materialEntries, setMaterialEntries] = useState<MaterialEntryWithName[]>([]);
   const [filter, setFilter] = useState("all");
   const [customDate, setCustomDate] = useState("");
 
@@ -134,7 +138,7 @@ const MaterialsPage = () => {
       return;
     }
 
-    const mergedEntries = entries.map((entry) => ({
+    const mergedEntries: MaterialEntryWithName[] = entries.map((entry) => ({
       ...entry,
       material_name: materials.find((m) => m.id === entry.material_id)?.name || "Unknown",
     }));
@@ -284,7 +288,7 @@ const MaterialsPage = () => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={2} className="text-center py-4">No materials found.</TableCell>
+                <TableCell colSpan={3} className="text-center py-4">No materials found.</TableCell>
               </TableRow>
             )}
           </TableBody>
