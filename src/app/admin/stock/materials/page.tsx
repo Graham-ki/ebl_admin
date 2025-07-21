@@ -42,12 +42,11 @@ interface Material {
   amount_used?: number;
 }
 
-interface MaterialMovement {
+interface MaterialTransaction {
   date: string;
   inflow: number;
   outflow: number;
   damages: number;
-  balance: number;
 }
 
 interface MaterialEntry {
@@ -72,7 +71,7 @@ const MaterialsPage = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [viewMaterial, setViewMaterial] = useState<Material | null>(null);
-  const [materialMovements, setMaterialMovements] = useState<MaterialMovement[]>([]);
+  const [materialTransactions, setMaterialTransactions] = useState<MaterialTransaction[]>([]);
   const [materialEntries, setMaterialEntries] = useState<MaterialEntryWithName[]>([]);
   const [filter, setFilter] = useState("all");
   const [customDate, setCustomDate] = useState("");
@@ -218,11 +217,8 @@ const MaterialsPage = () => {
       return;
     }
 
-    // Calculate movements
-    const movements: MaterialMovement[] = [];
-    let balance = 0;
-
-    entries?.forEach(entry => {
+    // Calculate independent transactions
+    const transactions: MaterialTransaction[] = entries?.map(entry => {
       const date = new Date(entry.date).toLocaleDateString();
       
       let inflow = 0;
@@ -231,23 +227,20 @@ const MaterialsPage = () => {
 
       if (entry.action === "Received from store") {
         inflow = entry.quantity;
-        balance += inflow;
       } else if (entry.action === "Used in production" || entry.action === "Sold") {
         outflow = entry.quantity;
         damages = entry.damage || 0;
-        balance -= (outflow + damages);
       }
 
-      movements.push({
+      return {
         date,
         inflow,
         outflow,
-        damages,
-        balance
-      });
-    });
+        damages
+      };
+    }) || [];
 
-    setMaterialMovements(movements);
+    setMaterialTransactions(transactions);
   };
 
   return (
@@ -337,7 +330,7 @@ const MaterialsPage = () => {
       <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>📊 Material Movement - {viewMaterial?.name}</DialogTitle>
+            <DialogTitle>📊 Material Transactions - {viewMaterial?.name}</DialogTitle>
           </DialogHeader>
           <div className="max-h-[500px] overflow-y-auto">
             <Table>
@@ -347,23 +340,27 @@ const MaterialsPage = () => {
                   <TableHead className="text-right">Inflow</TableHead>
                   <TableHead className="text-right">Outflow</TableHead>
                   <TableHead className="text-right">Damages</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {materialMovements.length > 0 ? (
-                  materialMovements.map((movement, index) => (
+                {materialTransactions.length > 0 ? (
+                  materialTransactions.map((transaction, index) => (
                     <TableRow key={index}>
-                      <TableCell>{movement.date}</TableCell>
-                      <TableCell className="text-right text-green-600">{movement.inflow > 0 ? movement.inflow : '-'}</TableCell>
-                      <TableCell className="text-right text-red-600">{movement.outflow > 0 ? movement.outflow : '-'}</TableCell>
-                      <TableCell className="text-right text-orange-600">{movement.damages > 0 ? movement.damages : '-'}</TableCell>
-                      <TableCell className="text-right font-medium">{movement.balance}</TableCell>
+                      <TableCell>{transaction.date}</TableCell>
+                      <TableCell className="text-right text-green-600">
+                        {transaction.inflow > 0 ? transaction.inflow : '-'}
+                      </TableCell>
+                      <TableCell className="text-right text-red-600">
+                        {transaction.outflow > 0 ? transaction.outflow : '-'}
+                      </TableCell>
+                      <TableCell className="text-right text-orange-600">
+                        {transaction.damages > 0 ? transaction.damages : '-'}
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-4">No movement data available</TableCell>
+                    <TableCell colSpan={4} className="text-center py-4">No transaction data available</TableCell>
                   </TableRow>
                 )}
               </TableBody>
