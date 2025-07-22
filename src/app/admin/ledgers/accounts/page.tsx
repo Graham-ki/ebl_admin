@@ -272,6 +272,7 @@ export default function FinancialSummaryPage() {
   }, []);
 
   return (
+    <div className="container mx-auto p-4 md:p-6">
       <Button 
         onClick={() => setIsModalOpen(true)}
         className="mb-6 bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
