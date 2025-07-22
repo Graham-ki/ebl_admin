@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,6 +19,7 @@ const supabase = createClient(
 export default function GeneralLedgerPage() {
   const [ledger, setLedger] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [groupedExpenses, setGroupedExpenses] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(false);
   const [expensesLoading, setExpensesLoading] = useState(false);
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -32,6 +34,10 @@ export default function GeneralLedgerPage() {
   const [statementFilter, setStatementFilter] = useState<"daily" | "weekly" | "monthly" | "yearly" | "custom">("monthly");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+  const [selectedItemDetails, setSelectedItemDetails] = useState<any[]>([]);
+  const [showItemDetails, setShowItemDetails] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<any>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   useEffect(() => {
     fetchGeneralLedger(filter);
@@ -172,6 +178,18 @@ export default function GeneralLedgerPage() {
     }
 
     setExpenses(data || []);
+    
+    // Group expenses by item
+    const grouped = (data || []).reduce((acc, expense) => {
+      const item = expense.item || 'Uncategorized';
+      if (!acc[item]) {
+        acc[item] = [];
+      }
+      acc[item].push(expense);
+      return acc;
+    }, {});
+
+    setGroupedExpenses(grouped);
     setExpensesLoading(false);
   };
 
@@ -385,6 +403,65 @@ export default function GeneralLedgerPage() {
 
     const csvBlob = new Blob([csvHeaders + csvRows], { type: "text/csv;charset=utf-8" });
     saveAs(csvBlob, "expenses_ledger.csv");
+  };
+
+  const showDetailsForItem = (item: string) => {
+    setSelectedItemDetails(groupedExpenses[item] || []);
+    setShowItemDetails(true);
+  };
+
+  const handleEditExpense = (expense: any) => {
+    setEditingExpense(expense);
+    setShowEditDialog(true);
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this expense?")) return;
+    
+    try {
+      const { error } = await supabase
+        .from("expenses")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        alert("Error deleting expense: " + error.message);
+        return;
+      }
+
+      // Refresh expenses
+      fetchExpensesLedger(expensesFilter);
+      setShowItemDetails(false);
+      alert("Expense deleted successfully");
+    } catch (error) {
+      console.error("Error deleting expense:", error);
+      alert("Error deleting expense");
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingExpense) return;
+
+    try {
+      const { error } = await supabase
+        .from("expenses")
+        .update(editingExpense)
+        .eq("id", editingExpense.id);
+
+      if (error) {
+        alert("Error updating expense: " + error.message);
+        return;
+      }
+
+      // Refresh expenses
+      fetchExpensesLedger(expensesFilter);
+      setShowEditDialog(false);
+      setShowItemDetails(false);
+      alert("Expense updated successfully");
+    } catch (error) {
+      console.error("Error updating expense:", error);
+      alert("Error updating expense");
+    }
   };
 
   return (
@@ -601,32 +678,35 @@ export default function GeneralLedgerPage() {
               <TableHeader className="bg-gray-50">
                 <TableRow>
                   <TableHead className="font-medium">Item</TableHead>
-                  <TableHead className="font-medium text-right">Amount</TableHead>
-                  <TableHead className="font-medium">Department</TableHead>
-                  <TableHead className="font-medium">Payment Mode</TableHead>
-                  <TableHead className="font-medium">Account</TableHead>
-                  <TableHead className="font-medium">Submitted By</TableHead>
-                  <TableHead className="font-medium">Date</TableHead>
+                  <TableHead className="font-medium text-right">Total Amount</TableHead>
+                  <TableHead className="font-medium">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {expenses.length > 0 ? (
-                  expenses.map((entry) => (
-                    <TableRow key={entry.id} className="hover:bg-gray-50">
-                      <TableCell>{entry.item}</TableCell>
-                      <TableCell className="text-right font-mono text-red-600">
-                        {formatCurrency(entry.amount_spent)}
-                      </TableCell>
-                      <TableCell>{entry.department}</TableCell>
-                      <TableCell>{entry.mode_of_payment}</TableCell>
-                      <TableCell>{entry.account || 'N/A'}</TableCell>
-                      <TableCell>{entry.submittedby}</TableCell>
-                      <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
-                    </TableRow>
-                  ))
+                {Object.keys(groupedExpenses).length > 0 ? (
+                  Object.entries(groupedExpenses).map(([item, itemExpenses]) => {
+                    const totalAmount = itemExpenses.reduce((sum, expense) => sum + (expense.amount_spent || 0), 0);
+                    return (
+                      <TableRow key={item} className="hover:bg-gray-50">
+                        <TableCell>{item}</TableCell>
+                        <TableCell className="text-right font-mono text-red-600">
+                          {formatCurrency(totalAmount)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => showDetailsForItem(item)}
+                          >
+                            Details
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={3} className="text-center py-8 text-gray-500">
                       No expenses found
                     </TableCell>
                   </TableRow>
@@ -636,6 +716,151 @@ export default function GeneralLedgerPage() {
           </div>
         )}
       </div>
+
+      {/* Item Details Dialog */}
+      <Dialog open={showItemDetails} onOpenChange={setShowItemDetails}>
+        <DialogContent className="rounded-lg max-w-4xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span>📋</span>
+              <span>Expense Details for {selectedItemDetails[0]?.item}</span>
+            </DialogTitle>
+            <DialogDescription>
+              Detailed view of all expenses for this item
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead>Payment Mode</TableHead>
+                  <TableHead>Submitted By</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedItemDetails.map((expense) => (
+                  <TableRow key={expense.id}>
+                    <TableCell>{new Date(expense.date).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right font-mono text-red-600">
+                      {formatCurrency(expense.amount_spent)}
+                    </TableCell>
+                    <TableCell>{expense.department}</TableCell>
+                    <TableCell>{expense.mode_of_payment}</TableCell>
+                    <TableCell>{expense.submittedby}</TableCell>
+                    <TableCell className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEditExpense(expense)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDeleteExpense(expense.id)}
+                      >
+                        Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              onClick={() => setShowItemDetails(false)}
+              variant="secondary"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Expense Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="rounded-lg max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Expense</DialogTitle>
+            <DialogDescription>
+              Update the expense details
+            </DialogDescription>
+          </DialogHeader>
+          
+          {editingExpense && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="item" className="text-right">
+                  Item
+                </label>
+                <Input
+                  id="item"
+                  value={editingExpense.item}
+                  onChange={(e) => setEditingExpense({...editingExpense, item: e.target.value})}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="amount" className="text-right">
+                  Amount
+                </label>
+                <Input
+                  id="amount"
+                  type="number"
+                  value={editingExpense.amount_spent}
+                  onChange={(e) => setEditingExpense({...editingExpense, amount_spent: Number(e.target.value)})}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="department" className="text-right">
+                  Department
+                </label>
+                <Input
+                  id="department"
+                  value={editingExpense.department}
+                  onChange={(e) => setEditingExpense({...editingExpense, department: e.target.value})}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="paymentMode" className="text-right">
+                  Payment Mode
+                </label>
+                <Input
+                  id="paymentMode"
+                  value={editingExpense.mode_of_payment}
+                  onChange={(e) => setEditingExpense({...editingExpense, mode_of_payment: e.target.value})}
+                  className="col-span-3"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button 
+              onClick={handleSaveEdit}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Save Changes
+            </Button>
+            <Button 
+              onClick={() => setShowEditDialog(false)}
+              variant="secondary"
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Income Statement Dialog */}
       <Dialog open={showIncomeStatement} onOpenChange={setShowIncomeStatement}>
