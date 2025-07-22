@@ -259,7 +259,7 @@ export default function ExpensesLedgerPage() {
       department: formData.department,
       mode_of_payment: formData.mode_of_payment,
       account: formData.account,
-      submittedby: "You",
+      submittedby: "Admin",
     };
 
     const { error } = editExpense
