@@ -25,7 +25,6 @@ type GroupedExpenses = Record<string, Expense[]>;
 type ItemTotal = {
   item: string;
   total: number;
-  count: number;
   entries: Expense[];
 };
 
@@ -71,7 +70,8 @@ export default function ExpensesLedgerPage() {
   const [existingItems, setExistingItems] = useState<string[]>([]);
   const [showNotice, setShowNotice] = useState(true);
   const [showCustomInput, setShowCustomInput] = useState(false);
-  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [selectedItemDetails, setSelectedItemDetails] = useState<Expense[] | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   useEffect(() => {
     fetchExpenses(filter);
@@ -358,16 +358,17 @@ export default function ExpensesLedgerPage() {
   const itemTotals: ItemTotal[] = Object.entries(groupedExpenses).map(([item, entries]) => ({
     item,
     total: entries.reduce((sum, entry) => sum + (entry.amount_spent || 0), 0),
-    count: entries.length,
     entries
   }));
 
-  const toggleItemDetails = (item: string) => {
-    setExpandedItem(expandedItem === item ? null : item);
+  const showItemDetails = (entries: Expense[]) => {
+    setSelectedItemDetails(entries);
+    setShowDetailsModal(true);
   };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* Modern header with gradient */}
       <div className="mb-8 text-center">
         <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-red-600 to-orange-500 bg-clip-text text-transparent">
           Expenses Ledger
@@ -377,6 +378,7 @@ export default function ExpensesLedgerPage() {
         </p>
       </div>
 
+      {/* Financial summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-4 shadow-md text-white">
           <div className="flex items-center justify-between">
@@ -415,6 +417,7 @@ export default function ExpensesLedgerPage() {
         </div>
       </div>
 
+      {/* Filters and Export Button */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div className="flex flex-wrap gap-2">
           <button
@@ -469,6 +472,7 @@ export default function ExpensesLedgerPage() {
         </button>
       </div>
 
+      {/* Add/Edit Expense Form */}
       <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h2 className="text-lg font-semibold mb-4 flex items-center">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -477,6 +481,7 @@ export default function ExpensesLedgerPage() {
           {editExpense ? "Edit Expense" : "Add New Expense"}
         </h2>
 
+        {/* Dismissible notice */}
         {showNotice && (
           <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
             <div className="flex justify-between items-start">
@@ -652,6 +657,7 @@ export default function ExpensesLedgerPage() {
         </div>
       </div>
 
+      {/* Expenses Summary Table */}
       {loading ? (
         <div className="flex justify-center items-center h-64 rounded-lg bg-gray-50 border border-gray-100">
           <div className="flex flex-col items-center">
@@ -667,86 +673,25 @@ export default function ExpensesLedgerPage() {
                 <tr className="text-left border-b border-gray-200">
                   <th className="p-4 font-medium text-gray-500">Item/Reason</th>
                   <th className="p-4 font-medium text-gray-500 text-right">Total Amount</th>
-                  <th className="p-4 font-medium text-gray-500">Number of Entries</th>
                   <th className="p-4 font-medium text-gray-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {itemTotals.map(({ item, total, count, entries }) => (
-                  <>
-                    <tr key={item} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-medium">{item}</td>
-                      <td className="p-4 text-right font-mono text-red-600">
-                        UGX {total.toLocaleString()}
-                      </td>
-                      <td className="p-4">{count}</td>
-                      <td className="p-4">
-                        <button
-                          onClick={() => toggleItemDetails(item)}
-                          className="px-3 py-1 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors text-sm"
-                        >
-                          {expandedItem === item ? 'Hide Details' : 'Show Details'}
-                        </button>
-                      </td>
-                    </tr>
-                    {expandedItem === item && (
-                      <tr className="bg-gray-50">
-                        <td colSpan={4} className="p-4">
-                          <div className="overflow-x-auto">
-                            <table className="w-full bg-white rounded-lg overflow-hidden">
-                              <thead className="bg-gray-100">
-                                <tr>
-                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Amount</th>
-                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Department</th>
-                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Source Account</th>
-                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Details</th>
-                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Added By</th>
-                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Date</th>
-                                  <th className="p-3 text-sm font-medium text-gray-600 text-left">Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-200">
-                                {entries.map((expense) => (
-                                  <tr key={expense.id} className="hover:bg-gray-50">
-                                    <td className="p-3 text-sm font-mono text-red-600">
-                                      UGX {expense.amount_spent?.toLocaleString()}
-                                    </td>
-                                    <td className="p-3 text-sm">{expense.department}</td>
-                                    <td className="p-3 text-sm">{expense.mode_of_payment}</td>
-                                    <td className="p-3 text-sm">{expense.account || 'N/A'}</td>
-                                    <td className="p-3 text-sm">{expense.submittedby}</td>
-                                    <td className="p-3 text-sm text-gray-500">
-                                      {new Date(expense.date).toLocaleDateString()}
-                                    </td>
-                                    <td className="p-3">
-                                      <div className="flex gap-2">
-                                        <button
-                                          onClick={() => handleEdit(expense)}
-                                          className="p-1.5 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors"
-                                        >
-                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                          </svg>
-                                        </button>
-                                        <button
-                                          onClick={() => handleDelete(expense.id)}
-                                          className="p-1.5 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors"
-                                        >
-                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                          </svg>
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
+                {itemTotals.map(({ item, total, entries }) => (
+                  <tr key={item} className="hover:bg-gray-50 transition-colors">
+                    <td className="p-4 font-medium">{item}</td>
+                    <td className="p-4 text-right font-mono text-red-600">
+                      UGX {total.toLocaleString()}
+                    </td>
+                    <td className="p-4">
+                      <button
+                        onClick={() => showItemDetails(entries)}
+                        className="px-3 py-1 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors text-sm"
+                      >
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -760,6 +705,84 @@ export default function ExpensesLedgerPage() {
               <p className="text-sm mt-1">Try adjusting your filters or add a new expense</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Details Modal */}
+      {showDetailsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Expense Details</h3>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="p-3 text-sm font-medium text-gray-600 text-left">Amount</th>
+                      <th className="p-3 text-sm font-medium text-gray-600 text-left">Department</th>
+                      <th className="p-3 text-sm font-medium text-gray-600 text-left">Source Account</th>
+                      <th className="p-3 text-sm font-medium text-gray-600 text-left">Details</th>
+                      <th className="p-3 text-sm font-medium text-gray-600 text-left">Added By</th>
+                      <th className="p-3 text-sm font-medium text-gray-600 text-left">Date</th>
+                      <th className="p-3 text-sm font-medium text-gray-600 text-left">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {selectedItemDetails?.map((expense) => (
+                      <tr key={expense.id} className="hover:bg-gray-50">
+                        <td className="p-3 text-sm font-mono text-red-600">
+                          UGX {expense.amount_spent?.toLocaleString()}
+                        </td>
+                        <td className="p-3 text-sm">{expense.department}</td>
+                        <td className="p-3 text-sm">{expense.mode_of_payment}</td>
+                        <td className="p-3 text-sm">{expense.account || 'N/A'}</td>
+                        <td className="p-3 text-sm">{expense.submittedby}</td>
+                        <td className="p-3 text-sm text-gray-500">
+                          {new Date(expense.date).toLocaleDateString()}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                handleEdit(expense);
+                                setShowDetailsModal(false);
+                              }}
+                              className="p-1.5 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleDelete(expense.id);
+                                setShowDetailsModal(false);
+                              }}
+                              className="p-1.5 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
