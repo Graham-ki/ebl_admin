@@ -17,35 +17,34 @@ const supabase = createClient(
 
 export default function GeneralLedgerPage() {
   const [ledger, setLedger] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [expensesLoading, setExpensesLoading] = useState(false);
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalPayments, setTotalPayments] = useState(0);
   const [outstandingBalance, setOutstandingBalance] = useState(0);
-  const [netProfit, setNetProfit] = useState(0); // Changed from amountAvailable to netProfit
-  const [allAmountsAvailable, setAllAmountsAvailable] = useState<any[]>([]);
+  const [netProfit, setNetProfit] = useState(0);
   const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all">("all");
+  const [expensesFilter, setExpensesFilter] = useState<"daily" | "monthly" | "yearly" | "all">("all");
   const [showIncomeStatement, setShowIncomeStatement] = useState(false);
   const [incomeData, setIncomeData] = useState<any[]>([]);
   const [expenseData, setExpenseData] = useState<any[]>([]);
   const [statementFilter, setStatementFilter] = useState<"daily" | "weekly" | "monthly" | "yearly" | "custom">("monthly");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
-  const [showFullAmountHistory, setShowFullAmountHistory] = useState(false);
 
   useEffect(() => {
     fetchGeneralLedger(filter);
-    fetchNetProfit(); // Changed from fetchAmountAvailable to fetchNetProfit
-  }, [filter]);
+    fetchExpensesLedger(expensesFilter);
+    fetchNetProfit();
+  }, [filter, expensesFilter]);
 
   const fetchNetProfit = async () => {
     try {
-      // Get total amount_available from finance table
       const { data: financeData, error: financeError } = await supabase
         .from("finance")
-        .select("amount_available, created_at")
-        .order("created_at", { ascending: false });
+        .select("amount_available");
 
-      // Get total expenses
       const { data: expenseData, error: expenseError } = await supabase
         .from("expenses")
         .select("amount_spent");
@@ -55,9 +54,6 @@ export default function GeneralLedgerPage() {
         return;
       }
 
-      setAllAmountsAvailable(financeData || []);
-
-      // Calculate net profit (total amount_available - total expenses)
       const totalAvailable = (financeData || []).reduce((sum, entry) => sum + (entry.amount_available || 0), 0);
       const totalExpenses = (expenseData || []).reduce((sum, entry) => sum + (entry.amount_spent || 0), 0);
       const calculatedNetProfit = totalAvailable - totalExpenses;
@@ -123,6 +119,60 @@ export default function GeneralLedgerPage() {
     setLedger(data || []);
     calculateFinancials(data || []);
     setLoading(false);
+  };
+
+  const fetchExpensesLedger = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
+    setExpensesLoading(true);
+    const now = new Date();
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
+
+    switch (filterType) {
+      case "daily":
+        startDate = new Date(now.setHours(0, 0, 0, 0));
+        endDate = new Date(now.setHours(23, 59, 59, 999));
+        break;
+      case "monthly":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        break;
+      case "yearly":
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        break;
+      default:
+        startDate = null;
+        endDate = null;
+        break;
+    }
+
+    let query = supabase
+      .from("expenses")
+      .select(`
+        id,
+        item,
+        amount_spent,
+        department,
+        mode_of_payment,
+        account,
+        submittedby,
+        date
+      `).order("date", { ascending: false });
+
+    if (startDate && endDate) {
+      query = query.gte("date", startDate.toISOString()).lte("date", endDate.toISOString());
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      alert("Error fetching expenses ledger: " + error.message);
+      setExpensesLoading(false);
+      return;
+    }
+
+    setExpenses(data || []);
+    setExpensesLoading(false);
   };
 
   const calculateFinancials = (data: any[]) => {
@@ -319,6 +369,24 @@ export default function GeneralLedgerPage() {
     saveAs(csvBlob, "general_ledger.csv");
   };
 
+  const exportExpensesToCSV = () => {
+    const csvData = expenses.map((entry) => ({
+      "Item": entry.item,
+      "Amount Spent": entry.amount_spent,
+      "Department": entry.department,
+      "Payment Mode": entry.mode_of_payment,
+      "Account": entry.account,
+      "Submitted By": entry.submittedby,
+      "Date": new Date(entry.date).toLocaleDateString(),
+    }));
+
+    const csvHeaders = Object.keys(csvData[0]).join(",") + "\n";
+    const csvRows = csvData.map((row) => Object.values(row).join(",")).join("\n");
+
+    const csvBlob = new Blob([csvHeaders + csvRows], { type: "text/csv;charset=utf-8" });
+    saveAs(csvBlob, "expenses_ledger.csv");
+  };
+
   return (
     <div className="container mx-auto p-4 md:p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -385,48 +453,7 @@ export default function GeneralLedgerPage() {
         </Card>
       </div>
 
-      {/* Amount Available History */}
-      {allAmountsAvailable.length > 0 && (
-        <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200 shadow-sm">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <span>🔄</span>
-              <span>Amount Available History</span>
-            </h3>
-            {allAmountsAvailable.length > 3 && (
-              <Button 
-                variant="ghost"
-                onClick={() => setShowFullAmountHistory(true)}
-                className="text-blue-600 hover:text-blue-800"
-              >
-                View Full History
-              </Button>
-            )}
-          </div>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-gray-100">
-                <TableRow>
-                  <TableHead className="font-medium">Date</TableHead>
-                  <TableHead className="font-medium text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {allAmountsAvailable.slice(0, 3).map((entry, index) => (
-                  <TableRow key={`amount-${index}`}>
-                    <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(entry.amount_available)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
-      )}
-
-      {/* Filter Controls */}
+      {/* Filter Controls for Marketers Ledger */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div className="flex flex-wrap gap-2">
           <Button
@@ -475,51 +502,140 @@ export default function GeneralLedgerPage() {
         </Button>
       </div>
 
-      {/* Ledger Table */}
-      {loading ? (
-        <div className="flex justify-center items-center h-32">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      ) : (
-        <div className="border rounded-lg overflow-hidden shadow-sm">
-          <Table>
-            <TableHeader className="bg-gray-50">
-              <TableRow>
-                <TableHead className="font-medium">Marketer</TableHead>
-                <TableHead className="font-medium text-right">Total Amount</TableHead>
-                <TableHead className="font-medium text-right">Amount Paid</TableHead>
-                <TableHead className="font-medium text-right">Balance</TableHead>
-                <TableHead className="font-medium">Date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ledger.length > 0 ? (
-                ledger.map((entry) => (
-                  <TableRow key={entry.id} className="hover:bg-gray-50">
-                    <TableCell>{entry.users?.name || "Unknown"}</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(entry.total_amount)}</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(entry.amount_paid)}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {entry.balance > 0 ? (
-                        <Badge variant="destructive">{formatCurrency(entry.balance)}</Badge>
-                      ) : (
-                        <Badge className="bg-green-500">{formatCurrency(entry.balance)}</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
-                  </TableRow>
-                ))
-              ) : (
+      {/* Marketers Ledger Table */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Marketers Ledger</h2>
+        {loading ? (
+          <div className="flex justify-center items-center h-32">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        ) : (
+          <div className="border rounded-lg overflow-hidden shadow-sm">
+            <Table>
+              <TableHeader className="bg-gray-50">
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                    No ledger entries found
-                  </TableCell>
+                  <TableHead className="font-medium">Marketer</TableHead>
+                  <TableHead className="font-medium text-right">Total Amount</TableHead>
+                  <TableHead className="font-medium text-right">Amount Paid</TableHead>
+                  <TableHead className="font-medium text-right">Balance</TableHead>
+                  <TableHead className="font-medium">Date</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {ledger.length > 0 ? (
+                  ledger.map((entry) => (
+                    <TableRow key={entry.id} className="hover:bg-gray-50">
+                      <TableCell>{entry.users?.name || "Unknown"}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(entry.total_amount)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(entry.amount_paid)}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {entry.balance > 0 ? (
+                          <Badge variant="destructive">{formatCurrency(entry.balance)}</Badge>
+                        ) : (
+                          <Badge className="bg-green-500">{formatCurrency(entry.balance)}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                      No ledger entries found
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+
+      {/* Expenses Ledger Section */}
+      <div className="mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <h2 className="text-xl font-semibold">Expenses Ledger</h2>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={expensesFilter === "all" ? "default" : "outline"}
+              onClick={() => setExpensesFilter("all")}
+            >
+              All Time
+            </Button>
+            <Button
+              variant={expensesFilter === "daily" ? "default" : "outline"}
+              onClick={() => setExpensesFilter("daily")}
+            >
+              Today
+            </Button>
+            <Button
+              variant={expensesFilter === "monthly" ? "default" : "outline"}
+              onClick={() => setExpensesFilter("monthly")}
+            >
+              This Month
+            </Button>
+            <Button
+              variant={expensesFilter === "yearly" ? "default" : "outline"}
+              onClick={() => setExpensesFilter("yearly")}
+            >
+              This Year
+            </Button>
+            <Button
+              onClick={exportExpensesToCSV}
+              variant="default"
+              className="flex items-center gap-2"
+            >
+              <span>📥</span>
+              <span>Download Expenses</span>
+            </Button>
+          </div>
         </div>
-      )}
+
+        {expensesLoading ? (
+          <div className="flex justify-center items-center h-32">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        ) : (
+          <div className="border rounded-lg overflow-hidden shadow-sm">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead className="font-medium">Item</TableHead>
+                  <TableHead className="font-medium text-right">Amount</TableHead>
+                  <TableHead className="font-medium">Department</TableHead>
+                  <TableHead className="font-medium">Payment Mode</TableHead>
+                  <TableHead className="font-medium">Account</TableHead>
+                  <TableHead className="font-medium">Submitted By</TableHead>
+                  <TableHead className="font-medium">Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {expenses.length > 0 ? (
+                  expenses.map((entry) => (
+                    <TableRow key={entry.id} className="hover:bg-gray-50">
+                      <TableCell>{entry.item}</TableCell>
+                      <TableCell className="text-right font-mono text-red-600">
+                        {formatCurrency(entry.amount_spent)}
+                      </TableCell>
+                      <TableCell>{entry.department}</TableCell>
+                      <TableCell>{entry.mode_of_payment}</TableCell>
+                      <TableCell>{entry.account || 'N/A'}</TableCell>
+                      <TableCell>{entry.submittedby}</TableCell>
+                      <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                      No expenses found
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
 
       {/* Income Statement Dialog */}
       <Dialog open={showIncomeStatement} onOpenChange={setShowIncomeStatement}>
@@ -740,45 +856,6 @@ export default function GeneralLedgerPage() {
               onClick={() => setShowIncomeStatement(false)}
               variant="destructive"
             >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Full Amount History Dialog */}
-      <Dialog open={showFullAmountHistory} onOpenChange={setShowFullAmountHistory}>
-        <DialogContent className="rounded-lg max-w-6xl max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span>🔄</span>
-              <span>Full Amount Available History</span>
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader className="bg-gray-50">
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {allAmountsAvailable.map((entry, index) => (
-                  <TableRow key={`full-amount-${index}`}>
-                    <TableCell>{new Date(entry.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(entry.amount_available)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          
-          <DialogFooter>
-            <Button onClick={() => setShowFullAmountHistory(false)}>
               Close
             </Button>
           </DialogFooter>
