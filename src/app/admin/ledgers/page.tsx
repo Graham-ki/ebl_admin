@@ -180,8 +180,8 @@ export default function LedgerPage() {
               </svg>
             </div>
             <div>
-              <CardTitle className="text-lg font-semibold text-gray-800">Accounts</CardTitle>
-              <p className="text-sm text-gray-600 mt-1">Track payments across accounts</p>
+              <CardTitle className="text-lg font-semibold text-gray-800">Deposits Record</CardTitle>
+              <p className="text-sm text-gray-600 mt-1">Record income from your sources</p>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
