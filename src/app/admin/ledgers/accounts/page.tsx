@@ -129,7 +129,7 @@ export default function FinancialSummaryPage() {
       amount_paid: amountPaid,
       mode_of_payment: modeOfPayment,
       amount_available: amountPaid,
-      submittedby: "You",
+      submittedby: "Admin",
       purpose: purpose
     };
 
