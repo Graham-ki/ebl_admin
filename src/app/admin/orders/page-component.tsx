@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, isSameDay, getYear } from 'date-fns';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 
@@ -53,6 +54,47 @@ export default function PageComponent({ ordersWithProducts }: Props) {
   const [customDate, setCustomDate] = useState<Date | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [showWarning, setShowWarning] = useState(true);
+  const [marketers, setMarketers] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [newOrder, setNewOrder] = useState({
+    user: '',
+    total_amount: '',
+    status: 'Approved'
+  });
+  const [newOrderItem, setNewOrderItem] = useState({
+    product: '',
+    quantity: '',
+    order: ''
+  });
+  const [showOrderForm, setShowOrderForm] = useState(false);
+  const [showOrderItemForm, setShowOrderItemForm] = useState(false);
+
+  useEffect(() => {
+    // Fetch marketers from users table
+    const fetchMarketers = async () => {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, email');
+      
+      if (!error && data) {
+        setMarketers(data);
+      }
+    };
+
+    // Fetch products from product table
+    const fetchProducts = async () => {
+      const { data, error } = await supabase
+        .from('product')
+        .select('id, title');
+      
+      if (!error && data) {
+        setProducts(data);
+      }
+    };
+
+    fetchMarketers();
+    fetchProducts();
+  }, []);
 
   const handleStatusChange = async (orderId: number, status: string) => {
     try {
@@ -139,6 +181,50 @@ export default function PageComponent({ ordersWithProducts }: Props) {
     }
   };
 
+  const handleCreateOrder = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('order')
+        .insert([{
+          user: newOrder.user,
+          total_amount: parseFloat(newOrder.total_amount),
+          status: newOrder.status,
+          created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setNewOrderItem(prev => ({ ...prev, order: data.id }));
+      setShowOrderForm(false);
+      setShowOrderItemForm(true);
+      alert('Order created successfully! Now add items to this order.');
+    } catch (error) {
+      console.error('Error creating order:', error);
+      alert('Error creating order. Please try again.');
+    }
+  };
+
+  const handleAddOrderItem = async () => {
+    try {
+      await supabase
+        .from('order_item')
+        .insert([{
+          product: newOrderItem.product,
+          order: newOrderItem.order,
+          quantity: parseInt(newOrderItem.quantity),
+          created_at: new Date().toISOString()
+        }]);
+
+      setNewOrderItem({ product: '', quantity: '', order: newOrderItem.order });
+      alert('Order item added successfully!');
+    } catch (error) {
+      console.error('Error adding order item:', error);
+      alert('Error adding order item. Please try again.');
+    }
+  };
+
   const filterOrders = (orders: OrdersWithProducts) => {
     const now = new Date();
     switch (filter) {
@@ -194,7 +280,7 @@ export default function PageComponent({ ordersWithProducts }: Props) {
 
       {/* Filter controls with better organization */}
       <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-3 items-center justify-between">
           <div className="flex items-center space-x-2">
             <span className="text-sm font-medium text-gray-600">Filter by:</span>
             <Select onValueChange={(value: 'all' | 'daily' | 'monthly' | 'yearly' | 'custom') => setFilter(value)}>
@@ -211,35 +297,170 @@ export default function PageComponent({ ordersWithProducts }: Props) {
             </Select>
           </div>
 
-          {filter === 'custom' && (
-            <div className="bg-white p-2 rounded-lg border border-gray-200">
-              <Calendar
-                onChange={(date: Date) => setCustomDate(date)}
-                value={customDate}
-                className="border-none"
-              />
-            </div>
-          )}
+          {/* Add Order Button */}
+          <Dialog open={showOrderForm} onOpenChange={setShowOrderForm}>
+            <DialogTrigger asChild>
+              <Button className="bg-blue-600 hover:bg-blue-700">
+                Add New Order
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="rounded-lg max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg">Create New Order</DialogTitle>
+              </DialogHeader>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Marketer</label>
+                  <Select 
+                    onValueChange={(value) => setNewOrder({...newOrder, user: value})}
+                    value={newOrder.user}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a marketer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {marketers.map((marketer) => (
+                        <SelectItem key={marketer.id} value={marketer.id}>
+                          {marketer.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          {filter === 'yearly' && (
-            <div className="flex items-center space-x-2">
-              <span className="text-sm font-medium text-gray-600">Year:</span>
-              <Select onValueChange={(value: string) => setSelectedYear(parseInt(value))}>
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue placeholder="Select Year" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount</label>
+                  <Input
+                    type="number"
+                    placeholder="Enter total amount"
+                    value={newOrder.total_amount}
+                    onChange={(e) => setNewOrder({...newOrder, total_amount: e.target.value})}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <Select 
+                    onValueChange={(value) => setNewOrder({...newOrder, status: value})}
+                    value={newOrder.status}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Approved">Approved</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowOrderForm(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleCreateOrder}
+                    disabled={!newOrder.user || !newOrder.total_amount}
+                  >
+                    Create Order
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {filter === 'custom' && (
+          <div className="bg-white p-2 rounded-lg border border-gray-200 mt-3">
+            <Calendar
+              onChange={(date: Date) => setCustomDate(date)}
+              value={customDate}
+              className="border-none"
+            />
+          </div>
+        )}
+
+        {filter === 'yearly' && (
+          <div className="flex items-center space-x-2 mt-3">
+            <span className="text-sm font-medium text-gray-600">Year:</span>
+            <Select onValueChange={(value: string) => setSelectedYear(parseInt(value))}>
+              <SelectTrigger className="w-[100px]">
+                <SelectValue placeholder="Select Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map(year => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+
+      {/* Order Items Dialog */}
+      <Dialog open={showOrderItemForm} onOpenChange={setShowOrderItemForm}>
+        <DialogContent className="rounded-lg max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Add Order Items</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
+              <Select 
+                onValueChange={(value) => setNewOrderItem({...newOrderItem, product: value})}
+                value={newOrderItem.product}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a product" />
                 </SelectTrigger>
                 <SelectContent>
-                  {years.map(year => (
-                    <SelectItem key={year} value={year.toString()}>
-                      {year}
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          )}
-        </div>
-      </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+              <Input
+                type="number"
+                placeholder="Enter quantity"
+                value={newOrderItem.quantity}
+                onChange={(e) => setNewOrderItem({...newOrderItem, quantity: e.target.value})}
+              />
+            </div>
+
+            <input 
+              type="hidden" 
+              value={newOrderItem.order} 
+              onChange={(e) => setNewOrderItem({...newOrderItem, order: e.target.value})}
+            />
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowOrderItemForm(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleAddOrderItem}
+                disabled={!newOrderItem.product || !newOrderItem.quantity}
+              >
+                Add Item
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Enhanced table with better visual hierarchy */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
