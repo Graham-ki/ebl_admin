@@ -40,6 +40,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const statusOptions = ['Pending', 'Approved', 'Cancelled', 'Completed', 'Balanced'];
 
+type OrderItem = {
+  product: string;
+  quantity: string;
+};
+
 type Props = {
   ordersWithProducts: OrdersWithProducts;
 };
@@ -61,13 +66,14 @@ export default function PageComponent({ ordersWithProducts }: Props) {
     total_amount: '',
     status: 'Approved'
   });
-  const [newOrderItem, setNewOrderItem] = useState({
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [currentOrderItem, setCurrentOrderItem] = useState<OrderItem>({
     product: '',
     quantity: '',
-    order: ''
   });
   const [showOrderForm, setShowOrderForm] = useState(false);
   const [showOrderItemForm, setShowOrderItemForm] = useState(false);
+  const [currentOrderId, setCurrentOrderId] = useState<string>('');
 
   useEffect(() => {
     // Fetch marketers from users table
@@ -196,7 +202,7 @@ export default function PageComponent({ ordersWithProducts }: Props) {
 
       if (error) throw error;
 
-      setNewOrderItem(prev => ({ ...prev, order: data.id }));
+      setCurrentOrderId(data.id);
       setShowOrderForm(false);
       setShowOrderItemForm(true);
       alert('Order created successfully! Now add items to this order.');
@@ -206,22 +212,49 @@ export default function PageComponent({ ordersWithProducts }: Props) {
     }
   };
 
-  const handleAddOrderItem = async () => {
-    try {
-      await supabase
-        .from('order_item')
-        .insert([{
-          product: newOrderItem.product,
-          order: newOrderItem.order,
-          quantity: parseInt(newOrderItem.quantity),
-          created_at: new Date().toISOString()
-        }]);
+  const addOrderItem = () => {
+    if (!currentOrderItem.product || !currentOrderItem.quantity) {
+      alert('Please select a product and enter quantity');
+      return;
+    }
 
-      setNewOrderItem({ product: '', quantity: '', order: newOrderItem.order });
-      alert('Order item added successfully!');
+    setOrderItems([...orderItems, currentOrderItem]);
+    setCurrentOrderItem({ product: '', quantity: '' });
+  };
+
+  const removeOrderItem = (index: number) => {
+    const updatedItems = [...orderItems];
+    updatedItems.splice(index, 1);
+    setOrderItems(updatedItems);
+  };
+
+  const handleAddOrderItems = async () => {
+    if (orderItems.length === 0) {
+      alert('Please add at least one order item');
+      return;
+    }
+
+    try {
+      const itemsToInsert = orderItems.map(item => ({
+        product: item.product,
+        order: currentOrderId,
+        quantity: parseInt(item.quantity),
+        created_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('order_item')
+        .insert(itemsToInsert);
+
+      if (error) throw error;
+
+      setOrderItems([]);
+      setShowOrderItemForm(false);
+      alert('Order items added successfully!');
+      window.location.reload();
     } catch (error) {
-      console.error('Error adding order item:', error);
-      alert('Error adding order item. Please try again.');
+      console.error('Error adding order items:', error);
+      alert('Error adding order items. Please try again.');
     }
   };
 
@@ -404,58 +437,95 @@ export default function PageComponent({ ordersWithProducts }: Props) {
 
       {/* Order Items Dialog */}
       <Dialog open={showOrderItemForm} onOpenChange={setShowOrderItemForm}>
-        <DialogContent className="rounded-lg max-w-md">
+        <DialogContent className="rounded-lg max-w-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg">Add Order Items</DialogTitle>
           </DialogHeader>
           <div className="mt-4 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
-              <Select 
-                onValueChange={(value) => setNewOrderItem({...newOrderItem, product: value})}
-                value={newOrderItem.product}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
+                <Select 
+                  onValueChange={(value) => setCurrentOrderItem({...currentOrderItem, product: value})}
+                  value={currentOrderItem.product}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a product" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                <Input
+                  type="number"
+                  placeholder="Enter quantity"
+                  value={currentOrderItem.quantity}
+                  onChange={(e) => setCurrentOrderItem({...currentOrderItem, quantity: e.target.value})}
+                />
+              </div>
+
+              <div className="flex items-end">
+                <Button 
+                  onClick={addOrderItem}
+                  disabled={!currentOrderItem.product || !currentOrderItem.quantity}
+                  className="w-full"
+                >
+                  Add Item
+                </Button>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-              <Input
-                type="number"
-                placeholder="Enter quantity"
-                value={newOrderItem.quantity}
-                onChange={(e) => setNewOrderItem({...newOrderItem, quantity: e.target.value})}
-              />
-            </div>
-
-            <input 
-              type="hidden" 
-              value={newOrderItem.order} 
-              onChange={(e) => setNewOrderItem({...newOrderItem, order: e.target.value})}
-            />
+            {/* List of added items */}
+            {orderItems.length > 0 && (
+              <div className="border rounded-lg p-4">
+                <h3 className="font-medium text-gray-900 mb-3">Order Items</h3>
+                <div className="space-y-2">
+                  {orderItems.map((item, index) => {
+                    const product = products.find(p => p.id === item.product);
+                    return (
+                      <div key={index} className="flex justify-between items-center border-b pb-2">
+                        <div>
+                          <p className="font-medium">{product?.title || 'Unknown Product'}</p>
+                          <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => removeOrderItem(index)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end space-x-2 pt-4">
               <Button 
                 variant="outline" 
-                onClick={() => setShowOrderItemForm(false)}
+                onClick={() => {
+                  setShowOrderItemForm(false);
+                  setOrderItems([]);
+                }}
               >
                 Cancel
               </Button>
               <Button 
-                onClick={handleAddOrderItem}
-                disabled={!newOrderItem.product || !newOrderItem.quantity}
+                onClick={handleAddOrderItems}
+                disabled={orderItems.length === 0}
               >
-                Add Item
+                Save All Items
               </Button>
             </div>
           </div>
@@ -469,12 +539,9 @@ export default function PageComponent({ ordersWithProducts }: Props) {
             <TableRow>
               <TableHead className="font-semibold text-gray-700">Date</TableHead>
               <TableHead className="font-semibold text-gray-700">Track ID</TableHead>
-              <TableHead className="font-semibold text-gray-700">Order ID</TableHead>
-              <TableHead className="font-semibold text-gray-700">Reception</TableHead>
               <TableHead className="font-semibold text-gray-700">Status</TableHead>
               <TableHead className="font-semibold text-gray-700">Marketer</TableHead>
-              <TableHead className="font-semibold text-gray-700">Products</TableHead>
-              <TableHead className="font-semibold text-gray-700">Proofs</TableHead>
+              <TableHead className="font-semibold text-gray-700">Order Items</TableHead>
               <TableHead className="font-semibold text-gray-700">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -485,8 +552,6 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                   {format(new Date(order.created_at), 'MMM dd, yyyy')}
                 </TableCell>
                 <TableCell className="font-medium text-gray-900">{order.id}</TableCell>
-                <TableCell className="text-gray-600">{order.slug}</TableCell>
-                <TableCell className="text-gray-600">{order.receiption_status}</TableCell>
                 <TableCell>
                   <Select
                     onValueChange={value => handleStatusChange(order.id, value)}
@@ -528,57 +593,6 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                 </TableCell>
 
                 {/* View Proofs Button */}
-                <TableCell>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewProofs(order.id)}
-                        className="text-blue-600 hover:bg-blue-50"
-                      >
-                        View Proofs
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl rounded-lg">
-                      <DialogHeader>
-                        <DialogTitle className="text-lg font-semibold">Payment Receipts</DialogTitle>
-                      </DialogHeader>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto p-2">
-                        {proofs.length > 0 ? (
-                          proofs.map(proof => (
-                            <div key={proof.id} className="border rounded-lg p-3">
-                              <Image
-                                src={proof.file_url}
-                                alt={`Proof of payment ${proof.id}`}
-                                width={300}
-                                height={200}
-                                className="rounded-md object-contain w-full h-auto"
-                              />
-                              <div className="mt-3 flex justify-between items-center">
-                                <span className="text-sm text-gray-500">ID: {proof.id}</span>
-                                <a 
-                                  href={proof.file_url} 
-                                  download 
-                                  className="text-sm text-blue-600 hover:underline flex items-center"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                  </svg>
-                                  Download
-                                </a>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="col-span-2 text-center py-8 text-gray-500">
-                            No payment proofs available for this order
-                          </div>
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </TableCell>
 
                 {/* Action Buttons */}
                 <TableCell>
@@ -597,7 +611,7 @@ export default function PageComponent({ ordersWithProducts }: Props) {
                           }
                           className="text-gray-700 hover:bg-gray-100"
                         >
-                          Products
+                          View Items
                         </Button>
                       </DialogTrigger>
                       <DialogContent className="rounded-lg max-w-md">
