@@ -35,7 +35,7 @@ export default function MarketersPage() {
       const { data: users, error: usersError } = await supabase
         .from("users")
         .select("id, name")
-        .eq("type", "USERS");
+        .eq("type", "USER");
       
       if (usersError) throw usersError;
 
