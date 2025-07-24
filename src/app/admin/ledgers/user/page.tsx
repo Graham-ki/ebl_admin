@@ -310,7 +310,7 @@ export default function MarketersPage() {
                   {payments.map((payment) => (
                     <TableRow key={payment.id}>
                       <TableCell>
-                        {new Date(payment.date).toLocaleDateString()}
+                        {new Date(payment.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
                         {payment.amount_paid.toLocaleString()}
