@@ -24,15 +24,18 @@ export default function MarketersPage() {
     date: new Date().toISOString().split('T')[0],
     amount: ""
   });
+  const [showOrdersDialog, setShowOrdersDialog] = useState(false);
+  const [showPaymentsDialog, setShowPaymentsDialog] = useState(false);
 
   // Fetch all marketers with their order counts
   const fetchMarketers = async () => {
     setLoading(true);
     try {
-      // First get all users
+      // First get all users with type 'USERS'
       const { data: users, error: usersError } = await supabase
         .from("users")
-        .select("id, name");
+        .select("id, name")
+        .eq("type", "USERS");
       
       if (usersError) throw usersError;
 
@@ -135,6 +138,18 @@ export default function MarketersPage() {
     fetchMarketers();
   }, []);
 
+  const handleViewOrders = (marketer: any) => {
+    setSelectedMarketer(marketer);
+    fetchOrders(marketer.id);
+    setShowOrdersDialog(true);
+  };
+
+  const handleViewPayments = (order: any) => {
+    setSelectedOrder(order);
+    fetchPayments(order.id);
+    setShowPaymentsDialog(true);
+  };
+
   return (
     <div className="container mx-auto p-4 md:p-6">
       <div className="mb-8">
@@ -171,185 +186,13 @@ export default function MarketersPage() {
                     <Badge variant="outline">{marketer.orderCount}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedMarketer(marketer);
-                            fetchOrders(marketer.id);
-                          }}
-                        >
-                          View Orders
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-4xl rounded-lg">
-                        <DialogHeader>
-                          <DialogTitle className="text-lg font-semibold">
-                            Orders for {marketer.name}
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="max-h-[60vh] overflow-y-auto">
-                          <Table>
-                            <TableHeader className="bg-gray-50">
-                              <TableRow>
-                                <TableHead className="font-semibold">Date</TableHead>
-                                <TableHead className="font-semibold">Total Amount</TableHead>
-                                <TableHead className="font-semibold">Status</TableHead>
-                                <TableHead className="font-semibold text-right">Actions</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {orders.map((order) => (
-                                <TableRow key={order.id}>
-                                  <TableCell>
-                                    {new Date(order.created_at).toLocaleDateString()}
-                                  </TableCell>
-                                  <TableCell>
-                                    {order.total_amount.toLocaleString()}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge
-                                      variant={
-                                        order.status === 'Approved' ? 'default' :
-                                        order.status === 'Pending' ? 'secondary' :
-                                        order.status === 'Cancelled' ? 'destructive' : 'outline'
-                                      }
-                                    >
-                                      {order.status}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    <Dialog>
-                                      <DialogTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            setSelectedOrder(order);
-                                            fetchPayments(order.id);
-                                          }}
-                                        >
-                                          View Payments
-                                        </Button>
-                                      </DialogTrigger>
-                                      <DialogContent className="max-w-2xl rounded-lg">
-                                        <DialogHeader>
-                                          <DialogTitle className="text-lg font-semibold">
-                                            Payments for Order #{order.id}
-                                          </DialogTitle>
-                                        </DialogHeader>
-                                        <div className="space-y-4">
-                                          <div className="grid grid-cols-3 gap-4 mb-4">
-                                            <div className="border rounded-lg p-3">
-                                              <p className="text-sm text-gray-500">Total Amount</p>
-                                              <p className="font-bold">{order.total_amount.toLocaleString()}</p>
-                                            </div>
-                                            <div className="border rounded-lg p-3">
-                                              <p className="text-sm text-gray-500">Amount Paid</p>
-                                              <p className="font-bold">{totalPaid.toLocaleString()}</p>
-                                            </div>
-                                            <div className="border rounded-lg p-3">
-                                              <p className="text-sm text-gray-500">Balance</p>
-                                              <p className={`font-bold ${
-                                                balance > 0 ? 'text-red-600' : 'text-green-600'
-                                              }`}>
-                                                {balance.toLocaleString()}
-                                              </p>
-                                            </div>
-                                          </div>
-
-                                          <h3 className="font-medium">Payment History</h3>
-                                          <div className="border rounded-lg overflow-hidden">
-                                            <Table>
-                                              <TableHeader className="bg-gray-50">
-                                                <TableRow>
-                                                  <TableHead>Date</TableHead>
-                                                  <TableHead>Amount</TableHead>
-                                                </TableRow>
-                                              </TableHeader>
-                                              <TableBody>
-                                                {payments.map((payment) => (
-                                                  <TableRow key={payment.id}>
-                                                    <TableCell>
-                                                      {new Date(payment.date).toLocaleDateString()}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                      {payment.amount_paid.toLocaleString()}
-                                                    </TableCell>
-                                                  </TableRow>
-                                                ))}
-                                                {payments.length === 0 && (
-                                                  <TableRow>
-                                                    <TableCell colSpan={2} className="text-center py-4 text-gray-500">
-                                                      No payments recorded
-                                                    </TableCell>
-                                                  </TableRow>
-                                                )}
-                                              </TableBody>
-                                            </Table>
-                                          </div>
-
-                                          <div className="border-t pt-4">
-                                            <h3 className="font-medium mb-3">Add New Payment</h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                              <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                  Date
-                                                </label>
-                                                <Input
-                                                  type="date"
-                                                  value={newPayment.date}
-                                                  onChange={(e) => setNewPayment({
-                                                    ...newPayment,
-                                                    date: e.target.value
-                                                  })}
-                                                />
-                                              </div>
-                                              <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                  Amount
-                                                </label>
-                                                <Input
-                                                  type="number"
-                                                  placeholder="Enter amount"
-                                                  value={newPayment.amount}
-                                                  onChange={(e) => setNewPayment({
-                                                    ...newPayment,
-                                                    amount: e.target.value
-                                                  })}
-                                                />
-                                              </div>
-                                              <div className="flex items-end">
-                                                <Button
-                                                  onClick={addPayment}
-                                                  className="w-full"
-                                                  disabled={!newPayment.amount}
-                                                >
-                                                  Add Payment
-                                                </Button>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </DialogContent>
-                                    </Dialog>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                              {orders.length === 0 && (
-                                <TableRow>
-                                  <TableCell colSpan={4} className="text-center py-8 text-gray-500">
-                                    No orders found for this marketer
-                                  </TableCell>
-                                </TableRow>
-                              )}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewOrders(marketer)}
+                    >
+                      View Orders
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -363,6 +206,172 @@ export default function MarketersPage() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Orders Dialog */}
+      <Dialog open={showOrdersDialog} onOpenChange={setShowOrdersDialog}>
+        <DialogContent className="max-w-4xl rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Orders for {selectedMarketer?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead className="font-semibold">Date</TableHead>
+                  <TableHead className="font-semibold">Total Amount</TableHead>
+                  <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orders.map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell>
+                      {new Date(order.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      {order.total_amount.toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          order.status === 'Approved' ? 'default' :
+                          order.status === 'Pending' ? 'secondary' :
+                          order.status === 'Cancelled' ? 'destructive' : 'outline'
+                        }
+                      >
+                        {order.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewPayments(order)}
+                      >
+                        View Payments
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {orders.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                      No orders found for this marketer
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payments Dialog */}
+      <Dialog open={showPaymentsDialog} onOpenChange={setShowPaymentsDialog}>
+        <DialogContent className="max-w-2xl rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Payments for Order #{selectedOrder?.id}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="border rounded-lg p-3">
+                <p className="text-sm text-gray-500">Total Amount</p>
+                <p className="font-bold">{selectedOrder?.total_amount.toLocaleString()}</p>
+              </div>
+              <div className="border rounded-lg p-3">
+                <p className="text-sm text-gray-500">Amount Paid</p>
+                <p className="font-bold">{totalPaid.toLocaleString()}</p>
+              </div>
+              <div className="border rounded-lg p-3">
+                <p className="text-sm text-gray-500">Balance</p>
+                <p className={`font-bold ${
+                  balance > 0 ? 'text-red-600' : 'text-green-600'
+                }`}>
+                  {balance.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <h3 className="font-medium">Payment History</h3>
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader className="bg-gray-50">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payments.map((payment) => (
+                    <TableRow key={payment.id}>
+                      <TableCell>
+                        {new Date(payment.date).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {payment.amount_paid.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {payments.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-center py-4 text-gray-500">
+                        No payments recorded
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="border-t pt-4">
+              <h3 className="font-medium mb-3">Add New Payment</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={newPayment.date}
+                    onChange={(e) => setNewPayment({
+                      ...newPayment,
+                      date: e.target.value
+                    })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Amount
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder="Enter amount"
+                    value={newPayment.amount}
+                    onChange={(e) => setNewPayment({
+                      ...newPayment,
+                      amount: e.target.value
+                    })}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    onClick={addPayment}
+                    className="w-full"
+                    disabled={!newPayment.amount}
+                  >
+                    Add Payment
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
