@@ -91,7 +91,7 @@ export default function MarketersPage() {
         .from("finance")
         .select("*")
         .eq("order_id", orderId)
-        .order("date", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       setPayments(data || []);
@@ -112,7 +112,7 @@ export default function MarketersPage() {
         .insert([{
           order_id: selectedOrder.id,
           amount_paid: parseFloat(newPayment.amount),
-          date: newPayment.date,
+          created_at: newPayment.date,
           user_id: selectedMarketer.id
         }]);
 
