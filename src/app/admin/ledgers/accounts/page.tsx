@@ -23,6 +23,7 @@ export default function FinancialSummaryPage() {
   const [modeOfMobileMoney, setModeOfMobileMoney] = useState("");
   const [bankName, setBankName] = useState("");
   const [purpose, setPurpose] = useState("");
+  const [name, setName] = useState(""); // Added name state
   const [financialSummary, setFinancialSummary] = useState<any>({
     cash: 0,
     bank: 0,
@@ -120,7 +121,7 @@ export default function FinancialSummaryPage() {
   };
 
   const handleDepositSubmit = async () => {
-    if (!amountPaid || !modeOfPayment || !purpose) {
+    if (!amountPaid || !modeOfPayment || !purpose || !name) { // Added name validation
       alert("Please fill in all required fields.");
       return;
     }
@@ -130,7 +131,8 @@ export default function FinancialSummaryPage() {
       mode_of_payment: modeOfPayment,
       amount_available: amountPaid,
       submittedby: "Admin",
-      purpose: purpose
+      purpose: purpose,
+      name: name // Added name to deposit data
     };
 
     if (modeOfPayment === "Mobile Money") {
@@ -153,6 +155,7 @@ export default function FinancialSummaryPage() {
     setModeOfMobileMoney("");
     setBankName("");
     setPurpose("");
+    setName(""); // Reset name field
     fetchAllLedgerEntries();
   };
 
@@ -188,7 +191,7 @@ export default function FinancialSummaryPage() {
     try {
       let query = supabase
         .from('finance')
-        .select('amount_paid, created_at, submittedby, purpose, bank_name, mode_of_mobilemoney')
+        .select('amount_paid, created_at, submittedby, purpose, bank_name, mode_of_mobilemoney, name') // Added name to query
         .eq('mode_of_payment', mode)
         .order('created_at', { ascending: false });
 
@@ -217,11 +220,12 @@ export default function FinancialSummaryPage() {
 
   const handleDownloadDetails = () => {
     const depositsCSV = [
-      ['Amount', 'Date', 'Submitted By', 'Purpose', 
+      ['Name', 'Amount', 'Date', 'Submitted By', 'Purpose', 
        currentDetailsMode === 'Bank' ? 'Bank Name' : '', 
        currentDetailsMode === 'Mobile Money' ? 'Provider' : '']
       .filter(Boolean).join(','),
       ...depositDetails.map(deposit => [
+        deposit.name,
         deposit.amount_paid,
         new Date(deposit.created_at).toLocaleDateString(),
         deposit.submittedby,
@@ -296,6 +300,7 @@ export default function FinancialSummaryPage() {
             <Table>
               <TableHeader className="bg-gray-50">
                 <TableRow>
+                  <TableHead className="font-medium">Name</TableHead>
                   <TableHead className="font-medium">Amount</TableHead>
                   <TableHead className="font-medium">Payment Method</TableHead>
                   <TableHead className="font-medium">Service Provider</TableHead>
@@ -309,6 +314,7 @@ export default function FinancialSummaryPage() {
                 {ledger.length > 0 ? (
                   ledger.map((entry) => (
                     <TableRow key={entry.id} className="hover:bg-gray-50">
+                      <TableCell>{entry.name || "-"}</TableCell>
                       <TableCell className="font-mono">{formatCurrency(entry.amount_paid)}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{entry.mode_of_payment}</Badge>
@@ -332,7 +338,7 @@ export default function FinancialSummaryPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                       No deposit records found
                     </TableCell>
                   </TableRow>
@@ -356,6 +362,16 @@ export default function FinancialSummaryPage() {
           </DialogHeader>
           
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <Input
+                type="text"
+                placeholder="Enter name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
               <Input
@@ -462,6 +478,7 @@ export default function FinancialSummaryPage() {
                     <Table>
                       <TableHeader className="bg-gray-50">
                         <TableRow>
+                          <TableHead>Name</TableHead>
                           <TableHead>Amount</TableHead>
                           <TableHead>Date</TableHead>
                           <TableHead>Submitted By</TableHead>
@@ -473,6 +490,7 @@ export default function FinancialSummaryPage() {
                       <TableBody>
                         {depositDetails.map((deposit, index) => (
                           <TableRow key={index}>
+                            <TableCell>{deposit.name}</TableCell>
                             <TableCell className="font-mono">{formatCurrency(deposit.amount_paid)}</TableCell>
                             <TableCell>{new Date(deposit.created_at).toLocaleDateString()}</TableCell>
                             <TableCell>{deposit.submittedby}</TableCell>
