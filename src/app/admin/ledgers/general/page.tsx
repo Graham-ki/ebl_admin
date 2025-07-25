@@ -17,8 +17,11 @@ const supabase = createClient(
 export default function CashFlowLedgerPage() {
   const [cashFlowData, setCashFlowData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all">("all");
+  const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all" | "custom">("all");
   const [users, setUsers] = useState<Record<string, string>>({});
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Fetch all users to map user IDs to names
   const fetchUsers = async () => {
@@ -41,28 +44,39 @@ export default function CashFlowLedgerPage() {
   };
 
   // Fetch and combine data from finance and expenses tables
-  const fetchCashFlowData = async (filterType: "daily" | "monthly" | "yearly" | "all") => {
+  const fetchCashFlowData = async (filterType: "daily" | "monthly" | "yearly" | "all" | "custom") => {
     setLoading(true);
     const now = new Date();
-    let startDate: Date | null = null;
-    let endDate: Date | null = null;
+    let queryStartDate: Date | null = null;
+    let queryEndDate: Date | null = null;
 
     switch (filterType) {
       case "daily":
-        startDate = new Date(now.setHours(0, 0, 0, 0));
-        endDate = new Date(now.setHours(23, 59, 59, 999));
+        queryStartDate = new Date(now.setHours(0, 0, 0, 0));
+        queryEndDate = new Date(now.setHours(23, 59, 59, 999));
         break;
       case "monthly":
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        queryStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        queryEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
         break;
       case "yearly":
-        startDate = new Date(now.getFullYear(), 0, 1);
-        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        queryStartDate = new Date(now.getFullYear(), 0, 1);
+        queryEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        break;
+      case "custom":
+        if (startDate && endDate) {
+          queryStartDate = new Date(startDate);
+          queryEndDate = new Date(endDate);
+          queryStartDate.setHours(0, 0, 0, 0);
+          queryEndDate.setHours(23, 59, 59, 999);
+        } else {
+          setLoading(false);
+          return;
+        }
         break;
       default:
-        startDate = null;
-        endDate = null;
+        queryStartDate = null;
+        queryEndDate = null;
         break;
     }
 
@@ -78,10 +92,10 @@ export default function CashFlowLedgerPage() {
           user_id
         `);
 
-      if (startDate && endDate) {
+      if (queryStartDate && queryEndDate) {
         inflowsQuery = inflowsQuery
-          .gte("created_at", startDate.toISOString())
-          .lte("created_at", endDate.toISOString());
+          .gte("created_at", queryStartDate.toISOString())
+          .lte("created_at", queryEndDate.toISOString());
       }
 
       const { data: inflows, error: inflowsError } = await inflowsQuery;
@@ -99,10 +113,10 @@ export default function CashFlowLedgerPage() {
           department
         `);
 
-      if (startDate && endDate) {
+      if (queryStartDate && queryEndDate) {
         outflowsQuery = outflowsQuery
-          .gte("date", startDate.toISOString())
-          .lte("date", endDate.toISOString());
+          .gte("date", queryStartDate.toISOString())
+          .lte("date", queryEndDate.toISOString());
       }
 
       const { data: outflows, error: outflowsError } = await outflowsQuery;
@@ -168,6 +182,62 @@ export default function CashFlowLedgerPage() {
     return date.toLocaleDateString() + " " + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
   };
 
+  const handleDownloadCSV = () => {
+    if (cashFlowData.length === 0) {
+      alert("No data to download");
+      return;
+    }
+
+    const headers = [
+      "Date",
+      "Name",
+      "Reason",
+      "Inflow (Debit)",
+      "Outflow (Credit)",
+      "Balance",
+      "Type"
+    ];
+
+    const rows = cashFlowData.map(item => [
+      formatDate(item.date),
+      item.name,
+      item.reason,
+      item.inflow || "",
+      item.outflow || "",
+      item.balance,
+      item.type === "inflow" ? "Inflow" : "Outflow"
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `cash_flow_${filter}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const applyCustomDateFilter = () => {
+    if (!startDate || !endDate) {
+      alert("Please select both start and end dates");
+      return;
+    }
+    if (new Date(startDate) > new Date(endDate)) {
+      alert("Start date cannot be after end date");
+      return;
+    }
+    setFilter("custom");
+    setShowDatePicker(false);
+    fetchCashFlowData("custom");
+  };
+
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -190,8 +260,13 @@ export default function CashFlowLedgerPage() {
       </div>
 
       {/* Filter Controls */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        <Select onValueChange={(value) => setFilter(value as any)} value={filter}>
+      <div className="flex flex-wrap gap-2 mb-6 items-center">
+        <Select onValueChange={(value) => {
+          setFilter(value as any);
+          if (value !== "custom") {
+            setShowDatePicker(false);
+          }
+        }} value={filter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Select time period" />
           </SelectTrigger>
@@ -200,8 +275,47 @@ export default function CashFlowLedgerPage() {
             <SelectItem value="daily">Today</SelectItem>
             <SelectItem value="monthly">This Month</SelectItem>
             <SelectItem value="yearly">This Year</SelectItem>
+            <SelectItem value="custom">Custom Date Range</SelectItem>
           </SelectContent>
         </Select>
+
+        {filter === "custom" && (
+          <div className="flex flex-col md:flex-row gap-2">
+            <div className="flex items-center gap-2">
+              <label className="text-sm">From:</label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-[150px]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm">To:</label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-[150px]"
+              />
+            </div>
+            <Button 
+              onClick={applyCustomDateFilter}
+              disabled={!startDate || !endDate}
+            >
+              Apply
+            </Button>
+          </div>
+        )}
+
+        <Button 
+          variant="outline" 
+          onClick={handleDownloadCSV}
+          className="ml-auto"
+          disabled={cashFlowData.length === 0}
+        >
+          Download CSV
+        </Button>
       </div>
 
       {/* Cash Flow Table */}
