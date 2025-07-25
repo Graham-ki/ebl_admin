@@ -144,14 +144,15 @@ export default function CashFlowLedgerPage() {
         type: "outflow"
       }));
 
-      // Combine and sort by date
+      // Combine and sort by date (newest first)
       const combinedData = [...transformedInflows, ...transformedOutflows].sort((a, b) => 
         new Date(b.date).getTime() - new Date(a.date).getTime()
       );
 
-      // Calculate running balance
+      // Calculate running balance (starting from the oldest record)
+      const reversedForBalance = [...combinedData].reverse();
       let balance = 0;
-      const dataWithBalance = combinedData.map(item => {
+      const dataWithBalance = reversedForBalance.map(item => {
         if (item.type === "inflow") {
           balance += item.inflow || 0;
         } else {
@@ -160,7 +161,8 @@ export default function CashFlowLedgerPage() {
         return { ...item, balance };
       });
 
-      setCashFlowData(dataWithBalance);
+      // Reverse back to maintain newest-first order
+      setCashFlowData(dataWithBalance.reverse());
     } catch (error) {
       console.error("Error fetching cash flow data:", error);
     } finally {
@@ -388,7 +390,7 @@ export default function CashFlowLedgerPage() {
             </p>
           </div>
           <div className={`border rounded-lg p-4 ${
-            cashFlowData[cashFlowData.length - 1]?.balance >= 0 
+            cashFlowData[0]?.balance >= 0 
               ? "bg-blue-50 border-blue-200" 
               : "bg-orange-50 border-orange-200"
           }`}>
@@ -396,7 +398,7 @@ export default function CashFlowLedgerPage() {
               Current Balance
             </h3>
             <p className="text-xl font-mono font-bold">
-              {formatCurrency(cashFlowData[cashFlowData.length - 1]?.balance || 0)}
+              {formatCurrency(cashFlowData[0]?.balance || 0)}
             </p>
           </div>
         </div>
