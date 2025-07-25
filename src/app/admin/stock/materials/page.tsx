@@ -339,7 +339,6 @@ const MaterialsPage = () => {
           <TableHeader>
             <TableRow className="bg-blue-50">
               <TableHead className="text-center">Name</TableHead>
-              <TableHead className="text-center">Unit Cost(UGX)</TableHead>
               <TableHead className="text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -348,7 +347,6 @@ const MaterialsPage = () => {
               materials.map((material) => (
                 <TableRow key={material.id}>
                   <TableCell className="text-center">{material.name}</TableCell>
-                  <TableCell className="text-center">{material.cost}</TableCell>
                   <TableCell className="text-center flex justify-center gap-2">
                     <Button size="sm" onClick={() => handleViewDetails(material)}>📄 Details</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleEditMaterial(material)}>✏️ Edit</Button>
@@ -373,7 +371,6 @@ const MaterialsPage = () => {
           </DialogHeader>
           <div className="space-y-4">
             <Input placeholder="Material Name" value={newMaterial.name} onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })} />
-            <Input placeholder="Unit Cost" value={newMaterial.cost} onChange={(e) => setNewMaterial({ ...newMaterial, cost: e.target.value })} />
             <Input type="number" placeholder="Amount Available" value={newMaterial.amount_available || ""} onChange={(e) => setNewMaterial({ ...newMaterial, amount_available: parseFloat(e.target.value) })} />
             <Input type="number" placeholder="Unit Per Box" value={newMaterial.unit || ""} onChange={(e) => setNewMaterial({ ...newMaterial, unit: parseFloat(e.target.value) })} />
           </div>
