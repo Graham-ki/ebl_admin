@@ -250,14 +250,15 @@ export default function CashFlowLedgerPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-          Cash Flow Ledger
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300">
-          Track all cash inflows and outflows with running balance
-        </p>
-      </div>
+      <div className="mb-8 text-center mx-auto">
+  <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+    General ledger
+  </h1>
+  <p className="text-gray-600 dark:text-gray-300">
+    Track all cash inflows and outflows with running balance
+  </p>
+</div>
+
 
       {/* Filter Controls */}
       <div className="flex flex-wrap gap-2 mb-6 items-center">
