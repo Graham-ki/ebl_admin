@@ -21,8 +21,8 @@ interface SupplyItem {
   id: string;
   supplier_id: string;
   name: string;
-  quantity: number; // Total ordered quantity
-  price: number; // Unit price
+  quantity: number;
+  price: number;
   created_at: string;
 }
 
@@ -44,6 +44,17 @@ interface Payment {
   reference?: string;
   created_at: string;
 }
+
+type Transaction = {
+  id: string;
+  type: 'delivery' | 'payment';
+  date: string;
+  quantity?: number;
+  amount?: number;
+  method?: string;
+  reference?: string;
+  notes?: string;
+};
 
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -90,6 +101,7 @@ export default function Suppliers() {
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [showTransactionsModal, setShowTransactionsModal] = useState(false);
 
   // Helper functions
   const getSupplierItems = (supplierId: string) => {
@@ -104,6 +116,27 @@ export default function Suppliers() {
   const getItemPayments = (itemId: string) => {
     return payments.filter(p => p.supply_item_id === itemId)
                   .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
+  };
+
+  const getCombinedTransactions = (itemId: string): Transaction[] => {
+    const deliveries = getItemDeliveries(itemId).map(d => ({
+      id: d.id,
+      type: 'delivery' as const,
+      date: d.delivery_date,
+      quantity: d.quantity,
+      notes: d.notes,
+    }));
+
+    const payments = getItemPayments(itemId).map(p => ({
+      id: p.id,
+      type: 'payment' as const,
+      date: p.payment_date,
+      amount: p.amount,
+      method: p.method,
+      reference: p.reference,
+    }));
+
+    return [...deliveries, ...payments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
   const getTotalDelivered = (itemId: string) => {
@@ -267,6 +300,37 @@ export default function Suppliers() {
     setError(null);
     
     try {
+      // First delete all items and their related records
+      const { data: items, error: itemsError } = await supabase
+        .from('supply_items')
+        .select('id')
+        .eq('supplier_id', id);
+
+      if (itemsError) throw itemsError;
+
+      if (items && items.length > 0) {
+        const itemIds = items.map(item => item.id);
+        
+        // Delete deliveries
+        await supabase
+          .from('deliveries')
+          .delete()
+          .in('supply_item_id', itemIds);
+
+        // Delete payments
+        await supabase
+          .from('payments')
+          .delete()
+          .in('supply_item_id', itemIds);
+
+        // Delete items
+        await supabase
+          .from('supply_items')
+          .delete()
+          .in('id', itemIds);
+      }
+
+      // Finally delete the supplier
       const { error } = await supabase
         .from('suppliers')
         .delete()
@@ -285,6 +349,18 @@ export default function Suppliers() {
     setError(null);
     
     try {
+      // First delete related records
+      await supabase
+        .from('deliveries')
+        .delete()
+        .eq('supply_item_id', id);
+
+      await supabase
+        .from('payments')
+        .delete()
+        .eq('supply_item_id', id);
+
+      // Then delete the item
       const { error } = await supabase
         .from('supply_items')
         .delete()
@@ -652,6 +728,15 @@ export default function Suppliers() {
                                 <button
                                   onClick={() => {
                                     setSelectedItem(item);
+                                    setShowTransactionsModal(true);
+                                  }}
+                                  className="text-purple-600 hover:text-purple-900"
+                                >
+                                  History
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedItem(item);
                                     setShowDeliveryForm(true);
                                   }}
                                   className="text-green-600 hover:text-green-900"
@@ -686,6 +771,83 @@ export default function Suppliers() {
                     </tbody>
                   </table>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transactions History Modal */}
+      {showTransactionsModal && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="p-6 flex-shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Transaction History for {selectedItem.name}
+                </h3>
+                <button 
+                  onClick={() => setShowTransactionsModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="overflow-y-auto max-h-[70vh]">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Quantity
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Amount
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Method/Notes
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {getCombinedTransactions(selectedItem.id).map((txn) => (
+                      <tr key={`${txn.type}-${txn.id}`}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            txn.type === 'delivery' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {txn.type === 'delivery' ? 'Delivery' : 'Payment'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(txn.date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {txn.type === 'delivery' ? txn.quantity : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {txn.type === 'payment' ? formatCurrency(txn.amount || 0) : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {txn.type === 'payment' ? (
+                            <div>
+                              <div className="font-medium">{txn.method}</div>
+                              {txn.reference && <div className="text-xs">Ref: {txn.reference}</div>}
+                            </div>
+                          ) : (
+                            txn.notes || '-'
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
