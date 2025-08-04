@@ -26,7 +26,6 @@ const NAV_LINKS = [
   { href: '/admin/users', label: 'Marketers', icon: <CircleUser className="h-4 w-4" /> },
   { href: '/admin/employees', label: 'Employees', icon: <CircleUser className="h-4 w-4" /> },
   { href: '/admin/suppliers', label: 'Suppliers', icon: <CircleUser className="h-4 w-4" /> },
-  { href: '/admin/orders', label: 'Orders', icon: <Package2 className="h-4 w-4" /> },
   { href: '/admin/ledgers', label: 'Finances', icon: <Package2 className="h-4 w-4" /> },
   { href: '/admin/analytics', label: 'Analytics', icon: <Package2 className="h-4 w-4" /> },
 ];
