@@ -22,6 +22,8 @@ interface SupplyItem {
   supplier_id: string;
   name: string;
   quantity: number;
+  quantity_delivered: number;
+  quantity_pending: number;
   price: number;
   total_cost: number;
   amount_paid: number;
@@ -37,10 +39,11 @@ export default function Suppliers() {
     contact: "",
     address: "",
   });
-  const [itemFormData, setItemFormData] = useState<Omit<SupplyItem, "id" | "total_cost" | "balance">>({
+  const [itemFormData, setItemFormData] = useState<Omit<SupplyItem, "id" | "total_cost" | "balance" | "quantity_pending">>({
     supplier_id: "",
     name: "",
     quantity: 0,
+    quantity_delivered: 0,
     price: 0,
     amount_paid: 0,
     purchase_date: new Date().toISOString().split('T')[0],
@@ -93,9 +96,10 @@ export default function Suppliers() {
     if (itemFormData.quantity && itemFormData.price) {
       const total = itemFormData.quantity * itemFormData.price;
       const balance = total - (itemFormData.amount_paid || 0);
-      setItemFormData(prev => ({ ...prev, total_cost: total, balance }));
+      const pending = itemFormData.quantity - (itemFormData.quantity_delivered || 0);
+      setItemFormData(prev => ({ ...prev, total_cost: total, balance, quantity_pending: pending }));
     }
-  }, [itemFormData.quantity, itemFormData.price, itemFormData.amount_paid]);
+  }, [itemFormData.quantity, itemFormData.price, itemFormData.amount_paid, itemFormData.quantity_delivered]);
 
   const fetchSupplierItems = async (supplierId: string) => {
     try {
@@ -122,7 +126,9 @@ export default function Suppliers() {
     const { name, value } = e.target;
     setItemFormData(prev => ({ 
       ...prev, 
-      [name]: name === 'quantity' || name === 'price' || name === 'amount_paid' ? Number(value) : value 
+      [name]: name === 'quantity' || name === 'quantity_delivered' || name === 'price' || name === 'amount_paid' 
+        ? Number(value) 
+        : value 
     }));
   };
 
@@ -174,12 +180,14 @@ export default function Suppliers() {
       
       const total_cost = itemFormData.quantity * itemFormData.price;
       const balance = total_cost - itemFormData.amount_paid;
+      const quantity_pending = itemFormData.quantity - itemFormData.quantity_delivered;
 
       const itemData = {
         ...itemFormData,
         supplier_id: selectedSupplier.id,
         total_cost,
-        balance
+        balance,
+        quantity_pending
       };
 
       if (isItemEditMode && selectedItem) {
@@ -314,6 +322,7 @@ export default function Suppliers() {
       supplier_id: item.supplier_id,
       name: item.name,
       quantity: item.quantity,
+      quantity_delivered: item.quantity_delivered,
       price: item.price,
       amount_paid: item.amount_paid,
       purchase_date: item.purchase_date || new Date().toISOString().split('T')[0],
@@ -340,6 +349,7 @@ export default function Suppliers() {
       supplier_id: "",
       name: "",
       quantity: 0,
+      quantity_delivered: 0,
       price: 0,
       amount_paid: 0,
       purchase_date: new Date().toISOString().split('T')[0],
@@ -590,7 +600,13 @@ export default function Suppliers() {
                           Item
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Qty
+                          Qty Ordered
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Qty Delivered
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Qty Pending
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Unit Price
@@ -620,6 +636,14 @@ export default function Suppliers() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {item.quantity}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {item.quantity_delivered}
+                          </td>
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                            item.quantity_pending > 0 ? 'text-yellow-600' : 'text-green-600'
+                          }`}>
+                            {item.quantity_pending}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {formatCurrency(item.price)}
@@ -672,7 +696,7 @@ export default function Suppliers() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  {isItemEditMode ? 'Edit Item' : 'Add  Item'}
+                  {isItemEditMode ? 'Edit Item' : 'Add Item'}
                 </h3>
                 <button 
                   onClick={resetItemForm}
@@ -732,10 +756,10 @@ export default function Suppliers() {
                   )}
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Quantity
+                      Quantity Ordered
                     </label>
                     <input
                       type="number"
@@ -744,6 +768,21 @@ export default function Suppliers() {
                       onChange={handleItemInputChange}
                       required
                       min="1"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantity Delivered
+                    </label>
+                    <input
+                      type="number"
+                      name="quantity_delivered"
+                      value={itemFormData.quantity_delivered}
+                      onChange={handleItemInputChange}
+                      required
+                      min="0"
+                      max={itemFormData.quantity}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
@@ -765,11 +804,23 @@ export default function Suppliers() {
                 </div>
 
                 <div className="bg-blue-50 p-3 rounded-lg">
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm font-medium">Total Cost:</span>
-                    <span className="font-medium">
-                      {formatCurrency((itemFormData.quantity || 0) * (itemFormData.price || 0))}
-                    </span>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <span className="text-sm font-medium">Total Cost:</span>
+                      <div className="font-medium">
+                        {formatCurrency((itemFormData.quantity || 0) * (itemFormData.price || 0))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Pending Delivery:</span>
+                      <div className={`font-medium ${
+                        (itemFormData.quantity - itemFormData.quantity_delivered) > 0 
+                          ? 'text-yellow-600' 
+                          : 'text-green-600'
+                      }`}>
+                        {itemFormData.quantity - itemFormData.quantity_delivered}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
