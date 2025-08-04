@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,6 +22,7 @@ const supabase = createClient(
 
 export default function MarketersPage() {
   const [marketers, setMarketers] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedMarketer, setSelectedMarketer] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
@@ -68,6 +76,24 @@ export default function MarketersPage() {
       setMarketers(marketersWithCounts);
     } catch (error) {
       console.error("Error fetching marketers:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch all products
+  const fetchProducts = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("product")
+        .select("title")
+        .order("title", { ascending: true });
+
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error("Error fetching products:", error);
     } finally {
       setLoading(false);
     }
@@ -247,6 +273,7 @@ export default function MarketersPage() {
 
   useEffect(() => {
     fetchMarketers();
+    fetchProducts();
   }, []);
 
   const handleViewOrders = (marketer: any) => {
@@ -423,15 +450,24 @@ export default function MarketersPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Item
               </label>
-              <Input
-                type="text"
-                placeholder="Enter item name"
+              <Select
                 value={newOrder.item}
-                onChange={(e) => setNewOrder({
+                onValueChange={(value) => setNewOrder({
                   ...newOrder,
-                  item: e.target.value
+                  item: value
                 })}
-              />
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an item" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.map((product) => (
+                    <SelectItem key={product.title} value={product.title}>
+                      {product.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
