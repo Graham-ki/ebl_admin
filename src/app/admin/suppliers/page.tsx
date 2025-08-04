@@ -732,7 +732,7 @@ export default function Suppliers() {
                                   }}
                                   className="text-purple-600 hover:text-purple-900"
                                 >
-                                  History
+                                  View Details
                                 </button>
                                 <button
                                   onClick={() => {
@@ -741,7 +741,7 @@ export default function Suppliers() {
                                   }}
                                   className="text-green-600 hover:text-green-900"
                                 >
-                                  Deliver
+                                  Record Delivery
                                 </button>
                                 <button
                                   onClick={() => {
@@ -755,7 +755,7 @@ export default function Suppliers() {
                                   }}
                                   className="text-blue-600 hover:text-blue-900"
                                 >
-                                  Pay
+                                  Record Payment
                                 </button>
                                 <button
                                   onClick={() => handleDeleteItem(item.id)}
