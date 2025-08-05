@@ -29,9 +29,13 @@ export default function MarketersPage() {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
   const [newPayment, setNewPayment] = useState({
     date: new Date().toISOString().split('T')[0],
-    amount: ""
+    amount: "",
+    mode_of_payment: "",
+    bank_name: "",
+    mobile_money_provider: ""
   });
   const [newOrder, setNewOrder] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -39,10 +43,16 @@ export default function MarketersPage() {
     quantity: "",
     cost: ""
   });
+  const [newExpense, setNewExpense] = useState({
+    date: new Date().toISOString().split('T')[0],
+    item: "",
+    amount: ""
+  });
   const [showOrdersDialog, setShowOrdersDialog] = useState(false);
   const [showPaymentsDialog, setShowPaymentsDialog] = useState(false);
   const [showAddOrderDialog, setShowAddOrderDialog] = useState(false);
   const [showLedgerDialog, setShowLedgerDialog] = useState(false);
+  const [showExpenseDialog, setShowExpenseDialog] = useState(false);
 
   // Fetch all marketers with their order counts
   const fetchMarketers = async () => {
@@ -137,7 +147,26 @@ export default function MarketersPage() {
     }
   };
 
-  // Fetch all transactions (orders + payments) for a marketer
+  // Fetch expenses for a specific marketer
+  const fetchExpenses = async (userId: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("department", userId)
+        .order("date", { ascending: false });
+
+      if (error) throw error;
+      setExpenses(data || []);
+    } catch (error) {
+      console.error("Error fetching expenses:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch all transactions (orders + payments + expenses) for a marketer
   const fetchTransactions = async (userId: string) => {
     setLoading(true);
     try {
@@ -159,6 +188,15 @@ export default function MarketersPage() {
 
       if (paymentsError) throw paymentsError;
 
+      // Get all expenses for the marketer
+      const { data: expensesData, error: expensesError } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("department", userId)
+        .order("date", { ascending: false });
+
+      if (expensesError) throw expensesError;
+
       // Combine and sort all transactions by date
       const allTransactions = [
         ...(ordersData?.map(order => ({
@@ -169,7 +207,8 @@ export default function MarketersPage() {
           quantity: order.quantity,
           unit_price: order.cost,
           amount: order.quantity * order.cost,
-          payment: 0
+          payment: 0,
+          expense: 0
         })) || []),
         ...(paymentsData?.map(payment => ({
           type: 'payment',
@@ -178,21 +217,41 @@ export default function MarketersPage() {
           order_id: payment.order_id,
           amount: 0,
           payment: payment.amount_paid,
-          item: 'Payment'
+          expense: 0,
+          item: `Payment (${payment.mode_of_payment})`,
+          mode_of_payment: payment.mode_of_payment,
+          bank_name: payment.bank_name,
+          mobile_money_provider: payment.mode_of_mobilemoney
+        })) || []),
+        ...(expensesData?.map(expense => ({
+          type: 'expense',
+          id: expense.id,
+          date: expense.date,
+          item: expense.item,
+          amount: 0,
+          payment: 0,
+          expense: expense.amount_spent,
+          description: `Expense: ${expense.item}`
         })) || [])
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      // Calculate running balance
-      let balance = 0;
+      // Calculate running balances
+      let orderBalance = 0;
+      let netBalance = 0;
       const transactionsWithBalance = allTransactions.map(transaction => {
         if (transaction.type === 'order') {
-          balance += transaction.amount;
-        } else {
-          balance -= transaction.payment;
+          orderBalance += transaction.amount;
+          netBalance += transaction.amount;
+        } else if (transaction.type === 'payment') {
+          orderBalance -= transaction.payment;
+          netBalance -= transaction.payment;
+        } else if (transaction.type === 'expense') {
+          netBalance += transaction.expense;
         }
         return {
           ...transaction,
-          balance
+          order_balance: orderBalance,
+          net_balance: netBalance
         };
       });
 
@@ -206,17 +265,26 @@ export default function MarketersPage() {
 
   // Add a new payment
   const addPayment = async () => {
-    if (!selectedOrder || !newPayment.amount) return;
+    if (!selectedOrder || !newPayment.amount || !newPayment.mode_of_payment) return;
 
     try {
+      const paymentData: any = {
+        order_id: selectedOrder.id,
+        amount_paid: parseFloat(newPayment.amount),
+        created_at: newPayment.date,
+        user_id: selectedMarketer.id,
+        mode_of_payment: newPayment.mode_of_payment
+      };
+
+      if (newPayment.mode_of_payment === 'Bank') {
+        paymentData.bank_name = newPayment.bank_name;
+      } else if (newPayment.mode_of_payment === 'Mobile Money') {
+        paymentData.mode_of_mobilemoney = newPayment.mobile_money_provider;
+      }
+
       const { data, error } = await supabase
         .from("finance")
-        .insert([{
-          order_id: selectedOrder.id,
-          amount_paid: parseFloat(newPayment.amount),
-          created_at: newPayment.date,
-          user_id: selectedMarketer.id
-        }]);
+        .insert([paymentData]);
 
       if (error) throw error;
       
@@ -226,7 +294,10 @@ export default function MarketersPage() {
       // Reset form
       setNewPayment({
         date: new Date().toISOString().split('T')[0],
-        amount: ""
+        amount: "",
+        mode_of_payment: "",
+        bank_name: "",
+        mobile_money_provider: ""
       });
     } catch (error) {
       console.error("Error adding payment:", error);
@@ -267,9 +338,86 @@ export default function MarketersPage() {
     }
   };
 
+  // Add a new expense
+  const addExpense = async () => {
+    if (!selectedMarketer || !newExpense.item || !newExpense.amount) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("expenses")
+        .insert([{
+          date: newExpense.date,
+          item: newExpense.item,
+          amount_spent: parseFloat(newExpense.amount),
+          department: selectedMarketer.id
+        }]);
+
+      if (error) throw error;
+      
+      // Refresh expenses and transactions
+      await fetchExpenses(selectedMarketer.id);
+      await fetchTransactions(selectedMarketer.id);
+      // Reset form
+      setNewExpense({
+        date: new Date().toISOString().split('T')[0],
+        item: "",
+        amount: ""
+      });
+      setShowExpenseDialog(false);
+    } catch (error) {
+      console.error("Error adding expense:", error);
+    }
+  };
+
+  // Download ledger as CSV
+  const downloadLedger = () => {
+    if (transactions.length === 0) return;
+
+    const headers = [
+      "Date",
+      "Type",
+      "Description",
+      "Quantity",
+      "Unit Price",
+      "Order Amount",
+      "Payment",
+      "Expense",
+      "Order Balance",
+      "Net Balance"
+    ];
+
+    const csvRows = [
+      headers.join(","),
+      ...transactions.map(t => [
+        new Date(t.date).toLocaleDateString(),
+        t.type,
+        t.item,
+        t.type === 'order' ? t.quantity : '',
+        t.type === 'order' ? t.unit_price : '',
+        t.type === 'order' ? t.amount : '',
+        t.type === 'payment' ? t.payment : '',
+        t.type === 'expense' ? t.expense : '',
+        t.order_balance,
+        t.net_balance
+      ].map(v => `"${v}"`).join(","))
+    ];
+
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `ledger_${selectedMarketer.name}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Calculate total paid amount
   const totalPaid = payments.reduce((sum, payment) => sum + payment.amount_paid, 0);
   const balance = selectedOrder ? selectedOrder.total_amount - totalPaid : 0;
+  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount_spent, 0);
 
   useEffect(() => {
     fetchMarketers();
@@ -279,6 +427,7 @@ export default function MarketersPage() {
   const handleViewOrders = (marketer: any) => {
     setSelectedMarketer(marketer);
     fetchOrders(marketer.id);
+    fetchExpenses(marketer.id);
     fetchTransactions(marketer.id);
     setShowOrdersDialog(true);
   };
@@ -359,14 +508,20 @@ export default function MarketersPage() {
               Orders for {selectedMarketer?.name}
             </DialogTitle>
           </DialogHeader>
-          <div className="flex justify-end mb-4">
+          <div className="flex justify-end mb-4 space-x-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowAddOrderDialog(true)}
-              className="mr-2"
             >
               Add New Order
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowExpenseDialog(true)}
+            >
+              Record Expense
             </Button>
             <Button
               variant="outline"
@@ -506,6 +661,65 @@ export default function MarketersPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Add Expense Dialog */}
+      <Dialog open={showExpenseDialog} onOpenChange={setShowExpenseDialog}>
+        <DialogContent className="max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Record Expense for {selectedMarketer?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date
+              </label>
+              <Input
+                type="date"
+                value={newExpense.date}
+                onChange={(e) => setNewExpense({
+                  ...newExpense,
+                  date: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Item
+              </label>
+              <Input
+                type="text"
+                placeholder="Enter expense item"
+                value={newExpense.item}
+                onChange={(e) => setNewExpense({
+                  ...newExpense,
+                  item: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Amount
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter amount"
+                value={newExpense.amount}
+                onChange={(e) => setNewExpense({
+                  ...newExpense,
+                  amount: e.target.value
+                })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={addExpense} disabled={!newExpense.item || !newExpense.amount}>
+              Record Expense
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* General Ledger Dialog */}
       <Dialog open={showLedgerDialog} onOpenChange={setShowLedgerDialog}>
         <DialogContent className="max-w-6xl rounded-lg">
@@ -514,6 +728,15 @@ export default function MarketersPage() {
               General Ledger for {selectedMarketer?.name}
             </DialogTitle>
           </DialogHeader>
+          <div className="flex justify-end mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={downloadLedger}
+            >
+              Download as CSV
+            </Button>
+          </div>
           <div className="max-h-[70vh] overflow-y-auto">
             <Table>
               <TableHeader className="bg-gray-50">
@@ -524,7 +747,9 @@ export default function MarketersPage() {
                   <TableHead className="font-semibold text-right">Unit Price</TableHead>
                   <TableHead className="font-semibold text-right">Order Amount</TableHead>
                   <TableHead className="font-semibold text-right">Payment</TableHead>
-                  <TableHead className="font-semibold text-right">Balance</TableHead>
+                  <TableHead className="font-semibold text-right">Expense</TableHead>
+                  <TableHead className="font-semibold text-right">Order Balance</TableHead>
+                  <TableHead className="font-semibold text-right">Net Balance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -536,7 +761,11 @@ export default function MarketersPage() {
                     <TableCell>
                       {transaction.type === 'order' ? 
                         `${transaction.item} (Order #${transaction.id})` : 
-                        `Payment for Order #${transaction.order_id}`}
+                        transaction.type === 'payment' ?
+                        `Payment (${transaction.mode_of_payment})` :
+                        `Expense: ${transaction.item}`}
+                      {transaction.bank_name && ` - ${transaction.bank_name}`}
+                      {transaction.mobile_money_provider && ` - ${transaction.mobile_money_provider}`}
                     </TableCell>
                     <TableCell className="text-right">
                       {transaction.type === 'order' ? transaction.quantity : '-'}
@@ -550,16 +779,24 @@ export default function MarketersPage() {
                     <TableCell className="text-right">
                       {transaction.type === 'payment' ? transaction.payment.toLocaleString() : '-'}
                     </TableCell>
+                    <TableCell className="text-right">
+                      {transaction.type === 'expense' ? transaction.expense.toLocaleString() : '-'}
+                    </TableCell>
                     <TableCell className={`text-right font-medium ${
-                      transaction.balance > 0 ? 'text-red-600' : 'text-green-600'
+                      transaction.order_balance > 0 ? 'text-red-600' : 'text-green-600'
                     }`}>
-                      {transaction.balance.toLocaleString()}
+                      {transaction.order_balance.toLocaleString()}
+                    </TableCell>
+                    <TableCell className={`text-right font-medium ${
+                      transaction.net_balance > 0 ? 'text-red-600' : 'text-green-600'
+                    }`}>
+                      {transaction.net_balance.toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
                 {transactions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                       No transactions found for this marketer
                     </TableCell>
                   </TableRow>
@@ -604,6 +841,8 @@ export default function MarketersPage() {
                 <TableHeader className="bg-gray-50">
                   <TableRow>
                     <TableHead>Date</TableHead>
+                    <TableHead>Mode</TableHead>
+                    <TableHead>Details</TableHead>
                     <TableHead>Amount</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -613,6 +852,11 @@ export default function MarketersPage() {
                       <TableCell>
                         {new Date(payment.created_at).toLocaleDateString()}
                       </TableCell>
+                      <TableCell>{payment.mode_of_payment}</TableCell>
+                      <TableCell>
+                        {payment.mode_of_payment === 'Bank' && payment.bank_name}
+                        {payment.mode_of_payment === 'Mobile Money' && payment.mode_of_mobilemoney}
+                      </TableCell>
                       <TableCell>
                         {payment.amount_paid.toLocaleString()}
                       </TableCell>
@@ -620,7 +864,7 @@ export default function MarketersPage() {
                   ))}
                   {payments.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={2} className="text-center py-4 text-gray-500">
+                      <TableCell colSpan={4} className="text-center py-4 text-gray-500">
                         No payments recorded
                       </TableCell>
                     </TableRow>
@@ -631,43 +875,106 @@ export default function MarketersPage() {
 
             <div className="border-t pt-4">
               <h3 className="font-medium mb-3">Add New Payment</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date
-                  </label>
-                  <Input
-                    type="date"
-                    value={newPayment.date}
-                    onChange={(e) => setNewPayment({
-                      ...newPayment,
-                      date: e.target.value
-                    })}
-                  />
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={newPayment.date}
+                      onChange={(e) => setNewPayment({
+                        ...newPayment,
+                        date: e.target.value
+                      })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Amount
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="Enter amount"
+                      value={newPayment.amount}
+                      onChange={(e) => setNewPayment({
+                        ...newPayment,
+                        amount: e.target.value
+                      })}
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Amount
+                    Mode of Payment
                   </label>
-                  <Input
-                    type="number"
-                    placeholder="Enter amount"
-                    value={newPayment.amount}
-                    onChange={(e) => setNewPayment({
+                  <Select
+                    value={newPayment.mode_of_payment}
+                    onValueChange={(value) => setNewPayment({
                       ...newPayment,
-                      amount: e.target.value
+                      mode_of_payment: value,
+                      bank_name: "",
+                      mobile_money_provider: ""
                     })}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <Button
-                    onClick={addPayment}
-                    className="w-full"
-                    disabled={!newPayment.amount}
                   >
-                    Add Payment
-                  </Button>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select payment mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Bank">Bank</SelectItem>
+                      <SelectItem value="Mobile Money">Mobile Money</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+                {newPayment.mode_of_payment === 'Bank' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Bank Name
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Enter bank name"
+                      value={newPayment.bank_name}
+                      onChange={(e) => setNewPayment({
+                        ...newPayment,
+                        bank_name: e.target.value
+                      })}
+                    />
+                  </div>
+                )}
+                {newPayment.mode_of_payment === 'Mobile Money' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Mobile Money Provider
+                    </label>
+                    <Select
+                      value={newPayment.mobile_money_provider}
+                      onValueChange={(value) => setNewPayment({
+                        ...newPayment,
+                        mobile_money_provider: value
+                      })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MTN">MTN</SelectItem>
+                        <SelectItem value="Airtel">Airtel</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <Button
+                  onClick={addPayment}
+                  className="w-full"
+                  disabled={!newPayment.amount || !newPayment.mode_of_payment || 
+                    (newPayment.mode_of_payment === 'Bank' && !newPayment.bank_name) ||
+                    (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider)}
+                >
+                  Add Payment
+                </Button>
               </div>
             </div>
           </div>
