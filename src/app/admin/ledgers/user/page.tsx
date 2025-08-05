@@ -35,7 +35,8 @@ export default function MarketersPage() {
     amount: "",
     mode_of_payment: "",
     bank_name: "",
-    mobile_money_provider: ""
+    mobile_money_provider: "",
+    purpose: "Order Payment"
   });
   const [newOrder, setNewOrder] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -278,7 +279,8 @@ export default function MarketersPage() {
         created_at: newPayment.date,
         user_id: selectedMarketer.id,
         mode_of_payment: newPayment.mode_of_payment,
-        payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+        payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+        purporse: newPayment.purpose
       };
 
       if (newPayment.mode_of_payment === 'Bank') {
@@ -300,7 +302,8 @@ export default function MarketersPage() {
         amount: "",
         mode_of_payment: "",
         bank_name: "",
-        mobile_money_provider: ""
+        mobile_money_provider: "",
+        purpose:""
       });
     } catch (error) {
       console.error("Error adding payment:", error);
