@@ -35,8 +35,7 @@ export default function MarketersPage() {
     amount: "",
     mode_of_payment: "",
     bank_name: "",
-    mobile_money_provider: "",
-    purpose: "Order Payment"
+    mobile_money_provider: ""
   });
   const [newOrder, setNewOrder] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -55,7 +54,6 @@ export default function MarketersPage() {
   const [showLedgerDialog, setShowLedgerDialog] = useState(false);
   const [showExpenseDialog, setShowExpenseDialog] = useState(false);
 
-  // Fetch all marketers with their order counts
   const fetchMarketers = async () => {
     setLoading(true);
     try {
@@ -90,7 +88,6 @@ export default function MarketersPage() {
     }
   };
 
-  // Fetch all products
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -108,7 +105,6 @@ export default function MarketersPage() {
     }
   };
 
-  // Fetch orders for a specific marketer
   const fetchOrders = async (userId: string) => {
     setLoading(true);
     try {
@@ -127,7 +123,6 @@ export default function MarketersPage() {
     }
   };
 
-  // Fetch payments for a specific order
   const fetchPayments = async (orderId: string) => {
     setLoading(true);
     try {
@@ -146,14 +141,22 @@ export default function MarketersPage() {
     }
   };
 
-  // Fetch expenses for a specific marketer
   const fetchExpenses = async (userId: string) => {
     setLoading(true);
     try {
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("name")
+        .eq("id", userId)
+        .single();
+
+      if (userError) throw userError;
+      if (!userData) throw new Error("User not found");
+
       const { data, error } = await supabase
         .from("expenses")
         .select("*")
-        .eq("department", userId)
+        .eq("department", userData.name)
         .order("date", { ascending: false });
 
       if (error) throw error;
@@ -165,10 +168,18 @@ export default function MarketersPage() {
     }
   };
 
-  // Fetch all transactions (orders + payments + expenses) for a marketer
   const fetchTransactions = async (userId: string) => {
     setLoading(true);
     try {
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("name")
+        .eq("id", userId)
+        .single();
+
+      if (userError) throw userError;
+      if (!userData) throw new Error("User not found");
+
       const { data: ordersData, error: ordersError } = await supabase
         .from("order")
         .select("*")
@@ -188,7 +199,7 @@ export default function MarketersPage() {
       const { data: expensesData, error: expensesError } = await supabase
         .from("expenses")
         .select("*")
-        .eq("department", userId)
+        .eq("department", userData.name)
         .order("date", { ascending: false });
 
       if (expensesError) throw expensesError;
@@ -257,7 +268,6 @@ export default function MarketersPage() {
     }
   };
 
-  // Add a new payment - Updated to handle multiple payments per order
   const addPayment = async () => {
     if (!selectedOrder || !newPayment.amount || !newPayment.mode_of_payment) return;
 
@@ -268,7 +278,7 @@ export default function MarketersPage() {
         created_at: newPayment.date,
         user_id: selectedMarketer.id,
         mode_of_payment: newPayment.mode_of_payment,
-        purpose: newPayment.purpose
+        payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
       };
 
       if (newPayment.mode_of_payment === 'Bank') {
@@ -281,19 +291,7 @@ export default function MarketersPage() {
         .from("finance")
         .insert([paymentData]);
 
-      if (error) {
-        // If there's a unique constraint violation, try with a slightly different timestamp
-        if (error.code === '23505') {
-          paymentData.created_at = new Date(new Date(newPayment.date).getTime() + 1000).toISOString();
-          const { data: retryData, error: retryError } = await supabase
-            .from("finance")
-            .insert([paymentData]);
-          
-          if (retryError) throw retryError;
-        } else {
-          throw error;
-        }
-      }
+      if (error) throw error;
       
       await fetchPayments(selectedOrder.id);
       await fetchTransactions(selectedMarketer.id);
@@ -302,8 +300,7 @@ export default function MarketersPage() {
         amount: "",
         mode_of_payment: "",
         bank_name: "",
-        mobile_money_provider: "",
-        purpose: ""
+        mobile_money_provider: ""
       });
     } catch (error) {
       console.error("Error adding payment:", error);
@@ -311,7 +308,6 @@ export default function MarketersPage() {
     }
   };
 
-  // Add a new order
   const addOrder = async () => {
     if (!selectedMarketer || !newOrder.item || !newOrder.quantity || !newOrder.cost) return;
 
@@ -343,18 +339,26 @@ export default function MarketersPage() {
     }
   };
 
-  // Add a new expense
   const addExpense = async () => {
     if (!selectedMarketer || !newExpense.item || !newExpense.amount) return;
 
     try {
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("name")
+        .eq("id", selectedMarketer.id)
+        .single();
+
+      if (userError) throw userError;
+      if (!userData) throw new Error("User not found");
+
       const { data, error } = await supabase
         .from("expenses")
         .insert([{
           date: newExpense.date,
           item: newExpense.item,
           amount_spent: parseFloat(newExpense.amount),
-          department: selectedMarketer.id
+          department: userData.name
         }]);
 
       if (error) throw error;
@@ -369,10 +373,10 @@ export default function MarketersPage() {
       setShowExpenseDialog(false);
     } catch (error) {
       console.error("Error adding expense:", error);
+      alert("Error adding expense. Please try again.");
     }
   };
 
-  // Download ledger as CSV
   const downloadLedger = () => {
     if (transactions.length === 0) return;
 
