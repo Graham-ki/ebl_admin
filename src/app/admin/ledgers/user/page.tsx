@@ -280,7 +280,7 @@ export default function MarketersPage() {
         user_id: selectedMarketer.id,
         mode_of_payment: newPayment.mode_of_payment,
         payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-        purporse: newPayment.purpose
+        purpose: newPayment.purpose
       };
 
       if (newPayment.mode_of_payment === 'Bank') {
