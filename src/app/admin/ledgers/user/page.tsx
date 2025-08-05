@@ -302,7 +302,8 @@ export default function MarketersPage() {
         amount: "",
         mode_of_payment: "",
         bank_name: "",
-        mobile_money_provider: ""
+        mobile_money_provider: "",
+        purpose: ""
       });
     } catch (error) {
       console.error("Error adding payment:", error);
