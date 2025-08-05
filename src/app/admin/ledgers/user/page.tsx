@@ -58,7 +58,6 @@ export default function MarketersPage() {
   const fetchMarketers = async () => {
     setLoading(true);
     try {
-      // First get all users with type 'USERS'
       const { data: users, error: usersError } = await supabase
         .from("users")
         .select("id, name")
@@ -66,7 +65,6 @@ export default function MarketersPage() {
       
       if (usersError) throw usersError;
 
-      // Then get order counts for each user
       const marketersWithCounts = await Promise.all(
         users.map(async (user) => {
           const { count, error: countError } = await supabase
@@ -170,7 +168,6 @@ export default function MarketersPage() {
   const fetchTransactions = async (userId: string) => {
     setLoading(true);
     try {
-      // Get all orders for the marketer
       const { data: ordersData, error: ordersError } = await supabase
         .from("order")
         .select("*")
@@ -179,7 +176,6 @@ export default function MarketersPage() {
 
       if (ordersError) throw ordersError;
 
-      // Get all payments for the marketer
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("finance")
         .select("*")
@@ -188,7 +184,6 @@ export default function MarketersPage() {
 
       if (paymentsError) throw paymentsError;
 
-      // Get all expenses for the marketer
       const { data: expensesData, error: expensesError } = await supabase
         .from("expenses")
         .select("*")
@@ -197,7 +192,6 @@ export default function MarketersPage() {
 
       if (expensesError) throw expensesError;
 
-      // Combine and sort all transactions by date
       const allTransactions = [
         ...(ordersData?.map(order => ({
           type: 'order',
@@ -235,7 +229,6 @@ export default function MarketersPage() {
         })) || [])
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      // Calculate running balances
       let orderBalance = 0;
       let netBalance = 0;
       const transactionsWithBalance = allTransactions.map(transaction => {
@@ -263,7 +256,7 @@ export default function MarketersPage() {
     }
   };
 
-  // Add a new payment
+  // Add a new payment - Updated to handle multiple payments per order
   const addPayment = async () => {
     if (!selectedOrder || !newPayment.amount || !newPayment.mode_of_payment) return;
 
@@ -286,12 +279,22 @@ export default function MarketersPage() {
         .from("finance")
         .insert([paymentData]);
 
-      if (error) throw error;
+      if (error) {
+        // If there's a unique constraint violation, try with a slightly different timestamp
+        if (error.code === '23505') {
+          paymentData.created_at = new Date(new Date(newPayment.date).getTime() + 1000).toISOString();
+          const { data: retryData, error: retryError } = await supabase
+            .from("finance")
+            .insert([paymentData]);
+          
+          if (retryError) throw retryError;
+        } else {
+          throw error;
+        }
+      }
       
-      // Refresh payments and transactions
       await fetchPayments(selectedOrder.id);
       await fetchTransactions(selectedMarketer.id);
-      // Reset form
       setNewPayment({
         date: new Date().toISOString().split('T')[0],
         amount: "",
@@ -301,6 +304,7 @@ export default function MarketersPage() {
       });
     } catch (error) {
       console.error("Error adding payment:", error);
+      alert("Error adding payment. Please try again.");
     }
   };
 
@@ -322,10 +326,8 @@ export default function MarketersPage() {
 
       if (error) throw error;
       
-      // Refresh orders and transactions
       await fetchOrders(selectedMarketer.id);
       await fetchTransactions(selectedMarketer.id);
-      // Reset form
       setNewOrder({
         date: new Date().toISOString().split('T')[0],
         item: "",
@@ -354,10 +356,8 @@ export default function MarketersPage() {
 
       if (error) throw error;
       
-      // Refresh expenses and transactions
       await fetchExpenses(selectedMarketer.id);
       await fetchTransactions(selectedMarketer.id);
-      // Reset form
       setNewExpense({
         date: new Date().toISOString().split('T')[0],
         item: "",
@@ -391,7 +391,11 @@ export default function MarketersPage() {
       ...transactions.map(t => [
         new Date(t.date).toLocaleDateString(),
         t.type,
-        t.item,
+        t.type === 'order' ? 
+          `${t.item} (Order #${t.id})` : 
+          t.type === 'payment' ?
+          `Payment (${t.mode_of_payment})` :
+          `Expense: ${t.item}`,
         t.type === 'order' ? t.quantity : '',
         t.type === 'order' ? t.unit_price : '',
         t.type === 'order' ? t.amount : '',
@@ -414,7 +418,6 @@ export default function MarketersPage() {
     document.body.removeChild(link);
   };
 
-  // Calculate total paid amount
   const totalPaid = payments.reduce((sum, payment) => sum + payment.amount_paid, 0);
   const balance = selectedOrder ? selectedOrder.total_amount - totalPaid : 0;
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount_spent, 0);
@@ -754,7 +757,7 @@ export default function MarketersPage() {
               </TableHeader>
               <TableBody>
                 {transactions.map((transaction, index) => (
-                  <TableRow key={`${transaction.type}-${transaction.id}`}>
+                  <TableRow key={`${transaction.type}-${transaction.id}-${index}`}>
                     <TableCell>
                       {new Date(transaction.date).toLocaleDateString()}
                     </TableCell>
