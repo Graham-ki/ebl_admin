@@ -35,7 +35,8 @@ export default function MarketersPage() {
     amount: "",
     mode_of_payment: "",
     bank_name: "",
-    mobile_money_provider: ""
+    mobile_money_provider: "",
+    purpose: "Order Payment"
   });
   const [newOrder, setNewOrder] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -266,7 +267,8 @@ export default function MarketersPage() {
         amount_paid: parseFloat(newPayment.amount),
         created_at: newPayment.date,
         user_id: selectedMarketer.id,
-        mode_of_payment: newPayment.mode_of_payment
+        mode_of_payment: newPayment.mode_of_payment,
+        purpose: newPayment.purpose
       };
 
       if (newPayment.mode_of_payment === 'Bank') {
