@@ -223,7 +223,6 @@ const UsersPage = () => {
                 <TableHead className="font-medium text-gray-700">Email</TableHead>
                 <TableHead className="font-medium text-gray-700">Phone</TableHead>
                 <TableHead className="font-medium text-gray-700">Address</TableHead>
-                <TableHead className="font-medium text-gray-700">Type</TableHead>
                 <TableHead className="font-medium text-gray-700 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -235,20 +234,7 @@ const UsersPage = () => {
                     <TableCell>{user.email}</TableCell>
                     <TableCell>{user.phone}</TableCell>
                     <TableCell>{user.address}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="border-blue-200 text-blue-600">
-                        {user.type}
-                      </Badge>
-                    </TableCell>
                     <TableCell className="flex justify-end gap-2">
-                      <Button 
-                        variant="outline" 
-                        onClick={() => handleViewOrders(user)}
-                        className="flex items-center gap-1 border-blue-200 text-blue-600 hover:bg-blue-50"
-                      >
-                        <span>📋</span>
-                        <span>Orders</span>
-                      </Button>
                       <Button 
                         variant="outline" 
                         onClick={() => handleEditUser(user)}
