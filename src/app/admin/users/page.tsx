@@ -196,7 +196,7 @@ const UsersPage = () => {
         <div className="flex items-center gap-3">
           <span className="text-4xl">👥</span>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            User Management Dashboard
+            Marketers Management Dashboard
           </h1>
         </div>
 
@@ -206,7 +206,7 @@ const UsersPage = () => {
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
         >
           <span>➕</span>
-          <span>Add New User</span>
+          <span>Add New</span>
         </Button>
       </div>
 
@@ -272,7 +272,7 @@ const UsersPage = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <span>👤</span>
-              <span>Add New User</span>
+              <span>Add Marketer</span>
             </DialogTitle>
             <DialogDescription>
               Fill in all required fields to register a new user
@@ -345,7 +345,7 @@ const UsersPage = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <span>✏️</span>
-              <span>Edit User Details</span>
+              <span>Edit  Details</span>
             </DialogTitle>
             <DialogDescription>
               Update the user information below
