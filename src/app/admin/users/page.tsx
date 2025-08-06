@@ -34,7 +34,6 @@ interface User {
   email: string;
   phone: string;
   address: string;
-  password?: string;
   type: string;
 }
 
@@ -61,7 +60,6 @@ const UsersPage = () => {
     email: "",
     phone: "",
     address: "",
-    password: "",
     type: "USER",
   });
 
@@ -82,51 +80,44 @@ const UsersPage = () => {
   };
 
   const handleAddUser = async () => {
-    const { name, email, phone, address, password } = newUser;
+    const { name, email, phone, address } = newUser;
   
-    if (!name || !email || !phone || !address || !password) {
-      alert("Please fill in all the fields.");
+    if (!name || !email || !phone || !address) {
+      alert("Please fill in all the required fields.");
       return;
     }
   
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-  
-      if (authError) {
-        throw authError;
-      }
-  
-      const authUser = authData.user;
-  
-      const { data: dbData, error: dbError } = await supabase.from("users").insert([
+      const { data, error } = await supabase.from("users").insert([
         {
           name,
           email,
           phone,
           address,
-          password,
           type: "USER",
         },
-      ]);
+      ]).select();
   
-      if (dbError) {
-        throw dbError;
+      if (error) {
+        throw error;
       }
   
-      if (dbData && Array.isArray(dbData)) {
-        setUsers([...users, ...dbData]);
-      } else {
-        alert("No user data was returned. Please check the database.");
+      if (data) {
+        setUsers([...users, ...data]);
       }
   
       setIsAdding(false);
+      setNewUser({
+        name: "",
+        email: "",
+        phone: "",
+        address: "",
+        type: "USER",
+      });
       alert("User added successfully!");
     } catch (error: any) {
       console.error("Error adding user:", error.message);
-      alert("User added: Please confirm the user by updating the details!");
+      alert("Error adding user: " + error.message);
     }
   };
   
@@ -160,6 +151,8 @@ const UsersPage = () => {
   };
 
   const handleDeleteUser = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this user?")) return;
+    
     const { error } = await supabase.from("users").delete().eq("id", id);
 
     if (error) {
@@ -301,55 +294,58 @@ const UsersPage = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
               <Input
                 value={newUser.name}
                 onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
                 placeholder="John Doe"
                 className="w-full"
+                required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
               <Input
                 type="email"
                 value={newUser.email}
                 onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                 placeholder="user@example.com"
                 className="w-full"
+                required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
               <Input
                 value={newUser.phone}
                 onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
                 placeholder="+256XXXXXXXXX"
                 className="w-full"
+                required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Physical Address</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Physical Address *</label>
               <Input
                 value={newUser.address}
                 onChange={(e) => setNewUser({ ...newUser, address: e.target.value })}
                 placeholder="Kampala, Uganda"
                 className="w-full"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
-              <Input
-                type="password"
-                value={newUser.password}
-                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                placeholder="••••••••"
-                className="w-full"
+                required
               />
             </div>
           </div>
           <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={() => setIsAdding(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => {
+              setIsAdding(false);
+              setNewUser({
+                name: "",
+                email: "",
+                phone: "",
+                address: "",
+                type: "USER",
+              });
+            }}>Cancel</Button>
             <Button onClick={handleAddUser} className="bg-blue-600 hover:bg-blue-700">
               Create User
             </Button>
