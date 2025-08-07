@@ -252,7 +252,7 @@ export default function MarketersPage() {
           orderBalance -= transaction.payment;
           netBalance -= transaction.payment;
         } else if (transaction.type === 'expense') {
-          netBalance += transaction.expense;
+          netBalance -= transaction.expense;
         }
         return {
           ...transaction,
