@@ -279,15 +279,35 @@ export default function Suppliers() {
     try {
       if (!selectedItem) return;
       
-      const { data, error } = await supabase
+      // First insert the payment record
+      const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
         .insert([{ ...paymentForm, supply_item_id: selectedItem.id }])
         .select();
 
-      if (error) throw error;
+      if (paymentError) throw paymentError;
 
-      if (data?.[0]) {
-        setPayments(prev => [...prev, data[0]]);
+      if (paymentData?.[0]) {
+        setPayments(prev => [...prev, paymentData[0]]);
+        
+        // Now create the expense record
+        const expenseData = {
+          item: 'Payment of Material',
+          amount_spent: paymentForm.amount,
+          date: paymentForm.payment_date,
+          department: 'Capital Investment',
+          account: paymentForm.method === 'mobile_money' ? paymentForm.reference || '' : 
+                  paymentForm.method === 'bank' ? paymentForm.reference || '' : 'Cash',
+          mode_of_payment: paymentForm.method,
+          submittedby: 'Admin'
+        };
+
+        const { error: expenseError } = await supabase
+          .from('expenses')
+          .insert([expenseData]);
+
+        if (expenseError) throw expenseError;
+
         resetPaymentForm();
       }
     } catch (err) {
