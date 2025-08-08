@@ -49,6 +49,13 @@ interface MaterialEntry {
   created_at: string;
 }
 
+interface SupplyItem {
+  id: string;
+  name: string;
+  quantity: number;
+  created_at: string;
+}
+
 interface MaterialTransaction {
   id: string;
   date: string;
@@ -111,47 +118,54 @@ const MaterialsPage = () => {
   };
 
   const fetchMaterialTransactions = async (materialId: string) => {
-  // Get inflows from supply_items
-  const { data: inflows, error: inflowError } = await supabase
-    .from("supply_items")
-    .select("id, name, quantity, created_at")
-    .eq("name", viewMaterial?.name);
+    if (!viewMaterial) return;
 
-  // Get outflows from material_entries
-  const { data: outflows, error: outflowError } = await supabase
-    .from("material_entries")
-    .select("id, material_id, quantity, action, date, created_at")
-    .eq("material_id", materialId);
+    // Get all supply items that match this material's name
+    const { data: supplyItems, error: supplyItemsError } = await supabase
+      .from("supply_items")
+      .select("id, name, quantity, created_at")
+      .ilike("name", viewMaterial.name); // Using ilike for case-insensitive matching
 
-  if (inflowError || outflowError) {
-    console.error("Error fetching transactions:", inflowError || outflowError);
-    return;
-  }
+    // Get outflows from material_entries
+    const { data: outflows, error: outflowError } = await supabase
+      .from("material_entries")
+      .select("id, material_id, quantity, action, date, created_at")
+      .eq("material_id", materialId);
 
-  // Combine and format transactions
-  const formattedTransactions: MaterialTransaction[] = [
-    ...(inflows?.map((item) => ({
+    if (supplyItemsError || outflowError) {
+      console.error("Error fetching transactions:", supplyItemsError || outflowError);
+      return;
+    }
+
+    // Format supply items as inflows
+    const inflowTransactions: MaterialTransaction[] = (supplyItems || []).map((item) => ({
       id: item.id,
       date: new Date(item.created_at).toLocaleDateString(),
       type: "inflow" as const,
       quantity: item.quantity,
       action: "Purchased",
       material_id: materialId,
-      material_name: viewMaterial?.name || "",
-    })) || []),
-    ...(outflows?.map((entry) => ({
+      material_name: viewMaterial.name,
+    }));
+
+    // Format material entries as outflows
+    const outflowTransactions: MaterialTransaction[] = (outflows || []).map((entry) => ({
       id: entry.id,
       date: new Date(entry.date).toLocaleDateString(),
       type: "outflow" as const,
       quantity: entry.quantity,
       action: entry.action,
       material_id: entry.material_id,
-      material_name: viewMaterial?.name || "",
-    })) || [])
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      material_name: viewMaterial.name,
+    }));
 
-  setTransactions(formattedTransactions);
-};
+    // Combine and sort by date (newest first)
+    const allTransactions = [...inflowTransactions, ...outflowTransactions].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    setTransactions(allTransactions);
+  };
 
   const calculateAvailableQuantity = (materialId: string) => {
     const materialTransactions = transactions.filter(
@@ -209,21 +223,6 @@ const MaterialsPage = () => {
       console.error("Error recording outflow:", error);
       alert("Failed to record outflow");
       return;
-    }
-
-    // Update material quantity
-    const currentMaterial = materials.find((m) => m.id === outflowForm.material_id);
-    if (currentMaterial) {
-      const { error: updateError } = await supabase
-        .from("materials")
-        .update({
-          quantity_available: currentMaterial.quantity_available - outflowForm.quantity,
-        })
-        .eq("id", outflowForm.material_id);
-
-      if (updateError) {
-        console.error("Error updating material quantity:", updateError);
-      }
     }
 
     // Refresh data
