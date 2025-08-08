@@ -61,7 +61,14 @@ export default function Suppliers() {
   const [supplyItems, setSupplyItems] = useState<SupplyItem[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  
+  //date picker
+const getEastAfricanDate = () => {
+  const now = new Date();
+  // East Africa Time is UTC+3, so we add 3 hours to get the correct date
+  const offset = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+  const eastAfricanTime = new Date(now.getTime() + offset);
+  return eastAfricanTime.toISOString().split('T')[0];
+};
   // Form states
   const [supplierForm, setSupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
     name: "",
@@ -79,14 +86,14 @@ export default function Suppliers() {
   const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at">>({
     supply_item_id: "",
     quantity: 0,
-    delivery_date: new Date().toISOString().split('T')[0],
+    delivery_date: getEastAfricanDate(),
     notes: "",
   });
   
   const [paymentForm, setPaymentForm] = useState<Omit<Payment, "id" | "created_at">>({
     supply_item_id: "",
     amount: 0,
-    payment_date: new Date().toISOString().split('T')[0],
+    payment_date: getEastAfricanDate(),
     method: "cash",
     reference: "",
   });
@@ -419,7 +426,7 @@ export default function Suppliers() {
     setDeliveryForm({
       supply_item_id: "",
       quantity: 0,
-      delivery_date: new Date().toISOString().split('T')[0],
+      delivery_date: getEastAfricanDate(),
       notes: "",
     });
     setShowDeliveryForm(false);
@@ -429,7 +436,7 @@ export default function Suppliers() {
     setPaymentForm({
       supply_item_id: "",
       amount: 0,
-      payment_date: new Date().toISOString().split('T')[0],
+      payment_date: getEastAfricanDate(),
       method: "cash",
       reference: "",
     });
