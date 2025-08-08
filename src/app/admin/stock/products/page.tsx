@@ -47,7 +47,6 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 type Product = {
   id: number;
   title: string;
-  maxQuantity: number;
   category: number;
 };
 
@@ -92,13 +91,22 @@ export default function SummaryPage() {
     quantity: '',
   });
   const [productToDelete, setProductToDelete] = useState<number | null>(null);
+  const [availableQuantities, setAvailableQuantities] = useState<Record<number, number>>({});
 
   // Fetch Products List
   useEffect(() => {
     const fetchProducts = async () => {
-      const { data, error } = await supabase.from('product').select('id, title, maxQuantity, category');
+      const { data, error } = await supabase.from('product').select('id, title, category');
       if (error) console.error('Error fetching products:', error);
-      else setProducts(data || []);
+      else {
+        setProducts(data || []);
+        // Initialize available quantities
+        const quantities: Record<number, number> = {};
+        data?.forEach(product => {
+          quantities[product.id] = 0;
+        });
+        setAvailableQuantities(quantities);
+      }
     };
 
     fetchProducts();
@@ -115,8 +123,41 @@ export default function SummaryPage() {
     fetchCategories();
   }, []);
 
+  // Fetch Product Entries and calculate available quantities
+  useEffect(() => {
+    const fetchProductEntries = async () => {
+      const { data, error } = await supabase
+        .from('product_entries')
+        .select('*');
+
+      if (error) {
+        console.error('Error fetching product entries:', error);
+        return;
+      }
+
+      setProductEntries(data || []);
+
+      // Calculate available quantities
+      const quantities: Record<number, number> = {};
+      products.forEach(product => {
+        quantities[product.id] = 0;
+      });
+
+      data?.forEach(entry => {
+        if (!quantities[entry.product_id]) quantities[entry.product_id] = 0;
+        quantities[entry.product_id] += entry.quantity;
+      });
+
+      setAvailableQuantities(quantities);
+    };
+
+    if (products.length > 0) {
+      fetchProductEntries();
+    }
+  }, [products]);
+
   // Fetch Product Entries for a specific product
-  const fetchProductEntries = async (productId: number) => {
+  const fetchProductEntriesForProduct = async (productId: number) => {
     const { data, error } = await supabase
       .from('product_entries')
       .select('*')
@@ -139,22 +180,26 @@ export default function SummaryPage() {
     setLoading(true);
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('product')
-        .insert([{ title, category: selectedCategory, maxQuantity: 0, slug }]);
+        .insert([{ title, category: selectedCategory, slug }])
+        .select();
 
       if (error) {
         console.error('Error adding product:', error);
         alert('Failed to add product.');
-      } else {
+      } else if (data) {
         alert('Beverage added successfully!');
-        window.location.reload();
+        setProducts(prev => [...prev, data[0]]);
+        setAvailableQuantities(prev => ({ ...prev, [data[0].id]: 0 }));
       }
     } catch (error) {
       console.error('Unexpected error:', error);
       alert('An unexpected error occurred.');
     } finally {
       setLoading(false);
+      setTitle('');
+      setSelectedCategory(null);
     }
   };
 
@@ -182,8 +227,8 @@ export default function SummaryPage() {
       if (productError) throw productError;
 
       alert('Beverage deleted successfully!');
+      setProducts(prev => prev.filter(p => p.id !== productToDelete));
       setProductToDelete(null);
-      window.location.reload();
     } catch (error) {
       console.error('Error deleting product:', error);
       alert('Failed to delete beverage. Please try again.');
@@ -195,7 +240,7 @@ export default function SummaryPage() {
   // Handle Product Click to view transactions
   const handleProductClick = async (productId: number) => {
     setSelectedProductId(productId);
-    await fetchProductEntries(productId);
+    await fetchProductEntriesForProduct(productId);
   };
 
   // Handle Date Range Change
@@ -222,7 +267,8 @@ export default function SummaryPage() {
       return;
     }
 
-    const product = products.find(p => p.id === Number(inflowForm.product_id));
+    const productId = Number(inflowForm.product_id);
+    const product = products.find(p => p.id === productId);
     if (!product) return;
 
     try {
@@ -230,7 +276,7 @@ export default function SummaryPage() {
       const { error: entryError } = await supabase
         .from('product_entries')
         .insert([{
-          product_id: Number(inflowForm.product_id),
+          product_id: productId,
           title: product.title,
           quantity: Number(inflowForm.quantity),
           created_at: inflowForm.date,
@@ -240,14 +286,11 @@ export default function SummaryPage() {
 
       if (entryError) throw entryError;
 
-      // Update the product quantity
-      const newQuantity = product.maxQuantity + Number(inflowForm.quantity);
-      const { error: productError } = await supabase
-        .from('product')
-        .update({ maxQuantity: newQuantity })
-        .eq('id', product.id);
-
-      if (productError) throw productError;
+      // Update available quantity locally
+      setAvailableQuantities(prev => ({
+        ...prev,
+        [productId]: (prev[productId] || 0) + Number(inflowForm.quantity)
+      }));
 
       alert('Inflow recorded successfully!');
       setInflowForm({
@@ -256,7 +299,6 @@ export default function SummaryPage() {
         source: '',
         quantity: '',
       });
-      window.location.reload();
     } catch (error) {
       console.error('Error recording inflow:', error);
       alert('Failed to record inflow');
@@ -270,10 +312,12 @@ export default function SummaryPage() {
       return;
     }
 
-    const product = products.find(p => p.id === Number(outflowForm.product_id));
+    const productId = Number(outflowForm.product_id);
+    const product = products.find(p => p.id === productId);
     if (!product) return;
 
-    if (product.maxQuantity < Number(outflowForm.quantity)) {
+    const currentQuantity = availableQuantities[productId] || 0;
+    if (currentQuantity < Number(outflowForm.quantity)) {
       alert('Not enough quantity available');
       return;
     }
@@ -283,7 +327,7 @@ export default function SummaryPage() {
       const { error: entryError } = await supabase
         .from('product_entries')
         .insert([{
-          product_id: Number(outflowForm.product_id),
+          product_id: productId,
           title: product.title,
           quantity: -Number(outflowForm.quantity), // Negative for outflow
           created_at: outflowForm.date,
@@ -293,14 +337,11 @@ export default function SummaryPage() {
 
       if (entryError) throw entryError;
 
-      // Update the product quantity
-      const newQuantity = product.maxQuantity - Number(outflowForm.quantity);
-      const { error: productError } = await supabase
-        .from('product')
-        .update({ maxQuantity: newQuantity })
-        .eq('id', product.id);
-
-      if (productError) throw productError;
+      // Update available quantity locally
+      setAvailableQuantities(prev => ({
+        ...prev,
+        [productId]: (prev[productId] || 0) - Number(outflowForm.quantity)
+      }));
 
       alert('Outflow recorded successfully!');
       setOutflowForm({
@@ -309,7 +350,6 @@ export default function SummaryPage() {
         reason: '',
         quantity: '',
       });
-      window.location.reload();
     } catch (error) {
       console.error('Error recording outflow:', error);
       alert('Failed to record outflow');
@@ -438,7 +478,7 @@ export default function SummaryPage() {
                   <SelectContent>
                     {products.map(product => (
                       <SelectItem key={product.id} value={String(product.id)}>
-                        {product.title}
+                        {product.title} (Available: {availableQuantities[product.id] || 0})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -517,7 +557,7 @@ export default function SummaryPage() {
                   <SelectContent>
                     {products.map(product => (
                       <SelectItem key={product.id} value={String(product.id)}>
-                        {product.title} (Available: {product.maxQuantity})
+                        {product.title} (Available: {availableQuantities[product.id] || 0})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -583,7 +623,7 @@ export default function SummaryPage() {
                 <TableRow key={product.id}>
                   <TableCell className="font-medium">{product.title}</TableCell>
                   <TableCell>{getCategoryName(product.category)}</TableCell>
-                  <TableCell>{product.maxQuantity}</TableCell>
+                  <TableCell>{availableQuantities[product.id] || 0}</TableCell>
                   <TableCell className="flex gap-2">
                     <Dialog>
                       <DialogTrigger asChild>
@@ -599,7 +639,7 @@ export default function SummaryPage() {
                         <DialogHeader>
                           <DialogTitle>Transaction History for {product.title}</DialogTitle>
                           <DialogDescription>
-                            Available Quantity: {product.maxQuantity}
+                            Available Quantity: {availableQuantities[product.id] || 0}
                           </DialogDescription>
                         </DialogHeader>
                         <div className="max-h-[500px] overflow-auto">
@@ -676,7 +716,6 @@ export default function SummaryPage() {
           <span>Inventory Analytics</span>
         </h2>
 
-
         {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Inventory Levels Bar Chart */}
@@ -693,7 +732,7 @@ export default function SummaryPage() {
                   <BarChart
                     data={products.map(product => ({
                       name: product.title,
-                      quantity: product.maxQuantity,
+                      quantity: availableQuantities[product.id] || 0,
                     }))}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -735,7 +774,7 @@ export default function SummaryPage() {
                     <Pie
                       data={products.map(product => ({
                         name: product.title,
-                        value: product.maxQuantity,
+                        value: availableQuantities[product.id] || 0,
                       }))}
                       dataKey="value"
                       nameKey="name"
