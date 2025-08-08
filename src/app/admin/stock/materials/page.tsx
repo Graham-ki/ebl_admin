@@ -111,47 +111,47 @@ const MaterialsPage = () => {
   };
 
   const fetchMaterialTransactions = async (materialId: string) => {
-    // Get inflows from supply_items
-    const { data: inflows, error: inflowError } = await supabase
-      .from("supply_items")
-      .select("id, name, quantity, created_at")
-      .eq("name", viewMaterial?.name);
+  // Get inflows from supply_items
+  const { data: inflows, error: inflowError } = await supabase
+    .from("supply_items")
+    .select("id, name, quantity, created_at")
+    .eq("name", viewMaterial?.name);
 
-    // Get outflows from material_entries
-    const { data: outflows, error: outflowError } = await supabase
-      .from("material_entries")
-      .select("id, material_id, quantity, action, date, created_at")
-      .eq("material_id", materialId);
+  // Get outflows from material_entries
+  const { data: outflows, error: outflowError } = await supabase
+    .from("material_entries")
+    .select("id, material_id, quantity, action, date, created_at")
+    .eq("material_id", materialId);
 
-    if (inflowError || outflowError) {
-      console.error("Error fetching transactions:", inflowError || outflowError);
-      return;
-    }
+  if (inflowError || outflowError) {
+    console.error("Error fetching transactions:", inflowError || outflowError);
+    return;
+  }
 
-    // Combine and format transactions
-    const formattedTransactions: MaterialTransaction[] = [
-      ...(inflows?.map((item) => ({
-        id: item.id,
-        date: new Date(item.created_at).toLocaleDateString(),
-        type: "inflow" as const,
-        quantity: item.quantity,
-        action: "Purchased",
-        material_id: materialId,
-        material_name: viewMaterial?.name || "",
-      })) || [],
-      ...(outflows?.map((entry) => ({
-        id: entry.id,
-        date: new Date(entry.date).toLocaleDateString(),
-        type: "outflow" as const,
-        quantity: entry.quantity,
-        action: entry.action,
-        material_id: entry.material_id,
-        material_name: viewMaterial?.name || "",
-      })) || [],
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Combine and format transactions
+  const formattedTransactions: MaterialTransaction[] = [
+    ...(inflows?.map((item) => ({
+      id: item.id,
+      date: new Date(item.created_at).toLocaleDateString(),
+      type: "inflow" as const,
+      quantity: item.quantity,
+      action: "Purchased",
+      material_id: materialId,
+      material_name: viewMaterial?.name || "",
+    })) || []),
+    ...(outflows?.map((entry) => ({
+      id: entry.id,
+      date: new Date(entry.date).toLocaleDateString(),
+      type: "outflow" as const,
+      quantity: entry.quantity,
+      action: entry.action,
+      material_id: entry.material_id,
+      material_name: viewMaterial?.name || "",
+    })) || [])
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    setTransactions(formattedTransactions);
-  };
+  setTransactions(formattedTransactions);
+};
 
   const calculateAvailableQuantity = (materialId: string) => {
     const materialTransactions = transactions.filter(
