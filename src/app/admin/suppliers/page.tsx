@@ -938,7 +938,7 @@ export default function Suppliers() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     defaultValue=""
                   >
-                    <option value="" disabled>Select a material</option>
+                    <option value="" disabled>Select item</option>
                     {materials.map((material) => (
                       <option key={material.id} value={material.name}>
                         {material.name}
