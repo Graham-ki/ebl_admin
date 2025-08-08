@@ -676,25 +676,6 @@ export default function SummaryPage() {
           <span>Inventory Analytics</span>
         </h2>
 
-        {/* Date Range Picker */}
-        <div className="mb-6">
-          <Card className="border border-gray-200 rounded-xl overflow-hidden">
-            <CardHeader className="bg-gray-50 border-b border-gray-200">
-              <CardTitle className="flex items-center gap-2">
-                <span>📅</span>
-                <span>Select Date Range</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 flex justify-center">
-              <Calendar
-                onChange={handleDateRangeChange as any}
-                value={dateRange}
-                selectRange={true}
-                className="border-0 rounded-lg"
-              />
-            </CardContent>
-          </Card>
-        </div>
 
         {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
