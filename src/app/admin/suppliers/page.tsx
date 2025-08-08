@@ -295,7 +295,7 @@ export default function Suppliers() {
           item: 'Payment of Material',
           amount_spent: paymentForm.amount,
           date: paymentForm.payment_date,
-          department: 'Capital Investment',
+          department: selectedItem.name, // Using the item name as department
           account: paymentForm.method === 'mobile_money' ? paymentForm.reference || '' : 
                   paymentForm.method === 'bank' ? paymentForm.reference || '' : 'Cash',
           mode_of_payment: paymentForm.method,
