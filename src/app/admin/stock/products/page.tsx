@@ -73,6 +73,7 @@ export default function SummaryPage() {
   const [title, setTitle] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [dateRange, setDateRange] = useState<[Date, Date]>([
     new Date(new Date().setMonth(new Date().getMonth() - 1)),
@@ -90,6 +91,7 @@ export default function SummaryPage() {
     reason: '',
     quantity: '',
   });
+  const [productToDelete, setProductToDelete] = useState<number | null>(null);
 
   // Fetch Products List
   useEffect(() => {
@@ -153,6 +155,40 @@ export default function SummaryPage() {
       alert('An unexpected error occurred.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle Delete Product
+  const handleDeleteProduct = async () => {
+    if (!productToDelete) return;
+
+    setDeleteLoading(true);
+
+    try {
+      // First delete all related entries
+      const { error: entriesError } = await supabase
+        .from('product_entries')
+        .delete()
+        .eq('product_id', productToDelete);
+
+      if (entriesError) throw entriesError;
+
+      // Then delete the product
+      const { error: productError } = await supabase
+        .from('product')
+        .delete()
+        .eq('id', productToDelete);
+
+      if (productError) throw productError;
+
+      alert('Beverage deleted successfully!');
+      setProductToDelete(null);
+      window.location.reload();
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      alert('Failed to delete beverage. Please try again.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -548,7 +584,7 @@ export default function SummaryPage() {
                   <TableCell className="font-medium">{product.title}</TableCell>
                   <TableCell>{getCategoryName(product.category)}</TableCell>
                   <TableCell>{product.maxQuantity}</TableCell>
-                  <TableCell>
+                  <TableCell className="flex gap-2">
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button
@@ -594,6 +630,37 @@ export default function SummaryPage() {
                         </div>
                       </DialogContent>
                     </Dialog>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setProductToDelete(product.id)}
+                        >
+                          Delete
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Confirm Deletion</DialogTitle>
+                          <DialogDescription>
+                            Are you sure you want to delete "{product.title}"? This action cannot be undone.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <Button 
+                            variant="destructive" 
+                            onClick={handleDeleteProduct}
+                            disabled={deleteLoading}
+                          >
+                            {deleteLoading ? 'Deleting...' : 'Delete'}
+                          </Button>
+                          <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                          </DialogClose>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   </TableCell>
                 </TableRow>
               ))}
@@ -608,6 +675,27 @@ export default function SummaryPage() {
           <span>📈</span>
           <span>Inventory Analytics</span>
         </h2>
+
+        {/* Date Range Picker */}
+        <div className="mb-6">
+          <Card className="border border-gray-200 rounded-xl overflow-hidden">
+            <CardHeader className="bg-gray-50 border-b border-gray-200">
+              <CardTitle className="flex items-center gap-2">
+                <span>📅</span>
+                <span>Select Date Range</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 flex justify-center">
+              <Calendar
+                onChange={handleDateRangeChange as any}
+                value={dateRange}
+                selectRange={true}
+                className="border-0 rounded-lg"
+              />
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Inventory Levels Bar Chart */}
