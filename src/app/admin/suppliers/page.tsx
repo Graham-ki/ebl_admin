@@ -45,6 +45,12 @@ interface Payment {
   created_at: string;
 }
 
+interface Material {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 type Transaction = {
   id: string;
   type: 'delivery' | 'payment';
@@ -61,14 +67,18 @@ export default function Suppliers() {
   const [supplyItems, setSupplyItems] = useState<SupplyItem[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [showOtherInput, setShowOtherInput] = useState(false);
+  
   //date picker
-const getEastAfricanDate = () => {
-  const now = new Date();
-  // East Africa Time is UTC+3, so we add 3 hours to get the correct date
-  const offset = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
-  const eastAfricanTime = new Date(now.getTime() + offset);
-  return eastAfricanTime.toISOString().split('T')[0];
-};
+  const getEastAfricanDate = () => {
+    const now = new Date();
+    // East Africa Time is UTC+3, so we add 3 hours to get the correct date
+    const offset = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+    const eastAfricanTime = new Date(now.getTime() + offset);
+    return eastAfricanTime.toISOString().split('T')[0];
+  };
+  
   // Form states
   const [supplierForm, setSupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
     name: "",
@@ -155,18 +165,17 @@ const getEastAfricanDate = () => {
   };
 
   const formatDate = (dateString: string) => {
-  const options: Intl.DateTimeFormatOptions = {
-    timeZone: 'Africa/Nairobi',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: 'Africa/Nairobi',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    
+    return new Date(dateString).toLocaleString('en-US', options);
   };
-  
-  return new Date(dateString).toLocaleString('en-US', options);
-};
-
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -186,23 +195,27 @@ const getEastAfricanDate = () => {
           { data: suppliersData, error: suppliersError },
           { data: itemsData, error: itemsError },
           { data: deliveriesData, error: deliveriesError },
-          { data: paymentsData, error: paymentsError }
+          { data: paymentsData, error: paymentsError },
+          { data: materialsData, error: materialsError }
         ] = await Promise.all([
           supabase.from('suppliers').select('*').order('created_at', { ascending: false }),
           supabase.from('supply_items').select('*'),
           supabase.from('deliveries').select('*'),
-          supabase.from('payments').select('*')
+          supabase.from('payments').select('*'),
+          supabase.from('materials').select('*').order('name', { ascending: true })
         ]);
 
         if (suppliersError) throw suppliersError;
         if (itemsError) throw itemsError;
         if (deliveriesError) throw deliveriesError;
         if (paymentsError) throw paymentsError;
+        if (materialsError) throw materialsError;
 
         setSuppliers(suppliersData || []);
         setSupplyItems(itemsData || []);
         setDeliveries(deliveriesData || []);
         setPayments(paymentsData || []);
+        setMaterials(materialsData || []);
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load data. Please try again.');
@@ -426,6 +439,7 @@ const getEastAfricanDate = () => {
       price: 0,
     });
     setShowItemForm(false);
+    setShowOtherInput(false);
   };
 
   const resetDeliveryForm = () => {
@@ -447,6 +461,17 @@ const getEastAfricanDate = () => {
       reference: "",
     });
     setShowPaymentForm(false);
+  };
+
+  const handleMaterialChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedValue = e.target.value;
+    if (selectedValue === "other") {
+      setShowOtherInput(true);
+      setItemForm({...itemForm, name: ""});
+    } else {
+      setShowOtherInput(false);
+      setItemForm({...itemForm, name: selectedValue});
+    }
   };
 
   if (loading) {
@@ -908,14 +933,31 @@ const getEastAfricanDate = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Item Name
                   </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={itemForm.name}
-                    onChange={(e) => setItemForm({...itemForm, name: e.target.value})}
-                    required
+                  <select
+                    onChange={handleMaterialChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select a material</option>
+                    {materials.map((material) => (
+                      <option key={material.id} value={material.name}>
+                        {material.name}
+                      </option>
+                    ))}
+                    <option value="other">Other (specify below)</option>
+                  </select>
+                  
+                  {showOtherInput && (
+                    <input
+                      type="text"
+                      name="name"
+                      value={itemForm.name}
+                      onChange={(e) => setItemForm({...itemForm, name: e.target.value})}
+                      required
+                      placeholder="Enter material name"
+                      className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
