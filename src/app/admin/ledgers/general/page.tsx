@@ -276,9 +276,17 @@ export default function CashFlowLedgerPage() {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString() + " " + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'Africa/Nairobi',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
   };
+  
+  return new Date(dateString).toLocaleString('en-US', options);
+};
 
   const handleDownloadCSV = () => {
     if (cashFlowData.length === 0) {
