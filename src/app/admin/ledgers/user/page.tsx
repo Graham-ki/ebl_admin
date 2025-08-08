@@ -94,7 +94,7 @@ export default function MarketersPage() {
     try {
       const { data, error } = await supabase
         .from("product")
-        .select("title")
+        .select("id, title")
         .order("title", { ascending: true });
 
       if (error) throw error;
@@ -315,7 +315,12 @@ export default function MarketersPage() {
     if (!selectedMarketer || !newOrder.item || !newOrder.quantity || !newOrder.cost) return;
 
     try {
-      const { data, error } = await supabase
+      // First, find the product ID for the selected item
+      const product = products.find(p => p.title === newOrder.item);
+      if (!product) throw new Error("Product not found");
+
+      // Record the order in the order table
+      const { data: orderData, error: orderError } = await supabase
         .from("order")
         .insert([{
           user: selectedMarketer.id,
@@ -324,9 +329,24 @@ export default function MarketersPage() {
           cost: parseFloat(newOrder.cost),
           created_at: newOrder.date,
           total_amount: parseFloat(newOrder.quantity) * parseFloat(newOrder.cost)
+        }])
+        .select();
+
+      if (orderError) throw orderError;
+      
+      // Record the outflow in the product_entries table
+      const { error: entryError } = await supabase
+        .from("product_entries")
+        .insert([{
+          product_id: product.id,
+          title: newOrder.item,
+          quantity: -parseFloat(newOrder.quantity), // Negative for outflow
+          created_at: newOrder.date,
+          created_by: 'Admin',
+          transaction: `${selectedMarketer.name}-Order`
         }]);
 
-      if (error) throw error;
+      if (entryError) throw entryError;
       
       await fetchOrders(selectedMarketer.id);
       await fetchTransactions(selectedMarketer.id);
@@ -339,6 +359,7 @@ export default function MarketersPage() {
       setShowAddOrderDialog(false);
     } catch (error) {
       console.error("Error adding order:", error);
+      alert("Error adding order. Please try again.");
     }
   };
 
