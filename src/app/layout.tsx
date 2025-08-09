@@ -8,7 +8,7 @@ import { ThemeProvider } from '@/providers/theme-provider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Extra Beverages Limited',
+  title: 'E . B . L',
   description: 'E-shop',
 };
 
