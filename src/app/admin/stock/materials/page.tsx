@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createClient } from "@supabase/supabase-js";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,6 +38,7 @@ interface Material {
   id: string;
   name: string;
   quantity_available: number;
+  category: string;
 }
 
 interface MaterialEntry {
@@ -72,6 +74,8 @@ interface OutflowFormData {
   date: string;
 }
 
+const CATEGORIES = ["Labels", "Bottles", "Spirit", "Boxes", "Flavor"];
+
 const MaterialsPage = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +88,7 @@ const MaterialsPage = () => {
   const [newMaterial, setNewMaterial] = useState<Omit<Material, "id">>({
     name: "",
     quantity_available: 0,
+    category: "Labels",
   });
   const [outflowForm, setOutflowForm] = useState<OutflowFormData>({
     material_id: "",
@@ -91,6 +96,7 @@ const MaterialsPage = () => {
     quantity: 0,
     date: new Date().toISOString().split("T")[0],
   });
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchAllData();
@@ -108,7 +114,7 @@ const MaterialsPage = () => {
       // Fetch materials
       const { data: materialsData, error: materialsError } = await supabase
         .from("materials")
-        .select("id, name, quantity_available")
+        .select("id, name, quantity_available, category")
         .order("name", { ascending: true });
 
       if (materialsError) throw materialsError;
@@ -168,6 +174,13 @@ const MaterialsPage = () => {
 
       setMaterialQuantities(quantities);
       setMaterials(materialsData || []);
+
+      // Initialize expanded categories state
+      const initialExpandedState: Record<string, boolean> = {};
+      CATEGORIES.forEach(category => {
+        initialExpandedState[category] = true;
+      });
+      setExpandedCategories(initialExpandedState);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -210,7 +223,7 @@ const MaterialsPage = () => {
     if (data?.[0]) {
       setMaterials([...materials, data[0]]);
       setIsAdding(false);
-      setNewMaterial({ name: "", quantity_available: 0 });
+      setNewMaterial({ name: "", quantity_available: 0, category: "Labels" });
       fetchAllData(); // Refresh all data to include the new material
     }
   };
@@ -266,6 +279,17 @@ const MaterialsPage = () => {
     fetchAllData(); // Refresh data after deletion
   };
 
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
+  const getMaterialsByCategory = (category: string) => {
+    return materials.filter(material => material.category === category);
+  };
+
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Materials Inventory</h1>
@@ -280,52 +304,91 @@ const MaterialsPage = () => {
       {loading ? (
         <div className="text-center py-8">Loading materials...</div>
       ) : (
-        <Table className="border rounded-lg">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="text-right">Quantity Available</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {materials.length > 0 ? (
-              materials.map((material) => (
-                <TableRow key={material.id}>
-                  <TableCell>{material.name}</TableCell>
-                  <TableCell className="text-right">
-                    {materialQuantities[material.id] || 0}
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setViewMaterial(material);
-                        setIsViewDetailsOpen(true);
-                      }}
+        <div className="border rounded-lg">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {CATEGORIES.map((category) => {
+                const categoryMaterials = getMaterialsByCategory(category);
+                if (categoryMaterials.length === 0) return null;
+                
+                return (
+                  <div key={category}>
+                    <TableRow 
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => toggleCategory(category)}
                     >
-                      Details
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => handleDeleteMaterial(material.id)}
-                    >
-                      Delete
-                    </Button>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center">
+                          {expandedCategories[category] ? (
+                            <ChevronDown className="w-4 h-4 mr-2" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 mr-2" />
+                          )}
+                          {category}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewMaterial(categoryMaterials[0]);
+                            setIsViewDetailsOpen(true);
+                          }}
+                        >
+                          View All
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                    {expandedCategories[category] && categoryMaterials.map((material) => (
+                      <TableRow key={material.id} className="bg-gray-50">
+                        <TableCell className="pl-8">{material.name}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end space-x-2">
+                            <span className="mr-4">
+                              {materialQuantities[material.id] || 0}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setViewMaterial(material);
+                                setIsViewDetailsOpen(true);
+                              }}
+                            >
+                              Details
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteMaterial(material.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </div>
+                );
+              })}
+              {materials.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center py-4">
+                    No materials found
                   </TableCell>
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={3} className="text-center py-4">
-                  No materials found
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       )}
 
       {/* Add Material Dialog */}
@@ -342,6 +405,29 @@ const MaterialsPage = () => {
                 setNewMaterial({ ...newMaterial, name: e.target.value })
               }
             />
+            <div>
+              <label className="block text-sm font-medium mb-1">Category</label>
+              <Select
+                value={newMaterial.category}
+                onValueChange={(value) =>
+                  setNewMaterial({
+                    ...newMaterial,
+                    category: value,
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Input
               type="number"
               placeholder="Initial Quantity"
@@ -368,25 +454,40 @@ const MaterialsPage = () => {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
-              Transactions for {viewMaterial?.name}
+              {viewMaterial?.category === viewMaterial?.name 
+                ? `All ${viewMaterial?.category} Materials` 
+                : `Transactions for ${viewMaterial?.name}`}
             </DialogTitle>
             <DialogDescription>
-              Quantity Available: {materialQuantities[viewMaterial?.id || ""] || 0}
+              {viewMaterial?.category === viewMaterial?.name ? (
+                <div className="space-y-2">
+                  {getMaterialsByCategory(viewMaterial?.category || "").map(material => (
+                    <div key={material.id} className="flex justify-between">
+                      <span>{material.name}</span>
+                      <span>Quantity: {materialQuantities[material.id] || 0}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                `Quantity Available: ${materialQuantities[viewMaterial?.id || ""] || 0}`
+              )}
             </DialogDescription>
           </DialogHeader>
-          <div className="mb-4">
-            <Button
-              onClick={() => {
-                setOutflowForm({
-                  ...outflowForm,
-                  material_id: viewMaterial?.id || "",
-                });
-                setIsOutflowDialogOpen(true);
-              }}
-            >
-              Record Outflow
-            </Button>
-          </div>
+          {viewMaterial?.category !== viewMaterial?.name && (
+            <div className="mb-4">
+              <Button
+                onClick={() => {
+                  setOutflowForm({
+                    ...outflowForm,
+                    material_id: viewMaterial?.id || "",
+                  });
+                  setIsOutflowDialogOpen(true);
+                }}
+              >
+                Record Outflow
+              </Button>
+            </div>
+          )}
           <div className="max-h-[500px] overflow-y-auto">
             <Table>
               <TableHeader>
@@ -398,7 +499,13 @@ const MaterialsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {allTransactions.filter(t => t.material_id === viewMaterial?.id).length > 0 ? (
+                {viewMaterial?.category === viewMaterial?.name ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-4">
+                      Select a specific material to view transactions
+                    </TableCell>
+                  </TableRow>
+                ) : allTransactions.filter(t => t.material_id === viewMaterial?.id).length > 0 ? (
                   allTransactions
                     .filter(t => t.material_id === viewMaterial?.id)
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
