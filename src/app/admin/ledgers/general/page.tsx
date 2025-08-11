@@ -97,6 +97,7 @@ export default function CashFlowLedgerPage() {
           purpose,
           created_at,
           user_id,
+          name,
           mode_of_payment,
           mode_of_mobilemoney,
           bank_name
@@ -137,7 +138,7 @@ export default function CashFlowLedgerPage() {
       const transformedInflows = (inflows || []).map(item => ({
         id: item.id,
         date: item.created_at,
-        name: users[item.user_id] || "Unknown",
+        name: item.user_id ? (users[item.user_id] || "Unknown") : (item.name || "Unknown"),
         reason: item.purpose || "N/A",
         inflow: item.amount_paid,
         outflow: null,
@@ -276,17 +277,17 @@ export default function CashFlowLedgerPage() {
   };
 
   const formatDate = (dateString: string) => {
-  const options: Intl.DateTimeFormatOptions = {
-    timeZone: 'Africa/Nairobi',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: 'Africa/Nairobi',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    
+    return new Date(dateString).toLocaleString('en-US', options);
   };
-  
-  return new Date(dateString).toLocaleString('en-US', options);
-};
 
   const handleDownloadCSV = () => {
     if (cashFlowData.length === 0) {
