@@ -65,9 +65,18 @@ type Category = {
   name: string;
 };
 
+type OpeningStock = {
+  id: number;
+  product_id: number;
+  date: string;
+  quantity: number;
+  type: 'product' | 'material';
+};
+
 export default function SummaryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productEntries, setProductEntries] = useState<ProductEntry[]>([]);
+  const [openingStocks, setOpeningStocks] = useState<OpeningStock[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [title, setTitle] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -90,73 +99,81 @@ export default function SummaryPage() {
     reason: '',
     quantity: '',
   });
+  const [openingStockForm, setOpeningStockForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    product_id: '',
+    quantity: '',
+  });
   const [productToDelete, setProductToDelete] = useState<number | null>(null);
   const [availableQuantities, setAvailableQuantities] = useState<Record<number, number>>({});
+  const [isOpeningStockDialogOpen, setIsOpeningStockDialogOpen] = useState(false);
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState<Date>(new Date());
 
-  // Fetch Products List
+  // Fetch all data
   useEffect(() => {
-    const fetchProducts = async () => {
-      const { data, error } = await supabase.from('product').select('id, title, category');
-      if (error) console.error('Error fetching products:', error);
-      else {
-        setProducts(data || []);
-        // Initialize available quantities
-        const quantities: Record<number, number> = {};
-        data?.forEach(product => {
-          quantities[product.id] = 0;
-        });
-        setAvailableQuantities(quantities);
+    const fetchAllData = async () => {
+      setLoading(true);
+      try {
+        // Fetch products
+        const { data: productsData, error: productsError } = await supabase
+          .from('product')
+          .select('id, title, category');
+        if (productsError) throw productsError;
+
+        // Fetch categories
+        const { data: categoriesData, error: categoriesError } = await supabase
+          .from('category')
+          .select('*');
+        if (categoriesError) throw categoriesError;
+
+        // Fetch opening stocks
+        const { data: openingStocksData, error: openingStocksError } = await supabase
+          .from('opening_stocks')
+          .select('*')
+          .eq('type', 'product')
+          .order('date', { ascending: false });
+        if (openingStocksError) throw openingStocksError;
+
+        // Fetch product entries
+        const { data: productEntriesData, error: entriesError } = await supabase
+          .from('product_entries')
+          .select('*');
+        if (entriesError) throw entriesError;
+
+        setProducts(productsData || []);
+        setCategories(categoriesData || []);
+        setOpeningStocks(openingStocksData || []);
+        setProductEntries(productEntriesData || []);
+        calculateAvailableQuantities(productEntriesData || [], openingStocksData || []);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchProducts();
+    fetchAllData();
   }, []);
 
-  // Fetch Categories
-  useEffect(() => {
-    const fetchCategories = async () => {
-      const { data, error } = await supabase.from('category').select('*');
-      if (error) console.error('Error fetching categories:', error);
-      else setCategories(data || []);
-    };
+  const calculateAvailableQuantities = (entries: ProductEntry[], stocks: OpeningStock[]) => {
+    const quantities: Record<number, number> = {};
 
-    fetchCategories();
-  }, []);
+    // Initialize with opening stocks
+    stocks.forEach(stock => {
+      if (!quantities[stock.product_id]) quantities[stock.product_id] = 0;
+      quantities[stock.product_id] += stock.quantity;
+    });
 
-  // Fetch Product Entries and calculate available quantities
-  useEffect(() => {
-    const fetchProductEntries = async () => {
-      const { data, error } = await supabase
-        .from('product_entries')
-        .select('*');
+    // Add inflows and subtract outflows
+    entries.forEach(entry => {
+      if (!quantities[entry.product_id]) quantities[entry.product_id] = 0;
+      quantities[entry.product_id] += entry.quantity;
+    });
 
-      if (error) {
-        console.error('Error fetching product entries:', error);
-        return;
-      }
+    setAvailableQuantities(quantities);
+  };
 
-      setProductEntries(data || []);
-
-      // Calculate available quantities
-      const quantities: Record<number, number> = {};
-      products.forEach(product => {
-        quantities[product.id] = 0;
-      });
-
-      data?.forEach(entry => {
-        if (!quantities[entry.product_id]) quantities[entry.product_id] = 0;
-        quantities[entry.product_id] += entry.quantity;
-      });
-
-      setAvailableQuantities(quantities);
-    };
-
-    if (products.length > 0) {
-      fetchProductEntries();
-    }
-  }, [products]);
-
-  // Fetch Product Entries for a specific product
   const fetchProductEntriesForProduct = async (productId: number) => {
     const { data, error } = await supabase
       .from('product_entries')
@@ -168,7 +185,6 @@ export default function SummaryPage() {
     else setProductEntries(data || []);
   };
 
-  // Handle Add Product
   const handleAddProduct = async () => {
     const slug = slugify(title, { lower: true, strict: true });
 
@@ -185,82 +201,62 @@ export default function SummaryPage() {
         .insert([{ title, category: selectedCategory, slug }])
         .select();
 
-      if (error) {
-        console.error('Error adding product:', error);
-        alert('Failed to add product.');
-      } else if (data) {
-        alert('Beverage added successfully!');
-        setProducts(prev => [...prev, data[0]]);
-        setAvailableQuantities(prev => ({ ...prev, [data[0].id]: 0 }));
-      }
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      alert('An unexpected error occurred.');
-    } finally {
-      setLoading(false);
+      if (error) throw error;
+      
+      alert('Beverage added successfully!');
+      setProducts(prev => [...prev, data[0]]);
+      setAvailableQuantities(prev => ({ ...prev, [data[0].id]: 0 }));
       setTitle('');
       setSelectedCategory(null);
+    } catch (error) {
+      console.error('Error adding product:', error);
+      alert('Failed to add product.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handle Delete Product
   const handleDeleteProduct = async () => {
     if (!productToDelete) return;
 
     setDeleteLoading(true);
 
     try {
-      // First delete all related entries
-      const { error: entriesError } = await supabase
+      // Delete related entries
+      await supabase
         .from('product_entries')
         .delete()
         .eq('product_id', productToDelete);
 
-      if (entriesError) throw entriesError;
+      // Delete opening stocks
+      await supabase
+        .from('opening_stocks')
+        .delete()
+        .eq('product_id', productToDelete)
+        .eq('type', 'product');
 
-      // Then delete the product
-      const { error: productError } = await supabase
+      // Delete product
+      await supabase
         .from('product')
         .delete()
         .eq('id', productToDelete);
-
-      if (productError) throw productError;
 
       alert('Beverage deleted successfully!');
       setProducts(prev => prev.filter(p => p.id !== productToDelete));
       setProductToDelete(null);
     } catch (error) {
       console.error('Error deleting product:', error);
-      alert('Failed to delete beverage. Please try again.');
+      alert('Failed to delete beverage.');
     } finally {
       setDeleteLoading(false);
     }
   };
 
-  // Handle Product Click to view transactions
   const handleProductClick = async (productId: number) => {
     setSelectedProductId(productId);
     await fetchProductEntriesForProduct(productId);
   };
 
-  // Handle Date Range Change
-  const handleDateRangeChange = (value: [Date, Date]) => {
-    setDateRange(value);
-  };
-
-  // Handle Inflow Form Change
-  const handleInflowFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setInflowForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  // Handle Outflow Form Change
-  const handleOutflowFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setOutflowForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  // Record Inflow Transaction
   const recordInflow = async () => {
     if (!inflowForm.product_id || !inflowForm.source || !inflowForm.quantity) {
       alert('Please fill all fields');
@@ -272,8 +268,7 @@ export default function SummaryPage() {
     if (!product) return;
 
     try {
-      // Record the transaction
-      const { error: entryError } = await supabase
+      const { error } = await supabase
         .from('product_entries')
         .insert([{
           product_id: productId,
@@ -284,9 +279,9 @@ export default function SummaryPage() {
           transaction: inflowForm.source,
         }]);
 
-      if (entryError) throw entryError;
+      if (error) throw error;
 
-      // Update available quantity locally
+      // Update local state
       setAvailableQuantities(prev => ({
         ...prev,
         [productId]: (prev[productId] || 0) + Number(inflowForm.quantity)
@@ -305,7 +300,6 @@ export default function SummaryPage() {
     }
   };
 
-  // Record Outflow Transaction
   const recordOutflow = async () => {
     if (!outflowForm.product_id || !outflowForm.reason || !outflowForm.quantity) {
       alert('Please fill all fields');
@@ -323,21 +317,20 @@ export default function SummaryPage() {
     }
 
     try {
-      // Record the transaction
-      const { error: entryError } = await supabase
+      const { error } = await supabase
         .from('product_entries')
         .insert([{
           product_id: productId,
           title: product.title,
-          quantity: -Number(outflowForm.quantity), // Negative for outflow
+          quantity: -Number(outflowForm.quantity),
           created_at: outflowForm.date,
           created_by: 'Admin',
           transaction: outflowForm.reason,
         }]);
 
-      if (entryError) throw entryError;
+      if (error) throw error;
 
-      // Update available quantity locally
+      // Update local state
       setAvailableQuantities(prev => ({
         ...prev,
         [productId]: (prev[productId] || 0) - Number(outflowForm.quantity)
@@ -356,7 +349,90 @@ export default function SummaryPage() {
     }
   };
 
-  // Get category name by ID
+  const handleRecordOpeningStock = async () => {
+    if (!openingStockForm.product_id || !openingStockForm.quantity) {
+      alert('Please fill all required fields');
+      return;
+    }
+
+    const productId = Number(openingStockForm.product_id);
+    const quantity = Number(openingStockForm.quantity);
+
+    try {
+      // Check for existing record
+      const { data: existing, error: checkError } = await supabase
+        .from('opening_stocks')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('date', openingStockForm.date)
+        .eq('type', 'product')
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+      if (existing) {
+        alert('Opening stock already recorded for this product on the selected date');
+        return;
+      }
+
+      // Record new opening stock
+      const { error } = await supabase
+        .from('opening_stocks')
+        .insert([{
+          product_id: productId,
+          date: openingStockForm.date,
+          quantity: quantity,
+          type: 'product'
+        }]);
+
+      if (error) throw error;
+
+      // Refresh data
+      const { data: stocks } = await supabase
+        .from('opening_stocks')
+        .select('*')
+        .eq('type', 'product')
+        .order('date', { ascending: false });
+      
+      setOpeningStocks(stocks || []);
+      calculateAvailableQuantities(productEntries, stocks || []);
+
+      alert('Opening stock recorded successfully!');
+      setIsOpeningStockDialogOpen(false);
+      setOpeningStockForm({
+        date: new Date().toISOString().split('T')[0],
+        product_id: '',
+        quantity: '',
+      });
+    } catch (error) {
+      console.error('Error recording opening stock:', error);
+      alert('Failed to record opening stock');
+    }
+  };
+
+  const calculateOpeningStock = (productId: number, date: string) => {
+    // Find most recent opening stock before this date
+    const previousStocks = openingStocks
+      .filter(stock => 
+        stock.product_id === productId && 
+        stock.date < date
+      )
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const mostRecentStock = previousStocks[0]?.quantity || 0;
+    const mostRecentStockDate = previousStocks[0]?.date || '';
+
+    // Calculate net transactions since most recent opening stock
+    const relevantTransactions = productEntries.filter(entry => 
+      entry.product_id === productId &&
+      entry.created_at >= mostRecentStockDate &&
+      entry.created_at < date
+    );
+
+    const netTransactions = relevantTransactions.reduce((sum, entry) => sum + entry.quantity, 0);
+
+    return mostRecentStock + netTransactions;
+  };
+
   const getCategoryName = (categoryId: number) => {
     const category = categories.find(c => c.id === categoryId);
     return category ? category.name : 'Unknown';
@@ -400,19 +476,19 @@ export default function SummaryPage() {
                   placeholder="e.g. Cola, Orange Juice"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                 <Select onValueChange={(value) => setSelectedCategory(Number(value))}>
-                  <SelectTrigger className="w-full border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a Category" />
                   </SelectTrigger>
-                  <SelectContent className="rounded-lg border-gray-200">
+                  <SelectContent>
                     {categories.map((category) => (
-                      <SelectItem key={category.id} value={String(category.id)} className="hover:bg-gray-50">
+                      <SelectItem key={category.id} value={String(category.id)}>
                         {category.name}
                       </SelectItem>
                     ))}
@@ -423,19 +499,9 @@ export default function SummaryPage() {
               <Button 
                 onClick={handleAddProduct} 
                 disabled={loading}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 flex items-center justify-center gap-2"
+                className="w-full bg-indigo-600 hover:bg-indigo-700"
               >
-                {loading ? (
-                  <>
-                    <span className="animate-spin">🌀</span>
-                    <span>Adding...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>➕</span>
-                    <span>Add Beverage</span>
-                  </>
-                )}
+                {loading ? 'Adding...' : 'Add Beverage'}
               </Button>
             </div>
           </DialogContent>
@@ -443,7 +509,7 @@ export default function SummaryPage() {
       </div>
 
       {/* Transaction Recording Buttons */}
-      <div className="flex gap-4 mb-6">
+      <div className="flex flex-wrap gap-4 mb-6">
         {/* Record Inflow Button */}
         <Dialog>
           <DialogTrigger asChild>
@@ -462,7 +528,7 @@ export default function SummaryPage() {
                   type="date"
                   name="date"
                   value={inflowForm.date}
-                  onChange={handleInflowFormChange}
+                  onChange={(e) => setInflowForm(prev => ({ ...prev, date: e.target.value }))}
                   className="w-full"
                 />
               </div>
@@ -506,7 +572,7 @@ export default function SummaryPage() {
                   type="number"
                   name="quantity"
                   value={inflowForm.quantity}
-                  onChange={handleInflowFormChange}
+                  onChange={(e) => setInflowForm(prev => ({ ...prev, quantity: e.target.value }))}
                   className="w-full"
                   min="1"
                 />
@@ -541,7 +607,7 @@ export default function SummaryPage() {
                   type="date"
                   name="date"
                   value={outflowForm.date}
-                  onChange={handleOutflowFormChange}
+                  onChange={(e) => setOutflowForm(prev => ({ ...prev, date: e.target.value }))}
                   className="w-full"
                 />
               </div>
@@ -585,7 +651,7 @@ export default function SummaryPage() {
                   type="number"
                   name="quantity"
                   value={outflowForm.quantity}
-                  onChange={handleOutflowFormChange}
+                  onChange={(e) => setOutflowForm(prev => ({ ...prev, quantity: e.target.value }))}
                   className="w-full"
                   min="1"
                 />
@@ -597,6 +663,133 @@ export default function SummaryPage() {
               </Button>
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Record Opening Stock Button */}
+        <Dialog open={isOpeningStockDialogOpen} onOpenChange={setIsOpeningStockDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="default" className="bg-blue-600 hover:bg-blue-700">
+              📅 Record Opening Stock
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="rounded-lg max-w-md">
+            <DialogHeader>
+              <DialogTitle>📅 Record Opening Stock</DialogTitle>
+              <DialogDescription>
+                Record the starting quantity for a beverage on a specific date
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <Input
+                  type="date"
+                  value={openingStockForm.date}
+                  onChange={(e) => setOpeningStockForm(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Beverage</label>
+                <Select 
+                  onValueChange={(value) => setOpeningStockForm(prev => ({ ...prev, product_id: value }))}
+                  value={openingStockForm.product_id}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a beverage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map(product => (
+                      <SelectItem key={product.id} value={String(product.id)}>
+                        {product.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                <Input
+                  type="number"
+                  value={openingStockForm.quantity}
+                  onChange={(e) => setOpeningStockForm(prev => ({ ...prev, quantity: e.target.value }))}
+                  className="w-full"
+                  min="0"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleRecordOpeningStock} className="bg-blue-600 hover:bg-blue-700">
+                Record Opening Stock
+              </Button>
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* View History Button */}
+        <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="default" className="bg-purple-600 hover:bg-purple-700">
+              🕰️ View History
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="rounded-lg max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>🕰️ Opening Stock History</DialogTitle>
+              <DialogDescription>
+                View opening stock records by date
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Date</label>
+                <Input
+                  type="date"
+                  value={selectedHistoryDate.toISOString().split('T')[0]}
+                  onChange={(e) => setSelectedHistoryDate(new Date(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              <div className="max-h-[500px] overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Beverage</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Opening Stock</TableHead>
+                      <TableHead>Calculated Stock</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {products.map(product => {
+                      const dateKey = selectedHistoryDate.toISOString().split('T')[0];
+                      const recordedStock = openingStocks.find(
+                        s => s.product_id === product.id && s.date === dateKey
+                      )?.quantity;
+                      const calculatedStock = calculateOpeningStock(product.id, dateKey);
+
+                      return (
+                        <TableRow key={product.id}>
+                          <TableCell>{product.title}</TableCell>
+                          <TableCell>{getCategoryName(product.category)}</TableCell>
+                          <TableCell>{recordedStock ?? 'Not recorded'}</TableCell>
+                          <TableCell>{calculatedStock}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Close</Button>
               </DialogClose>
             </DialogFooter>
           </DialogContent>
@@ -647,6 +840,7 @@ export default function SummaryPage() {
                             <TableHeader>
                               <TableRow>
                                 <TableHead>Date</TableHead>
+                                <TableHead>Type</TableHead>
                                 <TableHead>Reason/Source</TableHead>
                                 <TableHead>Quantity</TableHead>
                               </TableRow>
@@ -654,10 +848,14 @@ export default function SummaryPage() {
                             <TableBody>
                               {productEntries
                                 .filter(entry => entry.product_id === product.id)
+                                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                                 .map((entry) => (
                                   <TableRow key={entry.id}>
                                     <TableCell>
                                       {new Date(entry.created_at).toLocaleDateString()}
+                                    </TableCell>
+                                    <TableCell>
+                                      {entry.quantity > 0 ? 'Inflow' : 'Outflow'}
                                     </TableCell>
                                     <TableCell>{entry.transaction}</TableCell>
                                     <TableCell className={entry.quantity > 0 ? 'text-green-600' : 'text-red-600'}>
@@ -710,109 +908,111 @@ export default function SummaryPage() {
       </Card>
 
       {/* Analytics Dashboard */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <span>📈</span>
-          <span>Inventory Analytics</span>
-        </h2>
+      {!loading && products.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+            <span>📈</span>
+            <span>Inventory Analytics</span>
+          </h2>
 
-        {/* Charts Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Inventory Levels Bar Chart */}
-          <Card className="border border-gray-200 rounded-xl overflow-hidden">
-            <CardHeader className="bg-gray-50 border-b border-gray-200">
-              <CardTitle className="flex items-center gap-2">
-                <span>📊</span>
-                <span>Inventory Levels</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={products.map(product => ({
-                      name: product.title,
-                      quantity: availableQuantities[product.id] || 0,
-                    }))}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="name" stroke="#6b7280" />
-                    <YAxis stroke="#6b7280" />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'white',
-                        borderColor: '#e5e7eb',
-                        borderRadius: '0.5rem',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                      }}
-                    />
-                    <Legend />
-                    <Bar 
-                      dataKey="quantity" 
-                      fill="#6366F1" 
-                      radius={[4, 4, 0, 0]}
-                      name="Available Quantity"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Inventory Distribution Pie Chart */}
-          <Card className="border border-gray-200 rounded-xl overflow-hidden">
-            <CardHeader className="bg-gray-50 border-b border-gray-200">
-              <CardTitle className="flex items-center gap-2">
-                <span>🍹</span>
-                <span>Inventory Distribution</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
+          {/* Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Inventory Levels Bar Chart */}
+            <Card className="border border-gray-200 rounded-xl overflow-hidden">
+              <CardHeader className="bg-gray-50 border-b border-gray-200">
+                <CardTitle className="flex items-center gap-2">
+                  <span>📊</span>
+                  <span>Inventory Levels</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
                       data={products.map(product => ({
                         name: product.title,
-                        value: availableQuantities[product.id] || 0,
+                        quantity: availableQuantities[product.id] || 0,
                       }))}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      fill="#8884d8"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                     >
-                      {products.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'][index % 5]} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'white',
-                        borderColor: '#e5e7eb',
-                        borderRadius: '0.5rem',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                      }}
-                      formatter={(value, name, props) => [
-                        `${value} units`,
-                        name
-                      ]}
-                    />
-                    <Legend 
-                      layout="horizontal"
-                      verticalAlign="bottom"
-                      align="center"
-                      wrapperStyle={{ paddingTop: '20px' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="name" stroke="#6b7280" />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'white',
+                          borderColor: '#e5e7eb',
+                          borderRadius: '0.5rem',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                      />
+                      <Legend />
+                      <Bar 
+                        dataKey="quantity" 
+                        fill="#6366F1" 
+                        radius={[4, 4, 0, 0]}
+                        name="Available Quantity"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Inventory Distribution Pie Chart */}
+            <Card className="border border-gray-200 rounded-xl overflow-hidden">
+              <CardHeader className="bg-gray-50 border-b border-gray-200">
+                <CardTitle className="flex items-center gap-2">
+                  <span>🍹</span>
+                  <span>Inventory Distribution</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={products.map(product => ({
+                          name: product.title,
+                          value: availableQuantities[product.id] || 0,
+                        }))}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        fill="#8884d8"
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {products.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'][index % 5]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'white',
+                          borderColor: '#e5e7eb',
+                          borderRadius: '0.5rem',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                        formatter={(value, name, props) => [
+                          `${value} units`,
+                          name
+                        ]}
+                      />
+                      <Legend 
+                        layout="horizontal"
+                        verticalAlign="bottom"
+                        align="center"
+                        wrapperStyle={{ paddingTop: '20px' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
