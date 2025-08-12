@@ -83,7 +83,6 @@ const MaterialsPage = () => {
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [isOutflowDialogOpen, setIsOutflowDialogOpen] = useState(false);
   const [viewMaterial, setViewMaterial] = useState<Material | null>(null);
-  const [viewCategory, setViewCategory] = useState<string | null>(null);
   const [allTransactions, setAllTransactions] = useState<MaterialTransaction[]>([]);
   const [materialQuantities, setMaterialQuantities] = useState<Record<string, number>>({});
   const [newMaterial, setNewMaterial] = useState<Omit<Material, "id">>({
@@ -179,7 +178,7 @@ const MaterialsPage = () => {
       // Initialize expanded categories state
       const initialExpandedState: Record<string, boolean> = {};
       CATEGORIES.forEach(category => {
-        initialExpandedState[category] = false;
+        initialExpandedState[category] = true;
       });
       setExpandedCategories(initialExpandedState);
     } catch (error) {
@@ -291,12 +290,6 @@ const MaterialsPage = () => {
     return materials.filter(material => material.category === category);
   };
 
-  const handleViewCategory = (category: string) => {
-    setViewCategory(category);
-    setViewMaterial(null);
-    setIsViewDetailsOpen(true);
-  };
-
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Materials Inventory</h1>
@@ -311,13 +304,12 @@ const MaterialsPage = () => {
       {loading ? (
         <div className="text-center py-8">Loading materials...</div>
       ) : (
-        <div className="border rounded-lg overflow-hidden">
+        <div className="border rounded-lg">
           <Table>
-            <TableHeader className="bg-gray-50">
+            <TableHeader>
               <TableRow>
-                <TableHead className="w-[200px]">Category</TableHead>
-                <TableHead>Material</TableHead>
-                <TableHead className="text-right">Quantity Available</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Quantity</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -327,13 +319,13 @@ const MaterialsPage = () => {
                 if (categoryMaterials.length === 0) return null;
                 
                 return (
-                  <>
-                    <TableRow key={category} className="bg-gray-50">
+                  <div key={category}>
+                    <TableRow 
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => toggleCategory(category)}
+                    >
                       <TableCell className="font-medium">
-                        <div 
-                          className="flex items-center cursor-pointer"
-                          onClick={() => toggleCategory(category)}
-                        >
+                        <div className="flex items-center">
                           {expandedCategories[category] ? (
                             <ChevronDown className="w-4 h-4 mr-2" />
                           ) : (
@@ -342,14 +334,22 @@ const MaterialsPage = () => {
                           {category}
                         </div>
                       </TableCell>
-                      <TableCell colSpan={2}></TableCell>
+                      <TableCell className="text-right">
+                        {categoryMaterials.reduce((sum, material) => sum + (materialQuantities[material.id] || 0), 0)}
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleViewCategory(category);
+                            setViewMaterial({
+                              id: category,
+                              name: category,
+                              category: category,
+                              quantity_available: 0
+                            });
+                            setIsViewDetailsOpen(true);
                           }}
                         >
                           View All
@@ -357,39 +357,40 @@ const MaterialsPage = () => {
                       </TableCell>
                     </TableRow>
                     {expandedCategories[category] && categoryMaterials.map((material) => (
-                      <TableRow key={material.id} className="hover:bg-gray-50">
-                        <TableCell></TableCell>
-                        <TableCell>{material.name}</TableCell>
+                      <TableRow key={material.id} className="bg-gray-50">
+                        <TableCell className="pl-8">{material.name}</TableCell>
                         <TableCell className="text-right">
                           {materialQuantities[material.id] || 0}
                         </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setViewMaterial(material);
-                              setIsViewDetailsOpen(true);
-                            }}
-                          >
-                            Details
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeleteMaterial(material.id)}
-                          >
-                            Delete
-                          </Button>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setViewMaterial(material);
+                                setIsViewDetailsOpen(true);
+                              }}
+                            >
+                              Details
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteMaterial(material.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
-                  </>
+                  </div>
                 );
               })}
               {materials.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-4">
+                  <TableCell colSpan={3} className="text-center py-4">
                     No materials found
                   </TableCell>
                 </TableRow>
@@ -462,16 +463,16 @@ const MaterialsPage = () => {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
-              {viewCategory 
-                ? `All ${viewCategory} Materials` 
+              {viewMaterial?.category === viewMaterial?.name 
+                ? `All ${viewMaterial?.category} Materials` 
                 : `Transactions for ${viewMaterial?.name}`}
             </DialogTitle>
             <DialogDescription>
-              {viewCategory ? (
-                <div className="space-y-2 mt-2">
-                  {getMaterialsByCategory(viewCategory).map(material => (
-                    <div key={material.id} className="flex justify-between items-center py-2 border-b">
-                      <span className="font-medium">{material.name}</span>
+              {viewMaterial?.category === viewMaterial?.name ? (
+                <div className="space-y-2">
+                  {getMaterialsByCategory(viewMaterial?.category || "").map(material => (
+                    <div key={material.id} className="flex justify-between">
+                      <span>{material.name}</span>
                       <span>Quantity: {materialQuantities[material.id] || 0}</span>
                     </div>
                   ))}
@@ -481,7 +482,7 @@ const MaterialsPage = () => {
               )}
             </DialogDescription>
           </DialogHeader>
-          {!viewCategory && (
+          {viewMaterial?.category !== viewMaterial?.name && (
             <div className="mb-4">
               <Button
                 onClick={() => {
@@ -496,53 +497,91 @@ const MaterialsPage = () => {
               </Button>
             </div>
           )}
-          {!viewCategory && (
-            <div className="max-h-[500px] overflow-y-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {allTransactions.filter(t => t.material_id === viewMaterial?.id).length > 0 ? (
-                    allTransactions
-                      .filter(t => t.material_id === viewMaterial?.id)
-                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                      .map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>{transaction.date}</TableCell>
-                          <TableCell>
-                            <span
-                              className={`px-2 py-1 rounded ${
-                                transaction.type === "inflow"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-red-100 text-red-800"
-                              }`}
-                            >
-                              {transaction.type}
-                            </span>
+          <div className="max-h-[500px] overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Quantity</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {viewMaterial?.category === viewMaterial?.name ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Material</TableHead>
+                        <TableHead className="text-right">Quantity</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {getMaterialsByCategory(viewMaterial?.category || "").map(material => (
+                        <TableRow key={material.id}>
+                          <TableCell>{material.name}</TableCell>
+                          <TableCell className="text-right">
+                            {materialQuantities[material.id] || 0}
                           </TableCell>
                           <TableCell className="text-right">
-                            {transaction.quantity}
+                            <div className="flex justify-end space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setViewMaterial(material);
+                                }}
+                              >
+                                Details
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteMaterial(material.id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
                           </TableCell>
-                          <TableCell>{transaction.action}</TableCell>
                         </TableRow>
-                      ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-4">
-                        No transactions found
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : allTransactions.filter(t => t.material_id === viewMaterial?.id).length > 0 ? (
+                  allTransactions
+                    .filter(t => t.material_id === viewMaterial?.id)
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .map((transaction) => (
+                      <TableRow key={transaction.id}>
+                        <TableCell>{transaction.date}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded ${
+                              transaction.type === "inflow"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {transaction.type}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {transaction.quantity}
+                        </TableCell>
+                        <TableCell>{transaction.action}</TableCell>
+                      </TableRow>
+                    ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-4">
+                      No transactions found
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
 
