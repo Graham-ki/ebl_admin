@@ -4,14 +4,6 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -796,114 +788,131 @@ export default function SummaryPage() {
         </Dialog>
       </div>
 
-      {/* Beverage Inventory Table */}
+      {/* Beverage Inventory List */}
       <Card className="mb-8">
         <CardHeader>
           <CardTitle>Beverage Inventory</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Beverage Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Available Quantity</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-medium">{product.title}</TableCell>
-                  <TableCell>{getCategoryName(product.category)}</TableCell>
-                  <TableCell>{availableQuantities[product.id] || 0}</TableCell>
-                  <TableCell className="flex gap-2">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleProductClick(product.id)}
+          <div className="space-y-4">
+            {products.map((product) => (
+              <div key={product.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-medium text-lg">{product.title}</h3>
+                    <p className="text-sm text-gray-600">{getCategoryName(product.category)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-xl">{availableQuantities[product.id] || 0}</p>
+                    <p className="text-sm text-gray-500">in stock</p>
+                  </div>
+                </div>
+                
+                <div className="mt-4 flex gap-2">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleProductClick(product.id)}
+                        className="flex-1"
+                      >
+                        View Transactions
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-4xl">
+                      <DialogHeader>
+                        <DialogTitle>Transaction History for {product.title}</DialogTitle>
+                        <DialogDescription>
+                          Available Quantity: {availableQuantities[product.id] || 0}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="max-h-[500px] overflow-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Reason/Source</TableHead>
+                              <TableHead>Quantity</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {productEntries
+                              .filter(entry => entry.product_id === product.id)
+                              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                              .map((entry) => (
+                                <TableRow key={entry.id}>
+                                  <TableCell>
+                                    {new Date(entry.created_at).toLocaleDateString()}
+                                  </TableCell>
+                                  <TableCell>
+                                    {entry.quantity > 0 ? 'Inflow' : 'Outflow'}
+                                  </TableCell>
+                                  <TableCell>{entry.transaction}</TableCell>
+                                  <TableCell className={entry.quantity > 0 ? 'text-green-600' : 'text-red-600'}>
+                                    {entry.quantity > 0 ? '+' : ''}{entry.quantity}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setOpeningStockForm({
+                        date: new Date().toISOString().split('T')[0],
+                        product_id: String(product.id),
+                        quantity: String(availableQuantities[product.id] || '0'),
+                      });
+                      setIsOpeningStockDialogOpen(true);
+                    }}
+                    className="flex-1"
+                  >
+                    Record Opening
+                  </Button>
+
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setProductToDelete(product.id)}
+                        className="flex-1"
+                      >
+                        Delete
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Confirm Deletion</DialogTitle>
+                        <DialogDescription>
+                          Are you sure you want to delete "{product.title}"? This action cannot be undone.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <DialogFooter>
+                        <Button 
+                          variant="destructive" 
+                          onClick={handleDeleteProduct}
+                          disabled={deleteLoading}
                         >
-                          View Transactions
+                          {deleteLoading ? 'Deleting...' : 'Delete'}
                         </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-4xl">
-                        <DialogHeader>
-                          <DialogTitle>Transaction History for {product.title}</DialogTitle>
-                          <DialogDescription>
-                            Available Quantity: {availableQuantities[product.id] || 0}
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="max-h-[500px] overflow-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Reason/Source</TableHead>
-                                <TableHead>Quantity</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {productEntries
-                                .filter(entry => entry.product_id === product.id)
-                                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                                .map((entry) => (
-                                  <TableRow key={entry.id}>
-                                    <TableCell>
-                                      {new Date(entry.created_at).toLocaleDateString()}
-                                    </TableCell>
-                                    <TableCell>
-                                      {entry.quantity > 0 ? 'Inflow' : 'Outflow'}
-                                    </TableCell>
-                                    <TableCell>{entry.transaction}</TableCell>
-                                    <TableCell className={entry.quantity > 0 ? 'text-green-600' : 'text-red-600'}>
-                                      {entry.quantity > 0 ? '+' : ''}{entry.quantity}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setProductToDelete(product.id)}
-                        >
-                          Delete
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-md">
-                        <DialogHeader>
-                          <DialogTitle>Confirm Deletion</DialogTitle>
-                          <DialogDescription>
-                            Are you sure you want to delete "{product.title}"? This action cannot be undone.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                          <Button 
-                            variant="destructive" 
-                            onClick={handleDeleteProduct}
-                            disabled={deleteLoading}
-                          >
-                            {deleteLoading ? 'Deleting...' : 'Delete'}
-                          </Button>
-                          <DialogClose asChild>
-                            <Button variant="outline">Cancel</Button>
-                          </DialogClose>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                        <DialogClose asChild>
+                          <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
