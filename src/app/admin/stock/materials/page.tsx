@@ -13,7 +13,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { createClient } from "@supabase/supabase-js";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, CalendarIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,7 +30,7 @@ interface Material {
   category: string;
 }
 
-type TransactionType = "inflow" | "outflow";
+type TransactionType = "inflow" | "outflow" | "opening_stock";
 
 interface MaterialTransaction {
   id: string;
@@ -39,9 +42,22 @@ interface MaterialTransaction {
   material_name: string;
 }
 
+interface OpeningStockRecord {
+  id: string;
+  material_id: string;
+  date: string;
+  quantity: number;
+}
+
 interface OutflowFormData {
   material_id: string;
   action: "Damaged" | "Sold" | "Used in production";
+  quantity: number;
+  date: string;
+}
+
+interface OpeningStockFormData {
+  material_id: string;
   quantity: number;
   date: string;
 }
@@ -54,8 +70,11 @@ const MaterialsPage = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [isOutflowDialogOpen, setIsOutflowDialogOpen] = useState(false);
+  const [isOpeningStockDialogOpen, setIsOpeningStockDialogOpen] = useState(false);
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [viewMaterial, setViewMaterial] = useState<Material | null>(null);
   const [allTransactions, setAllTransactions] = useState<MaterialTransaction[]>([]);
+  const [openingStocks, setOpeningStocks] = useState<OpeningStockRecord[]>([]);
   const [materialQuantities, setMaterialQuantities] = useState<Record<string, number>>({});
   const [newMaterial, setNewMaterial] = useState<Omit<Material, "id">>({
     name: "",
@@ -68,7 +87,14 @@ const MaterialsPage = () => {
     quantity: 0,
     date: new Date().toISOString().split("T")[0],
   });
+  const [openingStockForm, setOpeningStockForm] = useState<OpeningStockFormData>({
+    material_id: "",
+    quantity: 0,
+    date: new Date().toISOString().split("T")[0],
+  });
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState<Date | undefined>(new Date());
+  const [openingStockHistory, setOpeningStockHistory] = useState<Record<string, OpeningStockRecord[]>>({});
 
   useEffect(() => {
     fetchAllData();
@@ -77,27 +103,52 @@ const MaterialsPage = () => {
   const fetchAllData = async () => {
     setLoading(true);
     try {
+      // Fetch materials
       const { data: materialsData = [], error: materialsError } = await supabase
         .from("materials")
         .select("id, name, quantity_available, category")
         .order("name", { ascending: true });
       if (materialsError) throw materialsError;
 
+      // Fetch deliveries (inflows)
       const { data: deliveriesData = [], error: deliveriesError } = await supabase
         .from("deliveries")
         .select("id, supply_item_id, quantity, delivery_date");
       if (deliveriesError) throw deliveriesError;
 
+      // Fetch supply items
       const { data: supplyItemsData = [], error: supplyItemsError } = await supabase
         .from("supply_items")
         .select("id, name");
       if (supplyItemsError) throw supplyItemsError;
 
+      // Fetch outflows
       const { data: outflows = [], error: outflowError } = await supabase
         .from("material_entries")
         .select("id, material_id, quantity, action, date");
       if (outflowError) throw outflowError;
 
+      // Fetch opening stocks
+      const { data: openingStocksData = [], error: openingStocksError } = await supabase
+        .from("opening_stocks")
+        .select("id, material_id, quantity, date")
+        .order("date", { ascending: false });
+      if (openingStocksError) throw openingStocksError;
+
+      setOpeningStocks(openingStocksData);
+
+      // Process opening stocks into history by date
+      const historyByDate: Record<string, OpeningStockRecord[]> = {};
+      openingStocksData.forEach(record => {
+        const dateKey = record.date;
+        if (!historyByDate[dateKey]) {
+          historyByDate[dateKey] = [];
+        }
+        historyByDate[dateKey].push(record);
+      });
+      setOpeningStockHistory(historyByDate);
+
+      // Process transactions
       const inflowTransactions: MaterialTransaction[] = deliveriesData
         .map(delivery => {
           const supplyItem = supplyItemsData.find(si => si.id === delivery.supply_item_id);
@@ -105,7 +156,7 @@ const MaterialsPage = () => {
           if (!material) return null;
           return {
             id: delivery.id,
-            date: new Date(delivery.delivery_date).toLocaleDateString(),
+            date: new Date(delivery.delivery_date).toISOString().split("T")[0],
             type: "inflow",
             quantity: delivery.quantity ?? 0,
             action: "Delivered",
@@ -117,7 +168,7 @@ const MaterialsPage = () => {
 
       const outflowTransactions: MaterialTransaction[] = outflows.map(entry => ({
         id: entry.id,
-        date: new Date(entry.date).toLocaleDateString(),
+        date: new Date(entry.date).toISOString().split("T")[0],
         type: "outflow",
         quantity: entry.quantity ?? 0,
         action: entry.action ?? "",
@@ -125,24 +176,53 @@ const MaterialsPage = () => {
         material_name: materialsData.find(m => m.id === entry.material_id)?.name || "",
       }));
 
-      const combinedTransactions = [...inflowTransactions, ...outflowTransactions];
+      const openingStockTransactions: MaterialTransaction[] = openingStocksData.map(record => ({
+        id: record.id,
+        date: record.date,
+        type: "opening_stock",
+        quantity: record.quantity,
+        action: "Opening Stock",
+        material_id: record.material_id,
+        material_name: materialsData.find(m => m.id === record.material_id)?.name || "",
+      }));
+
+      const combinedTransactions = [...openingStockTransactions, ...inflowTransactions, ...outflowTransactions];
       setAllTransactions(combinedTransactions);
 
+      // Calculate current quantities
       const quantities: Record<string, number> = {};
+      const latestOpeningStocks: Record<string, number> = {};
+
+      // Get the most recent opening stock for each material
+      openingStocksData.forEach(record => {
+        const recordDate = new Date(record.date);
+        if (!latestOpeningStocks[record.material_id] || 
+            new Date(latestOpeningStocks[record.material_id]) < recordDate) {
+          latestOpeningStocks[record.material_id] = record.quantity;
+        }
+      });
+
       materialsData.forEach(material => {
         const materialTransactions = combinedTransactions.filter(t => t.material_id === material.id);
+        
+        // Find the most recent opening stock
+        const openingStock = latestOpeningStocks[material.id] || 0;
+        
         const totalInflow = materialTransactions
           .filter(t => t.type === "inflow")
           .reduce((sum, t) => sum + (t.quantity || 0), 0);
+        
         const totalOutflow = materialTransactions
           .filter(t => t.type === "outflow")
           .reduce((sum, t) => sum + (t.quantity || 0), 0);
-        quantities[material.id] = totalInflow - totalOutflow;
+        
+        quantities[material.id] = openingStock + totalInflow - totalOutflow;
       });
 
       setMaterialQuantities(quantities);
       setMaterials(materialsData);
 
+      // Initialize expanded categories
       const expanded: Record<string, boolean> = {};
       CATEGORIES.forEach(c => (expanded[c] = true));
       setExpandedCategories(expanded);
@@ -178,9 +258,37 @@ const MaterialsPage = () => {
     fetchAllData();
   };
 
+  const handleRecordOpeningStock = async () => {
+    if (!openingStockForm.material_id || openingStockForm.quantity < 0) {
+      return alert("Please fill all required fields");
+    }
+
+    // Check if opening stock already exists for this material and date
+    const { data: existingRecord, error: checkError } = await supabase
+      .from("opening_stocks")
+      .select("*")
+      .eq("material_id", openingStockForm.material_id)
+      .eq("date", openingStockForm.date)
+      .maybeSingle();
+
+    if (checkError) return alert("Error checking existing records");
+    if (existingRecord) return alert("Opening stock already recorded for this material on selected date");
+
+    const { error } = await supabase.from("opening_stocks").insert([openingStockForm]);
+    if (error) return alert("Failed to record opening stock");
+    setIsOpeningStockDialogOpen(false);
+    setOpeningStockForm({
+      material_id: "",
+      quantity: 0,
+      date: new Date().toISOString().split("T")[0],
+    });
+    fetchAllData();
+  };
+
   const handleDeleteMaterial = async (id: string) => {
     if (!confirm("Are you sure?")) return;
     await supabase.from("material_entries").delete().eq("material_id", id);
+    await supabase.from("opening_stocks").delete().eq("material_id", id);
     await supabase.from("materials").delete().eq("id", id);
     fetchAllData();
   };
@@ -203,13 +311,55 @@ const MaterialsPage = () => {
     );
   };
 
+  const getOpeningStockForDate = (date: string) => {
+    const dateKey = new Date(date).toISOString().split("T")[0];
+    return openingStocks.filter(record => record.date === dateKey);
+  };
+
+  const calculateOpeningStock = (materialId: string, date: string) => {
+    // Find the most recent opening stock before the given date
+    const previousOpeningStocks = openingStocks
+      .filter(record => record.material_id === materialId && record.date < date)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    const mostRecentOpeningStock = previousOpeningStocks[0]?.quantity || 0;
+    const mostRecentOpeningStockDate = previousOpeningStocks[0]?.date || "";
+
+    // Get all transactions between the most recent opening stock date and the target date
+    const relevantTransactions = allTransactions.filter(t => 
+      t.material_id === materialId && 
+      t.date >= mostRecentOpeningStockDate && 
+      t.date < date
+    );
+
+    const totalInflow = relevantTransactions
+      .filter(t => t.type === "inflow")
+      .reduce((sum, t) => sum + (t.quantity || 0), 0);
+    
+    const totalOutflow = relevantTransactions
+      .filter(t => t.type === "outflow")
+      .reduce((sum, t) => sum + (t.quantity || 0), 0);
+
+    return mostRecentOpeningStock + totalInflow - totalOutflow;
+  };
+
+  const viewHistoryForDate = async (date: Date) => {
+    setSelectedHistoryDate(date);
+    setIsHistoryDialogOpen(true);
+  };
+
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Materials Inventory</h1>
 
-      <div className="mb-6 flex justify-between">
+      <div className="mb-6 flex justify-between items-center">
         <span>Total Materials: {materials.length}</span>
-        <Button onClick={() => setIsAdding(true)}>Add Material</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => viewHistoryForDate(new Date())}>
+            View Opening Stock History
+          </Button>
+          <Button onClick={() => setIsAdding(true)}>Add Material</Button>
+        </div>
       </div>
 
       {loading ? (
@@ -268,6 +418,21 @@ const MaterialsPage = () => {
                           >
                             Details
                           </Button>
+                          <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpeningStockForm({
+                                ...openingStockForm,
+                                material_id: mat.id,
+                                date: new Date().toISOString().split("T")[0],
+                              });
+                              setIsOpeningStockDialogOpen(true);
+                            }}
+                          >
+                            Record Opening
+                          </Button>
                           <Button size="sm" variant="destructive" onClick={() => handleDeleteMaterial(mat.id)}>Delete</Button>
                         </TableCell>
                       </TableRow>
@@ -297,7 +462,7 @@ const MaterialsPage = () => {
 
       {/* View Details Dialog */}
       <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>
               {viewMaterial?.id === viewMaterial?.category ? 
@@ -324,10 +489,11 @@ const MaterialsPage = () => {
                 {(viewMaterial?.id === viewMaterial?.category ? 
                   getCategoryTransactions(viewMaterial?.category || "") : 
                   getMaterialTransactions(viewMaterial?.id || ""))
+                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                   .map((transaction) => (
                     <TableRow key={transaction.id}>
-                      <TableCell>{transaction.date}</TableCell>
-                      <TableCell className="capitalize">{transaction.type}</TableCell>
+                      <TableCell>{format(new Date(transaction.date), "PPP")}</TableCell>
+                      <TableCell className="capitalize">{transaction.type.replace("_", " ")}</TableCell>
                       <TableCell>{transaction.quantity}</TableCell>
                       <TableCell>{transaction.action}</TableCell>
                     </TableRow>
@@ -335,15 +501,79 @@ const MaterialsPage = () => {
               </TableBody>
             </Table>
           </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setIsOutflowDialogOpen(true)}
-              disabled={viewMaterial?.id === viewMaterial?.category}
-            >
-              Record Outflow
-            </Button>
+          <DialogFooter className="gap-2">
+            {viewMaterial?.id !== viewMaterial?.category && (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsOutflowDialogOpen(true);
+                    setOutflowForm({
+                      ...outflowForm,
+                      material_id: viewMaterial?.id || "",
+                      date: new Date().toISOString().split("T")[0],
+                    });
+                  }}
+                >
+                  Record Outflow
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  onClick={() => {
+                    setIsOpeningStockDialogOpen(true);
+                    setOpeningStockForm({
+                      material_id: viewMaterial?.id || "",
+                      quantity: calculateOpeningStock(viewMaterial?.id || "", new Date().toISOString().split("T")[0]),
+                      date: new Date().toISOString().split("T")[0],
+                    });
+                  }}
+                >
+                  Record Opening Stock
+                </Button>
+              </>
+            )}
             <Button onClick={() => setIsViewDetailsOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Opening Stock Dialog */}
+      <Dialog open={isOpeningStockDialogOpen} onOpenChange={setIsOpeningStockDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Opening Stock</DialogTitle>
+            <DialogDescription>
+              Record the opening stock quantity for a material on a specific date
+            </DialogDescription>
+          </DialogHeader>
+          <Select 
+            value={openingStockForm.material_id}
+            onValueChange={v => setOpeningStockForm({ ...openingStockForm, material_id: v })}
+            disabled={!!viewMaterial?.id && viewMaterial.id !== viewMaterial.category}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select Material" />
+            </SelectTrigger>
+            <SelectContent>
+              {materials.map(material => (
+                <SelectItem key={material.id} value={material.id}>{material.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input 
+            type="number" 
+            placeholder="Quantity" 
+            value={openingStockForm.quantity} 
+            onChange={e => setOpeningStockForm({ ...openingStockForm, quantity: Number(e.target.value) })} 
+          />
+          <Input 
+            type="date" 
+            value={openingStockForm.date} 
+            onChange={e => setOpeningStockForm({ ...openingStockForm, date: e.target.value })} 
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsOpeningStockDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleRecordOpeningStock}>Record</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -355,6 +585,7 @@ const MaterialsPage = () => {
           <Select 
             value={outflowForm.material_id}
             onValueChange={v => setOutflowForm({ ...outflowForm, material_id: v })}
+            disabled={!!viewMaterial?.id && viewMaterial.id !== viewMaterial.category}
           >
             <SelectTrigger><SelectValue placeholder="Select Material" /></SelectTrigger>
             <SelectContent>
@@ -385,6 +616,75 @@ const MaterialsPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsOutflowDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleRecordOutflow}>Record</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Opening Stock History Dialog */}
+      <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Opening Stock History</DialogTitle>
+            <DialogDescription>
+              View opening stock records by date
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 mb-4">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline">
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {selectedHistoryDate ? format(selectedHistoryDate, "PPP") : <span>Pick a date</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={selectedHistoryDate}
+                  onSelect={setSelectedHistoryDate}
+                  className="rounded-md border"
+                />
+              </PopoverContent>
+            </Popover>
+            <Button onClick={() => viewHistoryForDate(selectedHistoryDate || new Date())}>
+              View
+            </Button>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {selectedHistoryDate && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Material</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">Opening Stock</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {materials.map(material => {
+                    const dateKey = selectedHistoryDate.toISOString().split("T")[0];
+                    const record = openingStocks.find(
+                      r => r.material_id === material.id && r.date === dateKey
+                    );
+                    const calculatedStock = calculateOpeningStock(material.id, dateKey);
+                    
+                    return (
+                      <TableRow key={material.id}>
+                        <TableCell>{material.name}</TableCell>
+                        <TableCell>{material.category}</TableCell>
+                        <TableCell className="text-right">
+                          {record ? record.quantity : calculatedStock}
+                          {!record && " (calculated)"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsHistoryDialogOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
