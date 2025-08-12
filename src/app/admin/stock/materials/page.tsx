@@ -106,7 +106,7 @@ const MaterialsPage = () => {
           return {
             id: delivery.id,
             date: new Date(delivery.delivery_date).toLocaleDateString(),
-            type: "inflow" as const,
+            type: "inflow",
             quantity: delivery.quantity ?? 0,
             action: "Delivered",
             material_id: material.id,
@@ -118,7 +118,7 @@ const MaterialsPage = () => {
       const outflowTransactions: MaterialTransaction[] = outflows.map(entry => ({
         id: entry.id,
         date: new Date(entry.date).toLocaleDateString(),
-        type: "outflow" as const,
+        type: "outflow",
         quantity: entry.quantity ?? 0,
         action: entry.action ?? "",
         material_id: entry.material_id,
@@ -278,6 +278,17 @@ const MaterialsPage = () => {
       <Dialog open={isOutflowDialogOpen} onOpenChange={setIsOutflowDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Record Outflow</DialogTitle></DialogHeader>
+          <Select 
+            value={outflowForm.material_id}
+            onValueChange={v => setOutflowForm({ ...outflowForm, material_id: v })}
+          >
+            <SelectTrigger><SelectValue placeholder="Select Material" /></SelectTrigger>
+            <SelectContent>
+              {materials.map(material => (
+                <SelectItem key={material.id} value={material.id}>{material.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={outflowForm.action} onValueChange={v => setOutflowForm({ ...outflowForm, action: v as OutflowFormData["action"] })}>
             <SelectTrigger><SelectValue placeholder="Action" /></SelectTrigger>
             <SelectContent>
@@ -286,8 +297,17 @@ const MaterialsPage = () => {
               <SelectItem value="Used in production">Used in production</SelectItem>
             </SelectContent>
           </Select>
-          <Input type="number" value={outflowForm.quantity} onChange={e => setOutflowForm({ ...outflowForm, quantity: Number(e.target.value) })} />
-          <Input type="date" value={outflowForm.date} onChange={e => setOutflowForm({ ...outflowForm, date: e.target.value })} />
+          <Input 
+            type="number" 
+            placeholder="Quantity" 
+            value={outflowForm.quantity} 
+            onChange={e => setOutflowForm({ ...outflowForm, quantity: Number(e.target.value) })} 
+          />
+          <Input 
+            type="date" 
+            value={outflowForm.date} 
+            onChange={e => setOutflowForm({ ...outflowForm, date: e.target.value })} 
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsOutflowDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleRecordOutflow}>Record</Button>
