@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
@@ -192,6 +192,17 @@ const MaterialsPage = () => {
   const getMaterialsByCategory = (cat: string) =>
     materials.filter(m => m.category === cat);
 
+  const getMaterialTransactions = (materialId: string) => {
+    return allTransactions.filter(t => t.material_id === materialId);
+  };
+
+  const getCategoryTransactions = (category: string) => {
+    const categoryMaterials = materials.filter(m => m.category === category);
+    return allTransactions.filter(t => 
+      categoryMaterials.some(m => m.id === t.material_id)
+    );
+  };
+
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Materials Inventory</h1>
@@ -246,7 +257,17 @@ const MaterialsPage = () => {
                         <TableCell className="pl-8">{mat.name}</TableCell>
                         <TableCell className="text-right">{materialQuantities[mat.id] || 0}</TableCell>
                         <TableCell className="text-right flex justify-end gap-2">
-                          <Button size="sm" variant="outline" onClick={() => { setViewMaterial(mat); setIsViewDetailsOpen(true); }}>Details</Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewMaterial(mat);
+                              setIsViewDetailsOpen(true);
+                            }}
+                          >
+                            Details
+                          </Button>
                           <Button size="sm" variant="destructive" onClick={() => handleDeleteMaterial(mat.id)}>Delete</Button>
                         </TableCell>
                       </TableRow>
@@ -270,6 +291,59 @@ const MaterialsPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAdding(false)}>Cancel</Button>
             <Button onClick={handleAddMaterial}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Details Dialog */}
+      <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {viewMaterial?.id === viewMaterial?.category ? 
+                `All ${viewMaterial?.category} Transactions` : 
+                `${viewMaterial?.name} Details`}
+            </DialogTitle>
+            <DialogDescription>
+              {viewMaterial?.id === viewMaterial?.category ? 
+                `Showing all transactions for ${viewMaterial?.category} category` : 
+                `Showing details for ${viewMaterial?.name}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Quantity</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(viewMaterial?.id === viewMaterial?.category ? 
+                  getCategoryTransactions(viewMaterial?.category || "") : 
+                  getMaterialTransactions(viewMaterial?.id || ""))
+                  .map((transaction) => (
+                    <TableRow key={transaction.id}>
+                      <TableCell>{transaction.date}</TableCell>
+                      <TableCell className="capitalize">{transaction.type}</TableCell>
+                      <TableCell>{transaction.quantity}</TableCell>
+                      <TableCell>{transaction.action}</TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsOutflowDialogOpen(true)}
+              disabled={viewMaterial?.id === viewMaterial?.category}
+            >
+              Record Outflow
+            </Button>
+            <Button onClick={() => setIsViewDetailsOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
