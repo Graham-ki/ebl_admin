@@ -51,6 +51,16 @@ interface Material {
   created_at: string;
 }
 
+interface SupplierBalance {
+  id: string;
+  supplier_id: string;
+  opening_balance: number;
+  balance_type: 'debit' | 'credit';
+  current_balance: number;
+  created_at: string;
+  updated_at: string;
+}
+
 type Transaction = {
   id: string;
   type: 'delivery' | 'payment';
@@ -68,6 +78,7 @@ export default function Suppliers() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [supplierBalances, setSupplierBalances] = useState<SupplierBalance[]>([]);
   const [showOtherInput, setShowOtherInput] = useState(false);
   
   //date picker
@@ -108,6 +119,12 @@ export default function Suppliers() {
     reference: "",
   });
 
+  const [balanceForm, setBalanceForm] = useState({
+    supplier_id: "",
+    opening_balance: 0,
+    balance_type: "credit" as 'credit' | 'debit',
+  });
+
   // UI states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +136,7 @@ export default function Suppliers() {
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
+  const [showBalanceForm, setShowBalanceForm] = useState(false);
 
   // Helper functions
   const getSupplierItems = (supplierId: string) => {
@@ -133,6 +151,10 @@ export default function Suppliers() {
   const getItemPayments = (itemId: string) => {
     return payments.filter(p => p.supply_item_id === itemId)
                   .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
+  };
+
+  const getSupplierBalance = (supplierId: string) => {
+    return supplierBalances.find(b => b.supplier_id === supplierId);
   };
 
   const getCombinedTransactions = (itemId: string): Transaction[] => {
@@ -184,6 +206,15 @@ export default function Suppliers() {
     }).format(amount);
   };
 
+  const formatBalance = (balance: SupplierBalance | undefined) => {
+    if (!balance) return "Not set";
+    
+    const amount = formatCurrency(balance.current_balance);
+    return balance.balance_type === 'debit' 
+      ? `${amount} (Supplier owes company)`
+      : `${amount} (Company owes supplier)`;
+  };
+
   // Data fetching
   useEffect(() => {
     const fetchData = async () => {
@@ -196,13 +227,15 @@ export default function Suppliers() {
           { data: itemsData, error: itemsError },
           { data: deliveriesData, error: deliveriesError },
           { data: paymentsData, error: paymentsError },
-          { data: materialsData, error: materialsError }
+          { data: materialsData, error: materialsError },
+          { data: balancesData, error: balancesError }
         ] = await Promise.all([
           supabase.from('suppliers').select('*').order('created_at', { ascending: false }),
           supabase.from('supply_items').select('*'),
           supabase.from('deliveries').select('*'),
           supabase.from('payments').select('*'),
-          supabase.from('materials').select('*').order('name', { ascending: true })
+          supabase.from('materials').select('*').order('name', { ascending: true }),
+          supabase.from('supplier_balances').select('*')
         ]);
 
         if (suppliersError) throw suppliersError;
@@ -210,12 +243,14 @@ export default function Suppliers() {
         if (deliveriesError) throw deliveriesError;
         if (paymentsError) throw paymentsError;
         if (materialsError) throw materialsError;
+        if (balancesError) throw balancesError;
 
         setSuppliers(suppliersData || []);
         setSupplyItems(itemsData || []);
         setDeliveries(deliveriesData || []);
         setPayments(paymentsData || []);
         setMaterials(materialsData || []);
+        setSupplierBalances(balancesData || []);
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load data. Please try again.');
@@ -250,6 +285,41 @@ export default function Suppliers() {
     }
   };
 
+  const handleBalanceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    
+    try {
+      if (!selectedSupplier) return;
+      
+      const { data, error } = await supabase
+        .from('supplier_balances')
+        .upsert([{ 
+          supplier_id: selectedSupplier.id,
+          opening_balance: balanceForm.opening_balance,
+          balance_type: balanceForm.balance_type,
+          current_balance: balanceForm.opening_balance
+        }])
+        .select();
+
+      if (error) throw error;
+
+      if (data?.[0]) {
+        setSupplierBalances(prev => {
+          const existing = prev.find(b => b.supplier_id === selectedSupplier.id);
+          if (existing) {
+            return prev.map(b => b.supplier_id === selectedSupplier.id ? data[0] : b);
+          }
+          return [...prev, data[0]];
+        });
+        setShowBalanceForm(false);
+      }
+    } catch (err) {
+      console.error('Error saving balance:', err);
+      setError('Failed to save balance. Please try again.');
+    }
+  };
+
   const handleItemSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -281,6 +351,7 @@ export default function Suppliers() {
     try {
       if (!selectedItem) return;
       
+      // First insert the delivery record
       const { data, error } = await supabase
         .from('deliveries')
         .insert([{ ...deliveryForm, supply_item_id: selectedItem.id }])
@@ -290,6 +361,29 @@ export default function Suppliers() {
 
       if (data?.[0]) {
         setDeliveries(prev => [...prev, data[0]]);
+        
+        // Update supplier balance if it's a debit balance (supplier owes company)
+        const supplierBalance = getSupplierBalance(selectedItem.supplier_id);
+        if (supplierBalance && supplierBalance.balance_type === 'debit') {
+          const totalValue = deliveryForm.quantity * selectedItem.price;
+          const newBalance = supplierBalance.current_balance - totalValue;
+          
+          const { error: balanceError } = await supabase
+            .from('supplier_balances')
+            .update({ current_balance: newBalance })
+            .eq('supplier_id', selectedItem.supplier_id);
+
+          if (balanceError) throw balanceError;
+
+          setSupplierBalances(prev => 
+            prev.map(b => 
+              b.supplier_id === selectedItem.supplier_id 
+                ? { ...b, current_balance: newBalance } 
+                : b
+            )
+          );
+        }
+
         resetDeliveryForm();
       }
     } catch (err) {
@@ -334,6 +428,27 @@ export default function Suppliers() {
 
         if (expenseError) throw expenseError;
 
+        // Update supplier balance if it's a credit balance (company owes supplier)
+        const supplierBalance = getSupplierBalance(selectedItem.supplier_id);
+        if (supplierBalance && supplierBalance.balance_type === 'credit') {
+          const newBalance = supplierBalance.current_balance - paymentForm.amount;
+          
+          const { error: balanceError } = await supabase
+            .from('supplier_balances')
+            .update({ current_balance: newBalance })
+            .eq('supplier_id', selectedItem.supplier_id);
+
+          if (balanceError) throw balanceError;
+
+          setSupplierBalances(prev => 
+            prev.map(b => 
+              b.supplier_id === selectedItem.supplier_id 
+                ? { ...b, current_balance: newBalance } 
+                : b
+            )
+          );
+        }
+
         resetPaymentForm();
       }
     } catch (err) {
@@ -376,6 +491,12 @@ export default function Suppliers() {
           .in('id', itemIds);
       }
 
+      // Delete supplier balance
+      await supabase
+        .from('supplier_balances')
+        .delete()
+        .eq('supplier_id', id);
+
       // Finally delete the supplier
       const { error } = await supabase
         .from('suppliers')
@@ -385,6 +506,7 @@ export default function Suppliers() {
       if (error) throw error;
 
       setSuppliers(prev => prev.filter(s => s.id !== id));
+      setSupplierBalances(prev => prev.filter(b => b.supplier_id !== id));
     } catch (err) {
       console.error('Error deleting supplier:', err);
       setError('Failed to delete supplier. Please try again.');
@@ -463,6 +585,15 @@ export default function Suppliers() {
     setShowPaymentForm(false);
   };
 
+  const resetBalanceForm = () => {
+    setBalanceForm({
+      supplier_id: "",
+      opening_balance: 0,
+      balance_type: "credit",
+    });
+    setShowBalanceForm(false);
+  };
+
   const handleMaterialChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedValue = e.target.value;
     if (selectedValue === "other") {
@@ -537,6 +668,9 @@ export default function Suppliers() {
                     Contact
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Balance
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Supplies
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -548,44 +682,64 @@ export default function Suppliers() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {suppliers.map((supplier) => (
-                  <tr key={supplier.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900">{supplier.name}</div>
-                      <div className="text-sm text-gray-500">{supplier.address}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {supplier.contact}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {getSupplierItems(supplier.id).length} items
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(supplier.created_at)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedSupplier(supplier);
-                            setShowSuppliesModal(true);
-                          }}
-                          className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
-                        >
-                          <span>📦</span> View Supplies
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteSupplier(supplier.id)}
-                          className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
-                        >
-                          <span>🗑️</span> Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {suppliers.map((supplier) => {
+                  const balance = getSupplierBalance(supplier.id);
+                  return (
+                    <tr key={supplier.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-medium text-gray-900">{supplier.name}</div>
+                        <div className="text-sm text-gray-500">{supplier.address}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {supplier.contact}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatBalance(balance)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                          {getSupplierItems(supplier.id).length} items
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(supplier.created_at)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => {
+                              setSelectedSupplier(supplier);
+                              setShowSuppliesModal(true);
+                            }}
+                            className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                          >
+                            <span>📦</span> View Supplies
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedSupplier(supplier);
+                              setBalanceForm({
+                                supplier_id: supplier.id,
+                                opening_balance: balance?.current_balance || 0,
+                                balance_type: balance?.balance_type || 'credit'
+                              });
+                              setShowBalanceForm(true);
+                            }}
+                            className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 flex items-center gap-1"
+                          >
+                            <span>💰</span> Set Balance
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteSupplier(supplier.id)}
+                            className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
+                          >
+                            <span>🗑️</span> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -666,6 +820,83 @@ export default function Suppliers() {
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Save Supplier
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Balance Form Modal */}
+      {showBalanceForm && selectedSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Set Opening Balance for {selectedSupplier.name}
+                </h3>
+                <button 
+                  onClick={resetBalanceForm}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  ✕
+                </button>
+              </div>
+              <form onSubmit={handleBalanceSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Balance Type
+                  </label>
+                  <select
+                    value={balanceForm.balance_type}
+                    onChange={(e) => setBalanceForm({
+                      ...balanceForm,
+                      balance_type: e.target.value as 'credit' | 'debit'
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="credit">Company owes supplier</option>
+                    <option value="debit">Supplier owes company</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Opening Balance (UGX)
+                  </label>
+                  <input
+                    type="number"
+                    name="opening_balance"
+                    value={balanceForm.opening_balance}
+                    onChange={(e) => setBalanceForm({
+                      ...balanceForm,
+                      opening_balance: Number(e.target.value)
+                    })}
+                    required
+                    min="0"
+                    step="0.01"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                {error && (
+                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
+                    {error}
+                  </div>
+                )}
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={resetBalanceForm}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    Save Balance
                   </button>
                 </div>
               </form>
