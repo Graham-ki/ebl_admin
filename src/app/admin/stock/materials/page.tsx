@@ -13,10 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { createClient } from "@supabase/supabase-js";
-import { ChevronDown, ChevronRight, CalendarIcon } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,8 +90,7 @@ const MaterialsPage = () => {
     date: new Date().toISOString().split("T")[0],
   });
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const [selectedHistoryDate, setSelectedHistoryDate] = useState<Date | undefined>(new Date());
-  const [openingStockHistory, setOpeningStockHistory] = useState<Record<string, OpeningStockRecord[]>>({});
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState<Date>(new Date());
 
   useEffect(() => {
     fetchAllData();
@@ -136,17 +132,6 @@ const MaterialsPage = () => {
       if (openingStocksError) throw openingStocksError;
 
       setOpeningStocks(openingStocksData);
-
-      // Process opening stocks into history by date
-      const historyByDate: Record<string, OpeningStockRecord[]> = {};
-      openingStocksData.forEach(record => {
-        const dateKey = record.date;
-        if (!historyByDate[dateKey]) {
-          historyByDate[dateKey] = [];
-        }
-        historyByDate[dateKey].push(record);
-      });
-      setOpeningStockHistory(historyByDate);
 
       // Process transactions
       const inflowTransactions: MaterialTransaction[] = deliveriesData
@@ -311,11 +296,6 @@ const MaterialsPage = () => {
     );
   };
 
-  const getOpeningStockForDate = (date: string) => {
-    const dateKey = new Date(date).toISOString().split("T")[0];
-    return openingStocks.filter(record => record.date === dateKey);
-  };
-
   const calculateOpeningStock = (materialId: string, date: string) => {
     // Find the most recent opening stock before the given date
     const previousOpeningStocks = openingStocks
@@ -343,8 +323,7 @@ const MaterialsPage = () => {
     return mostRecentOpeningStock + totalInflow - totalOutflow;
   };
 
-  const viewHistoryForDate = async (date: Date) => {
-    setSelectedHistoryDate(date);
+  const viewHistoryForDate = async () => {
     setIsHistoryDialogOpen(true);
   };
 
@@ -355,7 +334,7 @@ const MaterialsPage = () => {
       <div className="mb-6 flex justify-between items-center">
         <span>Total Materials: {materials.length}</span>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => viewHistoryForDate(new Date())}>
+          <Button variant="outline" onClick={() => viewHistoryForDate()}>
             View Opening Stock History
           </Button>
           <Button onClick={() => setIsAdding(true)}>Add Material</Button>
@@ -492,7 +471,7 @@ const MaterialsPage = () => {
                   .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                   .map((transaction) => (
                     <TableRow key={transaction.id}>
-                      <TableCell>{format(new Date(transaction.date), "PPP")}</TableCell>
+                      <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
                       <TableCell className="capitalize">{transaction.type.replace("_", " ")}</TableCell>
                       <TableCell>{transaction.quantity}</TableCell>
                       <TableCell>{transaction.action}</TableCell>
@@ -629,59 +608,49 @@ const MaterialsPage = () => {
               View opening stock records by date
             </DialogDescription>
           </DialogHeader>
-          <div className="flex items-center gap-2 mb-4">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {selectedHistoryDate ? format(selectedHistoryDate, "PPP") : <span>Pick a date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={selectedHistoryDate}
-                  onSelect={setSelectedHistoryDate}
-                  className="rounded-md border"
-                />
-              </PopoverContent>
-            </Popover>
-            <Button onClick={() => viewHistoryForDate(selectedHistoryDate || new Date())}>
-              View
+          <div className="mb-4">
+            <Input 
+              type="date" 
+              value={selectedHistoryDate.toISOString().split('T')[0]}
+              onChange={e => setSelectedHistoryDate(new Date(e.target.value))}
+            />
+            <Button 
+              className="mt-2"
+              onClick={() => viewHistoryForDate()}
+            >
+              View Records
             </Button>
           </div>
           <div className="max-h-[60vh] overflow-y-auto">
-            {selectedHistoryDate && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Material</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Opening Stock</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {materials.map(material => {
-                    const dateKey = selectedHistoryDate.toISOString().split("T")[0];
-                    const record = openingStocks.find(
-                      r => r.material_id === material.id && r.date === dateKey
-                    );
-                    const calculatedStock = calculateOpeningStock(material.id, dateKey);
-                    
-                    return (
-                      <TableRow key={material.id}>
-                        <TableCell>{material.name}</TableCell>
-                        <TableCell>{material.category}</TableCell>
-                        <TableCell className="text-right">
-                          {record ? record.quantity : calculatedStock}
-                          {!record && " (calculated)"}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Material</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead className="text-right">Opening Stock</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {materials.map(material => {
+                  const dateKey = selectedHistoryDate.toISOString().split("T")[0];
+                  const record = openingStocks.find(
+                    r => r.material_id === material.id && r.date === dateKey
+                  );
+                  const calculatedStock = calculateOpeningStock(material.id, dateKey);
+                  
+                  return (
+                    <TableRow key={material.id}>
+                      <TableCell>{material.name}</TableCell>
+                      <TableCell>{material.category}</TableCell>
+                      <TableCell className="text-right">
+                        {record ? record.quantity : calculatedStock}
+                        {!record && " (calculated)"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
           <DialogFooter>
             <Button onClick={() => setIsHistoryDialogOpen(false)}>Close</Button>
