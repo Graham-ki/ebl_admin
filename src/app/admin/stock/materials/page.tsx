@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
@@ -27,10 +27,12 @@ interface Material {
   category: string;
 }
 
+type TransactionType = "inflow" | "outflow";
+
 interface MaterialTransaction {
   id: string;
   date: string;
-  type: "inflow" | "outflow";
+  type: TransactionType;
   quantity: number;
   action: string;
   material_id: string;
@@ -75,79 +77,75 @@ const MaterialsPage = () => {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      // Fetch materials
-      const { data: materialsData, error: materialsError } = await supabase
+      const { data: materialsData = [], error: materialsError } = await supabase
         .from("materials")
         .select("id, name, quantity_available, category")
         .order("name", { ascending: true });
       if (materialsError) throw materialsError;
 
-      // Fetch deliveries with supply items
-      const { data: deliveriesData, error: deliveriesError } = await supabase
+      const { data: deliveriesData = [], error: deliveriesError } = await supabase
         .from("deliveries")
         .select("id, supply_item_id, quantity, delivery_date");
       if (deliveriesError) throw deliveriesError;
 
-      const { data: supplyItemsData, error: supplyItemsError } = await supabase
+      const { data: supplyItemsData = [], error: supplyItemsError } = await supabase
         .from("supply_items")
         .select("id, name");
       if (supplyItemsError) throw supplyItemsError;
 
-      // Fetch outflows
-      const { data: outflows, error: outflowError } = await supabase
+      const { data: outflows = [], error: outflowError } = await supabase
         .from("material_entries")
         .select("id, material_id, quantity, action, date");
       if (outflowError) throw outflowError;
 
-      // Build inflow transactions from deliveries
-      const inflowTransactions: MaterialTransaction[] = (deliveriesData || []).map(delivery => {
-        const supplyItem = supplyItemsData?.find(si => si.id === delivery.supply_item_id);
-        const material = materialsData?.find(m => m.name === supplyItem?.name);
-        return {
-          id: delivery.id,
-          date: new Date(delivery.delivery_date).toLocaleDateString(),
-          type: "inflow",
-          quantity: delivery.quantity,
-          action: "Delivered",
-          material_id: material?.id || "",
-          material_name: material?.name || supplyItem?.name || "",
-        };
-      }).filter(t => t.material_id); // remove unmatched
+      const inflowTransactions: MaterialTransaction[] = deliveriesData
+        .map(delivery => {
+          const supplyItem = supplyItemsData.find(si => si.id === delivery.supply_item_id);
+          const material = materialsData.find(m => m.name === supplyItem?.name);
+          if (!material) return null;
+          return {
+            id: delivery.id,
+            date: new Date(delivery.delivery_date).toLocaleDateString(),
+            type: "inflow" as const,
+            quantity: delivery.quantity ?? 0,
+            action: "Delivered",
+            material_id: material.id,
+            material_name: material.name,
+          };
+        })
+        .filter((t): t is MaterialTransaction => t !== null);
 
-      // Build outflow transactions
-      const outflowTransactions: MaterialTransaction[] = (outflows || []).map(entry => ({
+      const outflowTransactions: MaterialTransaction[] = outflows.map(entry => ({
         id: entry.id,
         date: new Date(entry.date).toLocaleDateString(),
-        type: "outflow",
-        quantity: entry.quantity,
-        action: entry.action,
+        type: "outflow" as const,
+        quantity: entry.quantity ?? 0,
+        action: entry.action ?? "",
         material_id: entry.material_id,
-        material_name: materialsData?.find(m => m.id === entry.material_id)?.name || "",
+        material_name: materialsData.find(m => m.id === entry.material_id)?.name || "",
       }));
 
-      // Combine
       const combinedTransactions = [...inflowTransactions, ...outflowTransactions];
       setAllTransactions(combinedTransactions);
 
-      // Calculate quantities
       const quantities: Record<string, number> = {};
-      materialsData?.forEach(material => {
+      materialsData.forEach(material => {
         const materialTransactions = combinedTransactions.filter(t => t.material_id === material.id);
-        const totalInflow = materialTransactions.filter(t => t.type === "inflow")
-          .reduce((sum, t) => sum + t.quantity, 0);
-        const totalOutflow = materialTransactions.filter(t => t.type === "outflow")
-          .reduce((sum, t) => sum + t.quantity, 0);
+        const totalInflow = materialTransactions
+          .filter(t => t.type === "inflow")
+          .reduce((sum, t) => sum + (t.quantity || 0), 0);
+        const totalOutflow = materialTransactions
+          .filter(t => t.type === "outflow")
+          .reduce((sum, t) => sum + (t.quantity || 0), 0);
         quantities[material.id] = totalInflow - totalOutflow;
       });
 
       setMaterialQuantities(quantities);
-      setMaterials(materialsData || {});
+      setMaterials(materialsData);
 
-      // Expand categories by default
       const expanded: Record<string, boolean> = {};
-      CATEGORIES.forEach(c => expanded[c] = true);
+      CATEGORIES.forEach(c => (expanded[c] = true));
       setExpandedCategories(expanded);
-
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -203,7 +201,9 @@ const MaterialsPage = () => {
         <Button onClick={() => setIsAdding(true)}>Add Material</Button>
       </div>
 
-      {loading ? <div>Loading...</div> : (
+      {loading ? (
+        <div>Loading...</div>
+      ) : (
         <Table>
           <TableHeader>
             <TableRow>
@@ -217,8 +217,8 @@ const MaterialsPage = () => {
               const catMats = getMaterialsByCategory(cat);
               if (!catMats.length) return null;
               return (
-                <div key={cat}>
-                  <TableRow onClick={() => toggleCategory(cat)} className="cursor-pointer">
+                <>
+                  <TableRow key={`${cat}-header`} onClick={() => toggleCategory(cat)} className="cursor-pointer">
                     <TableCell className="font-bold flex items-center">
                       {expandedCategories[cat] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                       {cat}
@@ -227,22 +227,31 @@ const MaterialsPage = () => {
                       {catMats.reduce((sum, m) => sum + (materialQuantities[m.id] || 0), 0)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button size="sm" variant="outline" onClick={e => { e.stopPropagation(); setViewMaterial({ id: cat, name: cat, category: cat, quantity_available: 0 }); setIsViewDetailsOpen(true); }}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setViewMaterial({ id: cat, name: cat, category: cat, quantity_available: 0 });
+                          setIsViewDetailsOpen(true);
+                        }}
+                      >
                         View All
                       </Button>
                     </TableCell>
                   </TableRow>
-                  {expandedCategories[cat] && catMats.map(mat => (
-                    <TableRow key={mat.id} className="bg-gray-50">
-                      <TableCell className="pl-8">{mat.name}</TableCell>
-                      <TableCell className="text-right">{materialQuantities[mat.id] || 0}</TableCell>
-                      <TableCell className="text-right flex justify-end gap-2">
-                        <Button size="sm" variant="outline" onClick={() => { setViewMaterial(mat); setIsViewDetailsOpen(true); }}>Details</Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleDeleteMaterial(mat.id)}>Delete</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </div>
+                  {expandedCategories[cat] &&
+                    catMats.map(mat => (
+                      <TableRow key={mat.id} className="bg-gray-50">
+                        <TableCell className="pl-8">{mat.name}</TableCell>
+                        <TableCell className="text-right">{materialQuantities[mat.id] || 0}</TableCell>
+                        <TableCell className="text-right flex justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => { setViewMaterial(mat); setIsViewDetailsOpen(true); }}>Details</Button>
+                          <Button size="sm" variant="destructive" onClick={() => handleDeleteMaterial(mat.id)}>Delete</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </>
               );
             })}
           </TableBody>
@@ -254,7 +263,7 @@ const MaterialsPage = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Add Material</DialogTitle></DialogHeader>
           <Input placeholder="Material Name" value={newMaterial.name} onChange={e => setNewMaterial({ ...newMaterial, name: e.target.value })} />
-          <Select value={newMaterial.category} onValueChange={v => setNewMaterial({ ...newMaterial, category: v })}>
+          <Select value={newMaterial.category} onValueChange={v => setNewMaterial({ ...newMaterial, category: v as Material["category"] })}>
             <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
             <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
           </Select>
@@ -269,7 +278,7 @@ const MaterialsPage = () => {
       <Dialog open={isOutflowDialogOpen} onOpenChange={setIsOutflowDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Record Outflow</DialogTitle></DialogHeader>
-          <Select value={outflowForm.action} onValueChange={v => setOutflowForm({ ...outflowForm, action: v as any })}>
+          <Select value={outflowForm.action} onValueChange={v => setOutflowForm({ ...outflowForm, action: v as OutflowFormData["action"] })}>
             <SelectTrigger><SelectValue placeholder="Action" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="Damaged">Damaged</SelectItem>
