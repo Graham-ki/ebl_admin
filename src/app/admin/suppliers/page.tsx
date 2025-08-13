@@ -205,7 +205,8 @@ export default function Suppliers() {
 
   const formatBalance = (balance: SupplierBalance | undefined) => {
     if (!balance) return "Not set";
-    const amount = formatCurrency(balance.current_balance);
+    const amount = formatCurrency(Math.abs(balance.current_balance));
+    if (balance.current_balance === 0) return "Settled (0)";
     return balance.balance_type === 'debit' 
       ? `${amount} (Company owes supplier)`
       : `${amount} (Supplier owes company)`;
@@ -367,8 +368,12 @@ export default function Suppliers() {
           let newBalance = supplierBalance.current_balance;
           
           if (supplierBalance.balance_type === 'credit') {
-            newBalance = Math.max(0, supplierBalance.current_balance - deliveryValue);
+            // Supplier owes company (credit balance)
+            // Receiving goods reduces what supplier owes
+            newBalance = supplierBalance.current_balance - deliveryValue;
           } else {
+            // Company owes supplier (debit balance)
+            // Receiving goods increases what company owes
             newBalance = supplierBalance.current_balance + deliveryValue;
           }
           
@@ -435,8 +440,12 @@ export default function Suppliers() {
           let newBalance = supplierBalance.current_balance;
           
           if (supplierBalance.balance_type === 'debit') {
-            newBalance = Math.max(0, supplierBalance.current_balance - paymentForm.amount);
+            // Company owes supplier (debit balance)
+            // Making payment reduces what company owes
+            newBalance = supplierBalance.current_balance - paymentForm.amount;
           } else {
+            // Supplier owes company (credit balance)
+            // Making payment increases what supplier owes (company is paying supplier)
             newBalance = supplierBalance.current_balance + paymentForm.amount;
           }
           
