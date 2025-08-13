@@ -30,6 +30,7 @@ export default function MarketersPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [openingBalances, setOpeningBalances] = useState<any[]>([]);
   const [newPayment, setNewPayment] = useState({
     date: new Date().toISOString().split('T')[0],
     amount: "",
@@ -49,11 +50,20 @@ export default function MarketersPage() {
     item: "",
     amount: ""
   });
+  const [newOpeningBalance, setNewOpeningBalance] = useState({
+    date: new Date().toISOString().split('T')[0],
+    amount: "",
+    marketer_id: "",
+    status: "Unpaid"
+  });
   const [showOrdersDialog, setShowOrdersDialog] = useState(false);
   const [showPaymentsDialog, setShowPaymentsDialog] = useState(false);
   const [showAddOrderDialog, setShowAddOrderDialog] = useState(false);
   const [showLedgerDialog, setShowLedgerDialog] = useState(false);
   const [showExpenseDialog, setShowExpenseDialog] = useState(false);
+  const [showOpeningBalanceDialog, setShowOpeningBalanceDialog] = useState(false);
+  const [showOpeningBalancesList, setShowOpeningBalancesList] = useState(false);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
 
   const fetchMarketers = async () => {
     setLoading(true);
@@ -101,6 +111,23 @@ export default function MarketersPage() {
       setProducts(data || []);
     } catch (error) {
       console.error("Error fetching products:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchOpeningBalances = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("opening_balances")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setOpeningBalances(data || []);
+    } catch (error) {
+      console.error("Error fetching opening balances:", error);
     } finally {
       setLoading(false);
     }
@@ -205,7 +232,27 @@ export default function MarketersPage() {
 
       if (expensesError) throw expensesError;
 
+      const { data: openingBalancesData, error: openingBalancesError } = await supabase
+        .from("opening_balances")
+        .select("*")
+        .eq("marketer_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (openingBalancesError) throw openingBalancesError;
+
       const allTransactions = [
+        ...(openingBalancesData?.map(balance => ({
+          type: 'opening_balance',
+          id: balance.id,
+          date: balance.created_at,
+          item: `Opening Balance`,
+          amount: balance.amount,
+          quantity: 1,
+          unit_price: balance.amount,
+          payment: 0,
+          expense: 0,
+          status: balance.status
+        })) || []),
         ...(ordersData?.map(order => ({
           type: 'order',
           id: order.id,
@@ -228,7 +275,8 @@ export default function MarketersPage() {
           item: `Payment (${payment.mode_of_payment})`,
           mode_of_payment: payment.mode_of_payment,
           bank_name: payment.bank_name,
-          mobile_money_provider: payment.mode_of_mobilemoney
+          mobile_money_provider: payment.mode_of_mobilemoney,
+          purpose: payment.purpose
         })) || []),
         ...(expensesData?.map(expense => ({
           type: 'expense',
@@ -245,12 +293,18 @@ export default function MarketersPage() {
       let orderBalance = 0;
       let netBalance = 0;
       const transactionsWithBalance = allTransactions.map(transaction => {
-        if (transaction.type === 'order') {
+        if (transaction.type === 'opening_balance') {
+          netBalance += transaction.amount;
+        } else if (transaction.type === 'order') {
           orderBalance += transaction.amount;
           netBalance += transaction.amount;
         } else if (transaction.type === 'payment') {
-          orderBalance -= transaction.payment;
-          netBalance -= transaction.payment;
+          if (transaction.purpose === 'Debt Clearance') {
+            netBalance -= transaction.payment;
+          } else {
+            orderBalance -= transaction.payment;
+            netBalance -= transaction.payment;
+          }
         } else if (transaction.type === 'expense') {
           netBalance -= transaction.expense;
         }
@@ -303,7 +357,7 @@ export default function MarketersPage() {
         mode_of_payment: "",
         bank_name: "",
         mobile_money_provider: "",
-        purpose:""
+        purpose: newPayment.purpose // Keep the purpose for debt clearance
       });
     } catch (error) {
       console.error("Error adding payment:", error);
@@ -401,6 +455,69 @@ export default function MarketersPage() {
     }
   };
 
+  const addOpeningBalance = async () => {
+    if (!newOpeningBalance.marketer_id || !newOpeningBalance.amount) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("opening_balances")
+        .insert([{
+          marketer_id: newOpeningBalance.marketer_id,
+          amount: parseFloat(newOpeningBalance.amount),
+          status: newOpeningBalance.status,
+          created_at: newOpeningBalance.date
+        }]);
+
+      if (error) throw error;
+      
+      await fetchOpeningBalances();
+      await fetchTransactions(newOpeningBalance.marketer_id);
+      setNewOpeningBalance({
+        date: new Date().toISOString().split('T')[0],
+        amount: "",
+        marketer_id: "",
+        status: "Unpaid"
+      });
+      setShowOpeningBalanceDialog(false);
+    } catch (error) {
+      console.error("Error adding opening balance:", error);
+      alert("Error adding opening balance. Please try again.");
+    }
+  };
+
+  const updateOpeningBalanceStatus = async (id: string, status: string) => {
+    try {
+      const { error } = await supabase
+        .from("opening_balances")
+        .update({ status })
+        .eq("id", id);
+
+      if (error) throw error;
+      
+      await fetchOpeningBalances();
+      
+      // If status is "Pay", show the payment form
+      if (status === "Pay") {
+        const balance = openingBalances.find(b => b.id === id);
+        if (balance) {
+          setSelectedMarketer(marketers.find(m => m.id === balance.marketer_id));
+          setNewPayment({
+            date: new Date().toISOString().split('T')[0],
+            amount: balance.amount.toString(),
+            mode_of_payment: "",
+            bank_name: "",
+            mobile_money_provider: "",
+            purpose: "Debt Clearance"
+          });
+          setShowPaymentForm(true);
+        }
+      }
+    } catch (error) {
+      console.error("Error updating opening balance status:", error);
+      alert("Error updating status. Please try again.");
+    }
+  };
+
   const downloadLedger = () => {
     if (transactions.length === 0) return;
 
@@ -426,10 +543,12 @@ export default function MarketersPage() {
           `${t.item} (Order #${t.id})` : 
           t.type === 'payment' ?
           `Payment (${t.mode_of_payment})` :
+          t.type === 'opening_balance' ?
+          `Opening Balance (${t.status})` :
           `Expense: ${t.item}`,
-        t.type === 'order' ? t.quantity : '',
-        t.type === 'order' ? t.unit_price : '',
-        t.type === 'order' ? t.amount : '',
+        t.type === 'order' || t.type === 'opening_balance' ? t.quantity : '',
+        t.type === 'order' || t.type === 'opening_balance' ? t.unit_price : '',
+        t.type === 'order' || t.type === 'opening_balance' ? t.amount : '',
         t.type === 'payment' ? t.payment : '',
         t.type === 'expense' ? t.expense : '',
         t.order_balance,
@@ -442,7 +561,7 @@ export default function MarketersPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `ledger_${selectedMarketer.name}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `ledger_${selectedMarketer?.name}_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
@@ -456,6 +575,7 @@ export default function MarketersPage() {
   useEffect(() => {
     fetchMarketers();
     fetchProducts();
+    fetchOpeningBalances();
   }, []);
 
   const handleViewOrders = (marketer: any) => {
@@ -485,6 +605,21 @@ export default function MarketersPage() {
         <p className="text-gray-600 dark:text-gray-300">
           View and manage marketers and their orders
         </p>
+      </div>
+
+      <div className="flex space-x-4 mb-6">
+        <Button
+          variant="outline"
+          onClick={() => setShowOpeningBalanceDialog(true)}
+        >
+          Record Opening Balance
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setShowOpeningBalancesList(true)}
+        >
+          View Opening Balances
+        </Button>
       </div>
 
       {/* Marketers Table */}
@@ -533,6 +668,283 @@ export default function MarketersPage() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Add Opening Balance Dialog */}
+      <Dialog open={showOpeningBalanceDialog} onOpenChange={setShowOpeningBalanceDialog}>
+        <DialogContent className="max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Record Opening Balance
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date
+              </label>
+              <Input
+                type="date"
+                value={newOpeningBalance.date}
+                onChange={(e) => setNewOpeningBalance({
+                  ...newOpeningBalance,
+                  date: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Marketer
+              </label>
+              <Select
+                value={newOpeningBalance.marketer_id}
+                onValueChange={(value) => setNewOpeningBalance({
+                  ...newOpeningBalance,
+                  marketer_id: value
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a marketer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {marketers.map((marketer) => (
+                    <SelectItem key={marketer.id} value={marketer.id}>
+                      {marketer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Amount
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter amount"
+                value={newOpeningBalance.amount}
+                onChange={(e) => setNewOpeningBalance({
+                  ...newOpeningBalance,
+                  amount: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Status
+              </label>
+              <Select
+                value={newOpeningBalance.status}
+                onValueChange={(value) => setNewOpeningBalance({
+                  ...newOpeningBalance,
+                  status: value
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Unpaid">Unpaid</SelectItem>
+                  <SelectItem value="Paid">Paid</SelectItem>
+                  <SelectItem value="Pending Clearance">Pending Clearance</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={addOpeningBalance} disabled={!newOpeningBalance.marketer_id || !newOpeningBalance.amount}>
+              Record Opening Balance
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Opening Balances List Dialog */}
+      <Dialog open={showOpeningBalancesList} onOpenChange={setShowOpeningBalancesList}>
+        <DialogContent className="max-w-4xl rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Opening Balances
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-y-auto">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead className="font-semibold">Date</TableHead>
+                  <TableHead className="font-semibold">Marketer</TableHead>
+                  <TableHead className="font-semibold text-right">Amount</TableHead>
+                  <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {openingBalances.map((balance) => {
+                  const marketer = marketers.find(m => m.id === balance.marketer_id);
+                  return (
+                    <TableRow key={balance.id}>
+                      <TableCell>
+                        {new Date(balance.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>{marketer?.name || 'Unknown'}</TableCell>
+                      <TableCell className="text-right">
+                        {parseFloat(balance.amount).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            balance.status === 'Paid' ? 'default' :
+                            balance.status === 'Pending Clearance' ? 'secondary' :
+                            'destructive'
+                          }
+                        >
+                          {balance.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Select
+                          value={balance.status}
+                          onValueChange={(value) => updateOpeningBalanceStatus(balance.id, value)}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Change Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Unpaid">Unpaid</SelectItem>
+                            <SelectItem value="Pay">Pay</SelectItem>
+                            <SelectItem value="Paid">Paid</SelectItem>
+                            <SelectItem value="Pending Clearance">Pending Clearance</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {openingBalances.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                      No opening balances recorded
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Form for Debt Clearance */}
+      <Dialog open={showPaymentForm} onOpenChange={setShowPaymentForm}>
+        <DialogContent className="max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Record Payment for Debt Clearance
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date
+              </label>
+              <Input
+                type="date"
+                value={newPayment.date}
+                onChange={(e) => setNewPayment({
+                  ...newPayment,
+                  date: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Amount
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter amount"
+                value={newPayment.amount}
+                onChange={(e) => setNewPayment({
+                  ...newPayment,
+                  amount: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mode of Payment
+              </label>
+              <Select
+                value={newPayment.mode_of_payment}
+                onValueChange={(value) => setNewPayment({
+                  ...newPayment,
+                  mode_of_payment: value,
+                  bank_name: "",
+                  mobile_money_provider: ""
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select payment mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Bank">Bank</SelectItem>
+                  <SelectItem value="Mobile Money">Mobile Money</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {newPayment.mode_of_payment === 'Bank' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Bank Name
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Enter bank name"
+                  value={newPayment.bank_name}
+                  onChange={(e) => setNewPayment({
+                    ...newPayment,
+                    bank_name: e.target.value
+                  })}
+                />
+              </div>
+            )}
+            {newPayment.mode_of_payment === 'Mobile Money' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mobile Money Provider
+                </label>
+                <Select
+                  value={newPayment.mobile_money_provider}
+                  onValueChange={(value) => setNewPayment({
+                    ...newPayment,
+                    mobile_money_provider: value
+                  })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MTN">MTN</SelectItem>
+                    <SelectItem value="Airtel">Airtel</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                addPayment();
+                setShowPaymentForm(false);
+              }}
+              disabled={!newPayment.amount || !newPayment.mode_of_payment || 
+                (newPayment.mode_of_payment === 'Bank' && !newPayment.bank_name) ||
+                (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider)}
+            >
+              Record Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Orders Dialog */}
       <Dialog open={showOrdersDialog} onOpenChange={setShowOrdersDialog}>
@@ -797,18 +1209,20 @@ export default function MarketersPage() {
                         `${transaction.item} (Order #${transaction.id})` : 
                         transaction.type === 'payment' ?
                         `Payment (${transaction.mode_of_payment})` :
+                        transaction.type === 'opening_balance' ?
+                        `Opening Balance (${transaction.status})` :
                         `Expense: ${transaction.item}`}
                       {transaction.bank_name && ` - ${transaction.bank_name}`}
                       {transaction.mobile_money_provider && ` - ${transaction.mobile_money_provider}`}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'order' ? transaction.quantity : '-'}
+                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.quantity : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'order' ? transaction.unit_price.toLocaleString() : '-'}
+                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.unit_price.toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'order' ? transaction.amount.toLocaleString() : '-'}
+                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.amount.toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
                       {transaction.type === 'payment' ? transaction.payment.toLocaleString() : '-'}
@@ -1000,6 +1414,26 @@ export default function MarketersPage() {
                     </Select>
                   </div>
                 )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Purpose
+                  </label>
+                  <Select
+                    value={newPayment.purpose}
+                    onValueChange={(value) => setNewPayment({
+                      ...newPayment,
+                      purpose: value
+                    })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select purpose" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Order Payment">Order Payment</SelectItem>
+                      <SelectItem value="Debt Clearance">Debt Clearance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button
                   onClick={addPayment}
                   className="w-full"
