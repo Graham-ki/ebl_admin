@@ -203,13 +203,45 @@ export default function Suppliers() {
     }).format(amount);
   };
 
-  const formatBalance = (balance: SupplierBalance | undefined) => {
-    if (!balance) return "Not set";
+  const SupplierBalanceDisplay = ({ 
+    supplierId,
+    balanceOverride 
+  }: { 
+    supplierId: string;
+    balanceOverride?: SupplierBalance;
+  }) => {
+    const balance = balanceOverride || getSupplierBalance(supplierId);
+    
+    if (!balance) return <span className="text-gray-500">Not set</span>;
+
     const amount = formatCurrency(Math.abs(balance.current_balance));
-    if (balance.current_balance === 0) return "Settled (0)";
-    return balance.balance_type === 'debit' 
-      ? `${amount} (Company owes supplier)`
-      : `${amount} (Supplier owes company)`;
+    const isCredit = balance.balance_type === 'credit';
+    const isPositive = balance.current_balance > 0;
+
+    if (balance.current_balance === 0) {
+      return <span className="text-green-600">Settled (0)</span>;
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+          isPositive 
+            ? isCredit ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+            : 'bg-green-100 text-green-800'
+        }`}>
+          {amount}
+        </span>
+        <span className="text-sm text-gray-600">
+          {isPositive
+            ? isCredit 
+              ? "(Supplier owes company)"
+              : "(Company owes supplier)"
+            : isCredit
+              ? "(Company overpaid)"
+              : "(Supplier overpaid)"}
+        </span>
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -361,39 +393,34 @@ export default function Suppliers() {
       if (error) throw error;
 
       if (data?.[0]) {
+        // Update deliveries state
         setDeliveries(prev => [...prev, data[0]]);
         
-        const supplierBalance = getSupplierBalance(selectedItem.supplier_id);
-        if (supplierBalance) {
-          let newBalance = supplierBalance.current_balance;
-          
-          if (supplierBalance.balance_type === 'credit') {
-            // Supplier owes company (credit balance)
-            // Receiving goods reduces what supplier owes
-            newBalance = supplierBalance.current_balance - deliveryValue;
-          } else {
-            // Company owes supplier (debit balance)
-            // Receiving goods increases what company owes
-            newBalance = supplierBalance.current_balance + deliveryValue;
-          }
-          
-          const { error: balanceError } = await supabase
-            .from('supplier_balances')
-            .update({ current_balance: newBalance })
-            .eq('supplier_id', selectedItem.supplier_id);
+        // Update balance immediately
+        setSupplierBalances(prev => {
+          return prev.map(balance => {
+            if (balance.supplier_id === selectedItem.supplier_id) {
+              const newBalance = balance.balance_type === 'credit'
+                ? balance.current_balance - deliveryValue  // Supplier owes less
+                : balance.current_balance + deliveryValue; // Company owes more
+              
+              // Sync with database in background
+              supabase
+                .from('supplier_balances')
+                .update({ current_balance: newBalance })
+                .eq('supplier_id', selectedItem.supplier_id)
+                .then(({ error }) => {
+                  if (error) console.error('Balance update error:', error);
+                });
 
-          if (balanceError) throw balanceError;
-
-          setSupplierBalances(prev => 
-            prev.map(b => 
-              b.supplier_id === selectedItem.supplier_id 
-                ? { ...b, current_balance: newBalance } 
-                : b
-            )
-          );
-        }
+              return { ...balance, current_balance: newBalance };
+            }
+            return balance;
+          });
+        });
 
         resetDeliveryForm();
+        setShowDeliveryForm(false);
       }
     } catch (err) {
       console.error('Error saving delivery:', err);
@@ -416,8 +443,33 @@ export default function Suppliers() {
       if (paymentError) throw paymentError;
 
       if (paymentData?.[0]) {
+        // Update payments state
         setPayments(prev => [...prev, paymentData[0]]);
         
+        // Update balance immediately
+        setSupplierBalances(prev => {
+          return prev.map(balance => {
+            if (balance.supplier_id === selectedItem.supplier_id) {
+              const newBalance = balance.balance_type === 'debit'
+                ? balance.current_balance - paymentForm.amount  // Company owes less
+                : balance.current_balance + paymentForm.amount; // Supplier owes more
+              
+              // Sync with database in background
+              supabase
+                .from('supplier_balances')
+                .update({ current_balance: newBalance })
+                .eq('supplier_id', selectedItem.supplier_id)
+                .then(({ error }) => {
+                  if (error) console.error('Balance update error:', error);
+                });
+
+              return { ...balance, current_balance: newBalance };
+            }
+            return balance;
+          });
+        });
+
+        // Record expense
         const expenseData = {
           item: 'Payment of Material',
           amount_spent: paymentForm.amount,
@@ -429,43 +481,10 @@ export default function Suppliers() {
           submittedby: 'Admin'
         };
 
-        const { error: expenseError } = await supabase
-          .from('expenses')
-          .insert([expenseData]);
-
-        if (expenseError) throw expenseError;
-
-        const supplierBalance = getSupplierBalance(selectedItem.supplier_id);
-        if (supplierBalance) {
-          let newBalance = supplierBalance.current_balance;
-          
-          if (supplierBalance.balance_type === 'debit') {
-            // Company owes supplier (debit balance)
-            // Making payment reduces what company owes
-            newBalance = supplierBalance.current_balance - paymentForm.amount;
-          } else {
-            // Supplier owes company (credit balance)
-            // Making payment increases what supplier owes (company is paying supplier)
-            newBalance = supplierBalance.current_balance + paymentForm.amount;
-          }
-          
-          const { error: balanceError } = await supabase
-            .from('supplier_balances')
-            .update({ current_balance: newBalance })
-            .eq('supplier_id', selectedItem.supplier_id);
-
-          if (balanceError) throw balanceError;
-
-          setSupplierBalances(prev => 
-            prev.map(b => 
-              b.supplier_id === selectedItem.supplier_id 
-                ? { ...b, current_balance: newBalance } 
-                : b
-            )
-          );
-        }
+        await supabase.from('expenses').insert([expenseData]);
 
         resetPaymentForm();
+        setShowPaymentForm(false);
       }
     } catch (err) {
       console.error('Error saving payment:', err);
@@ -689,72 +708,62 @@ export default function Suppliers() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {suppliers.map((supplier) => {
-                  const balance = getSupplierBalance(supplier.id);
-                  return (
-                    <tr key={supplier.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-medium text-gray-900">{supplier.name}</div>
-                        <div className="text-sm text-gray-500">{supplier.address}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {supplier.contact}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          balance?.current_balance 
-                            ? balance.balance_type === 'credit' 
-                              ? 'bg-red-100 text-red-800' 
-                              : 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {formatBalance(balance)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                          {getSupplierItems(supplier.id).length} items
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(supplier.created_at)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-2">
-                          <button
-                            onClick={() => {
-                              setSelectedSupplier(supplier);
-                              setShowSuppliesModal(true);
-                            }}
-                            className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
-                          >
-                            <span>📦</span> View Supplies
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedSupplier(supplier);
-                              setBalanceForm({
-                                supplier_id: supplier.id,
-                                opening_balance: balance?.current_balance || 0,
-                                balance_type: balance?.balance_type || 'credit'
-                              });
-                              setShowBalanceForm(true);
-                            }}
-                            className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 flex items-center gap-1"
-                          >
-                            <span>💰</span> Set Balance
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteSupplier(supplier.id)}
-                            className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
-                          >
-                            <span>🗑️</span> Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {suppliers.map((supplier) => (
+                  <tr key={supplier.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-medium text-gray-900">{supplier.name}</div>
+                      <div className="text-sm text-gray-500">{supplier.address}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {supplier.contact}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <SupplierBalanceDisplay supplierId={supplier.id} />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {getSupplierItems(supplier.id).length} items
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(supplier.created_at)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end space-x-2">
+                        <button
+                          onClick={() => {
+                            setSelectedSupplier(supplier);
+                            setShowSuppliesModal(true);
+                          }}
+                          className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                        >
+                          <span>📦</span> View Supplies
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedSupplier(supplier);
+                            const balance = getSupplierBalance(supplier.id);
+                            setBalanceForm({
+                              supplier_id: supplier.id,
+                              opening_balance: balance?.current_balance || 0,
+                              balance_type: balance?.balance_type || 'credit'
+                            });
+                            setShowBalanceForm(true);
+                          }}
+                          className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 flex items-center gap-1"
+                        >
+                          <span>💰</span> Set Balance
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteSupplier(supplier.id)}
+                          className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
+                        >
+                          <span>🗑️</span> Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -1347,34 +1356,21 @@ export default function Suppliers() {
                   {getSupplierBalance(selectedItem.supplier_id) && (
                     <div className="mt-2">
                       <span className="text-sm font-medium">Current Balance:</span>
-                      <div className={`font-medium ${
-                        getSupplierBalance(selectedItem.supplier_id)!.current_balance > 0 
-                          ? getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit' 
-                            ? 'text-red-600' 
-                            : 'text-blue-600'
-                          : 'text-green-600'
-                      }`}>
-                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit' 
-                          ? `${formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance)} (Supplier owes company)`
-                          : `${formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance)} (Company owes supplier)`}
+                      <div className="font-medium">
+                        <SupplierBalanceDisplay supplierId={selectedItem.supplier_id} />
                       </div>
                       
-                      <span className="text-sm font-medium">Balance After Delivery:</span>
-                      <div className={`font-medium ${
-                        getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
-                          ? (getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price)) > 0
-                            ? 'text-red-600'
-                            : 'text-green-600'
-                          : (getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price)) > 0
-                            ? 'text-blue-600'
-                            : 'text-green-600'
-                      }`}>
-                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
-                          ? formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price))
-                          : formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price))}
-                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
-                          ? ` (Supplier will ${getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price) > 0 ? 'still owe' : 'be settled with'})`
-                          : ` (Company will ${getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price) > 0 ? 'still owe' : 'be settled with'})`}
+                      <span className="text-sm font-medium">New Balance:</span>
+                      <div className="font-medium">
+                        <SupplierBalanceDisplay 
+                          supplierId={selectedItem.supplier_id}
+                          balanceOverride={{
+                            ...getSupplierBalance(selectedItem.supplier_id)!,
+                            current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
+                              ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price)
+                              : getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price)
+                          }}
+                        />
                       </div>
                     </div>
                   )}
@@ -1488,34 +1484,21 @@ export default function Suppliers() {
                   {getSupplierBalance(selectedItem.supplier_id) && (
                     <div>
                       <span className="text-sm font-medium">Current Balance:</span>
-                      <div className={`font-medium ${
-                        getSupplierBalance(selectedItem.supplier_id)!.current_balance > 0 
-                          ? getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit' 
-                            ? 'text-red-600' 
-                            : 'text-blue-600'
-                          : 'text-green-600'
-                      }`}>
-                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit' 
-                          ? `${formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance)} (Supplier owes company)`
-                          : `${formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance)} (Company owes supplier)`}
+                      <div className="font-medium">
+                        <SupplierBalanceDisplay supplierId={selectedItem.supplier_id} />
                       </div>
                       
-                      <span className="text-sm font-medium">Balance After Payment:</span>
-                      <div className={`font-medium ${
-                        getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
-                          ? (getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount) > 0
-                            ? 'text-blue-600'
-                            : 'text-green-600'
-                          : (getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount) > 0
-                            ? 'text-red-600'
-                            : 'text-green-600'
-                      }`}>
-                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
-                          ? formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount)
-                          : formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount)}
-                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
-                          ? ` (Company will ${getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount > 0 ? 'still owe' : 'be settled with'})`
-                          : ` (Supplier will ${getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount > 0 ? 'still owe' : 'be settled with'})`}
+                      <span className="text-sm font-medium">New Balance:</span>
+                      <div className="font-medium">
+                        <SupplierBalanceDisplay 
+                          supplierId={selectedItem.supplier_id}
+                          balanceOverride={{
+                            ...getSupplierBalance(selectedItem.supplier_id)!,
+                            current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
+                              ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount
+                              : getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount
+                          }}
+                        />
                       </div>
                     </div>
                   )}
