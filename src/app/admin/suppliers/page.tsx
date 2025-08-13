@@ -1335,37 +1335,37 @@ export default function Suppliers() {
                     </div>
                   </div>
                   
-                  {supplierBalance && (
+                  {getSupplierBalance(selectedItem.supplier_id) && (
                     <div className="mt-2">
                       <span className="text-sm font-medium">Current Balance:</span>
                       <div className={`font-medium ${
-                        supplierBalance.current_balance > 0 
-                          ? supplierBalance.balance_type === 'credit' 
+                        getSupplierBalance(selectedItem.supplier_id)!.current_balance > 0 
+                          ? getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit' 
                             ? 'text-red-600' 
                             : 'text-blue-600'
                           : 'text-green-600'
                       }`}>
-                        {supplierBalance.balance_type === 'credit' 
-                          ? `${formatCurrency(supplierBalance.current_balance)} (Supplier owes company)`
-                          : `${formatCurrency(supplierBalance.current_balance)} (Company owes supplier)`}
+                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit' 
+                          ? `${formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance)} (Supplier owes company)`
+                          : `${formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance)} (Company owes supplier)`}
                       </div>
                       
                       <span className="text-sm font-medium">Balance After Delivery:</span>
                       <div className={`font-medium ${
-                        supplierBalance.balance_type === 'credit'
-                          ? (supplierBalance.current_balance - (deliveryForm.quantity * selectedItem.price)) > 0
+                        getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
+                          ? (getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price)) > 0
                             ? 'text-red-600'
                             : 'text-green-600'
-                          : (supplierBalance.current_balance + (deliveryForm.quantity * selectedItem.price)) > 0
+                          : (getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price)) > 0
                             ? 'text-blue-600'
                             : 'text-green-600'
                       }`}>
-                        {supplierBalance.balance_type === 'credit'
-                          ? formatCurrency(supplierBalance.current_balance - (deliveryForm.quantity * selectedItem.price))
-                          : formatCurrency(supplierBalance.current_balance + (deliveryForm.quantity * selectedItem.price))}
-                        {supplierBalance.balance_type === 'credit'
-                          ? ` (Supplier will ${supplierBalance.current_balance - (deliveryForm.quantity * selectedItem.price) > 0 ? 'still owe' : 'be settled with'})`
-                          : ` (Company will ${supplierBalance.current_balance + (deliveryForm.quantity * selectedItem.price) > 0 ? 'still owe' : 'be settled with'})`}
+                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
+                          ? formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price))
+                          : formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price))}
+                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
+                          ? ` (Supplier will ${getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price) > 0 ? 'still owe' : 'be settled with'})`
+                          : ` (Company will ${getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price) > 0 ? 'still owe' : 'be settled with'})`}
                       </div>
                     </div>
                   )}
@@ -1476,37 +1476,37 @@ export default function Suppliers() {
                 </div>
 
                 <div className="bg-blue-50 p-3 rounded-lg">
-                  {supplierBalance && (
+                  {getSupplierBalance(selectedItem.supplier_id) && (
                     <div>
                       <span className="text-sm font-medium">Current Balance:</span>
                       <div className={`font-medium ${
-                        supplierBalance.current_balance > 0 
-                          ? supplierBalance.balance_type === 'credit' 
+                        getSupplierBalance(selectedItem.supplier_id)!.current_balance > 0 
+                          ? getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit' 
                             ? 'text-red-600' 
                             : 'text-blue-600'
                           : 'text-green-600'
                       }`}>
-                        {supplierBalance.balance_type === 'credit' 
-                          ? `${formatCurrency(supplierBalance.current_balance)} (Supplier owes company)`
-                          : `${formatCurrency(supplierBalance.current_balance)} (Company owes supplier)`}
+                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit' 
+                          ? `${formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance)} (Supplier owes company)`
+                          : `${formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance)} (Company owes supplier)`}
                       </div>
                       
                       <span className="text-sm font-medium">Balance After Payment:</span>
                       <div className={`font-medium ${
-                        supplierBalance.balance_type === 'debit'
-                          ? (supplierBalance.current_balance - paymentForm.amount) > 0
+                        getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
+                          ? (getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount) > 0
                             ? 'text-blue-600'
                             : 'text-green-600'
-                          : (supplierBalance.current_balance + paymentForm.amount) > 0
+                          : (getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount) > 0
                             ? 'text-red-600'
                             : 'text-green-600'
                       }`}>
-                        {supplierBalance.balance_type === 'debit'
-                          ? formatCurrency(supplierBalance.current_balance - paymentForm.amount)
-                          : formatCurrency(supplierBalance.current_balance + paymentForm.amount)}
-                        {supplierBalance.balance_type === 'debit'
-                          ? ` (Company will ${supplierBalance.current_balance - paymentForm.amount > 0 ? 'still owe' : 'be settled with'})`
-                          : ` (Supplier will ${supplierBalance.current_balance + paymentForm.amount > 0 ? 'still owe' : 'be settled with'})`}
+                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
+                          ? formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount)
+                          : formatCurrency(getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount)}
+                        {getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
+                          ? ` (Company will ${getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount > 0 ? 'still owe' : 'be settled with'})`
+                          : ` (Supplier will ${getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount > 0 ? 'still owe' : 'be settled with'})`}
                       </div>
                     </div>
                   )}
