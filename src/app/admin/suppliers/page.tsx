@@ -30,6 +30,7 @@ interface Delivery {
   id: string;
   supply_item_id: string;
   quantity: number;
+  value: number;
   delivery_date: string;
   notes?: string;
   created_at: string;
@@ -67,6 +68,7 @@ type Transaction = {
   date: string;
   quantity?: number;
   amount?: number;
+  value?: number;
   method?: string;
   reference?: string;
   notes?: string;
@@ -81,16 +83,13 @@ export default function Suppliers() {
   const [supplierBalances, setSupplierBalances] = useState<SupplierBalance[]>([]);
   const [showOtherInput, setShowOtherInput] = useState(false);
   
-  //date picker
   const getEastAfricanDate = () => {
     const now = new Date();
-    // East Africa Time is UTC+3, so we add 3 hours to get the correct date
-    const offset = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+    const offset = 3 * 60 * 60 * 1000;
     const eastAfricanTime = new Date(now.getTime() + offset);
     return eastAfricanTime.toISOString().split('T')[0];
   };
   
-  // Form states
   const [supplierForm, setSupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
     name: "",
     contact: "",
@@ -104,7 +103,7 @@ export default function Suppliers() {
     price: 0,
   });
   
-  const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at">>({
+  const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at" | "value">>({
     supply_item_id: "",
     quantity: 0,
     delivery_date: getEastAfricanDate(),
@@ -125,7 +124,6 @@ export default function Suppliers() {
     balance_type: "credit" as 'credit' | 'debit',
   });
 
-  // UI states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -138,7 +136,6 @@ export default function Suppliers() {
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
   const [showBalanceForm, setShowBalanceForm] = useState(false);
 
-  // Helper functions
   const getSupplierItems = (supplierId: string) => {
     return supplyItems.filter(item => item.supplier_id === supplierId);
   };
@@ -158,15 +155,16 @@ export default function Suppliers() {
   };
 
   const getCombinedTransactions = (itemId: string): Transaction[] => {
-    const deliveries = getItemDeliveries(itemId).map(d => ({
+    const itemDeliveries = getItemDeliveries(itemId).map(d => ({
       id: d.id,
       type: 'delivery' as const,
       date: d.delivery_date,
       quantity: d.quantity,
+      value: d.value,
       notes: d.notes,
     }));
 
-    const payments = getItemPayments(itemId).map(p => ({
+    const itemPayments = getItemPayments(itemId).map(p => ({
       id: p.id,
       type: 'payment' as const,
       date: p.payment_date,
@@ -175,11 +173,11 @@ export default function Suppliers() {
       reference: p.reference,
     }));
 
-    return [...deliveries, ...payments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return [...itemDeliveries, ...itemPayments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
-  const getTotalDelivered = (itemId: string) => {
-    return getItemDeliveries(itemId).reduce((sum, d) => sum + d.quantity, 0);
+  const getTotalDeliveredValue = (itemId: string) => {
+    return getItemDeliveries(itemId).reduce((sum, d) => sum + d.value, 0);
   };
 
   const getTotalPaid = (itemId: string) => {
@@ -195,7 +193,6 @@ export default function Suppliers() {
       hour: '2-digit',
       minute: '2-digit'
     };
-    
     return new Date(dateString).toLocaleString('en-US', options);
   };
 
@@ -208,14 +205,12 @@ export default function Suppliers() {
 
   const formatBalance = (balance: SupplierBalance | undefined) => {
     if (!balance) return "Not set";
-    
     const amount = formatCurrency(balance.current_balance);
     return balance.balance_type === 'debit' 
-      ? `${amount} (Supplier owes company)`
-      : `${amount} (Company owes supplier)`;
+      ? `${amount} (Company owes supplier)`
+      : `${amount} (Supplier owes company)`;
   };
 
-  // Data fetching
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -262,7 +257,6 @@ export default function Suppliers() {
     fetchData();
   }, []);
 
-  // CRUD Operations
   const handleSupplierSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -351,10 +345,16 @@ export default function Suppliers() {
     try {
       if (!selectedItem) return;
       
-      // First insert the delivery record
+      const deliveryValue = deliveryForm.quantity * selectedItem.price;
+      const deliveryData = {
+        ...deliveryForm,
+        supply_item_id: selectedItem.id,
+        value: deliveryValue
+      };
+
       const { data, error } = await supabase
         .from('deliveries')
-        .insert([{ ...deliveryForm, supply_item_id: selectedItem.id }])
+        .insert([deliveryData])
         .select();
 
       if (error) throw error;
@@ -362,11 +362,15 @@ export default function Suppliers() {
       if (data?.[0]) {
         setDeliveries(prev => [...prev, data[0]]);
         
-        // Update supplier balance if it's a debit balance (supplier owes company)
         const supplierBalance = getSupplierBalance(selectedItem.supplier_id);
-        if (supplierBalance && supplierBalance.balance_type === 'debit') {
-          const totalValue = deliveryForm.quantity * selectedItem.price;
-          const newBalance = supplierBalance.current_balance - totalValue;
+        if (supplierBalance) {
+          let newBalance = supplierBalance.current_balance;
+          
+          if (supplierBalance.balance_type === 'credit') {
+            newBalance = Math.max(0, supplierBalance.current_balance - deliveryValue);
+          } else {
+            newBalance = supplierBalance.current_balance + deliveryValue;
+          }
           
           const { error: balanceError } = await supabase
             .from('supplier_balances')
@@ -399,7 +403,6 @@ export default function Suppliers() {
     try {
       if (!selectedItem) return;
       
-      // First insert the payment record
       const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
         .insert([{ ...paymentForm, supply_item_id: selectedItem.id }])
@@ -410,12 +413,11 @@ export default function Suppliers() {
       if (paymentData?.[0]) {
         setPayments(prev => [...prev, paymentData[0]]);
         
-        // Now create the expense record
         const expenseData = {
           item: 'Payment of Material',
           amount_spent: paymentForm.amount,
           date: paymentForm.payment_date,
-          department: selectedItem.name, // Using the item name as department
+          department: selectedItem.name,
           account: paymentForm.method === 'mobile_money' ? paymentForm.reference || '' : 
                   paymentForm.method === 'bank' ? paymentForm.reference || '' : 'Cash',
           mode_of_payment: paymentForm.method,
@@ -428,10 +430,15 @@ export default function Suppliers() {
 
         if (expenseError) throw expenseError;
 
-        // Update supplier balance if it's a credit balance (company owes supplier)
         const supplierBalance = getSupplierBalance(selectedItem.supplier_id);
-        if (supplierBalance && supplierBalance.balance_type === 'credit') {
-          const newBalance = supplierBalance.current_balance - paymentForm.amount;
+        if (supplierBalance) {
+          let newBalance = supplierBalance.current_balance;
+          
+          if (supplierBalance.balance_type === 'debit') {
+            newBalance = Math.max(0, supplierBalance.current_balance - paymentForm.amount);
+          } else {
+            newBalance = supplierBalance.current_balance + paymentForm.amount;
+          }
           
           const { error: balanceError } = await supabase
             .from('supplier_balances')
@@ -461,7 +468,6 @@ export default function Suppliers() {
     setError(null);
     
     try {
-      // First delete all items and their related records
       const { data: items, error: itemsError } = await supabase
         .from('supply_items')
         .select('id')
@@ -472,32 +478,27 @@ export default function Suppliers() {
       if (items && items.length > 0) {
         const itemIds = items.map(item => item.id);
         
-        // Delete deliveries
         await supabase
           .from('deliveries')
           .delete()
           .in('supply_item_id', itemIds);
 
-        // Delete payments
         await supabase
           .from('payments')
           .delete()
           .in('supply_item_id', itemIds);
 
-        // Delete items
         await supabase
           .from('supply_items')
           .delete()
           .in('id', itemIds);
       }
 
-      // Delete supplier balance
       await supabase
         .from('supplier_balances')
         .delete()
         .eq('supplier_id', id);
 
-      // Finally delete the supplier
       const { error } = await supabase
         .from('suppliers')
         .delete()
@@ -517,7 +518,6 @@ export default function Suppliers() {
     setError(null);
     
     try {
-      // First delete related records
       await supabase
         .from('deliveries')
         .delete()
@@ -528,7 +528,6 @@ export default function Suppliers() {
         .delete()
         .eq('supply_item_id', id);
 
-      // Then delete the item
       const { error } = await supabase
         .from('supply_items')
         .delete()
@@ -543,7 +542,6 @@ export default function Suppliers() {
     }
   };
 
-  // Form resets
   const resetSupplierForm = () => {
     setSupplierForm({
       name: "",
@@ -693,8 +691,16 @@ export default function Suppliers() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {supplier.contact}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatBalance(balance)}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          balance?.current_balance 
+                            ? balance.balance_type === 'credit' 
+                              ? 'bg-red-100 text-red-800' 
+                              : 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {formatBalance(balance)}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
@@ -835,7 +841,7 @@ export default function Suppliers() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Set Opening Balance for {selectedSupplier.name}
+                  Set Balance for {selectedSupplier.name}
                 </h3>
                 <button 
                   onClick={resetBalanceForm}
@@ -857,13 +863,13 @@ export default function Suppliers() {
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="credit">Company owes supplier</option>
-                    <option value="debit">Supplier owes company</option>
+                    <option value="credit">Supplier owes company</option>
+                    <option value="debit">Company owes supplier</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Opening Balance (UGX)
+                    Amount (UGX)
                   </label>
                   <input
                     type="number"
@@ -949,22 +955,13 @@ export default function Suppliers() {
                           Item
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Qty Ordered
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Qty Delivered
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Qty Pending
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Unit Price
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Total Cost
+                          Total Delivered
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Amount Paid
+                          Total Paid
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Balance
@@ -976,11 +973,9 @@ export default function Suppliers() {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {getSupplierItems(selectedSupplier.id).map((item) => {
-                        const totalDelivered = getTotalDelivered(item.id);
+                        const totalDelivered = getTotalDeliveredValue(item.id);
                         const totalPaid = getTotalPaid(item.id);
-                        const pending = item.quantity - totalDelivered;
-                        const totalCost = item.quantity * item.price;
-                        const balance = totalCost - totalPaid;
+                        const balance = totalDelivered - totalPaid;
 
                         return (
                           <tr key={item.id}>
@@ -988,29 +983,19 @@ export default function Suppliers() {
                               {item.name}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {item.quantity}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {totalDelivered}
-                            </td>
-                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
-                              pending > 0 ? 'text-yellow-600' : 'text-green-600'
-                            }`}>
-                              {pending}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {formatCurrency(item.price)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {formatCurrency(totalCost)}
+                              {formatCurrency(totalDelivered)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {formatCurrency(totalPaid)}
                             </td>
                             <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
-                              balance > 0 ? 'text-red-600' : 'text-green-600'
+                              balance > 0 ? 'text-blue-600' : 'text-green-600'
                             }`}>
-                              {formatCurrency(balance)}
+                              {formatCurrency(Math.abs(balance))}
+                              {balance > 0 ? ' (Company owes)' : ' (Supplier owes)'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <div className="flex justify-end space-x-2">
@@ -1038,7 +1023,7 @@ export default function Suppliers() {
                                     setPaymentForm({
                                       ...paymentForm,
                                       supply_item_id: item.id,
-                                      amount: Math.min(item.price * item.quantity - totalPaid, item.price * item.quantity)
+                                      amount: Math.max(0, totalDelivered - totalPaid)
                                     });
                                     setShowPaymentForm(true);
                                   }}
@@ -1097,10 +1082,10 @@ export default function Suppliers() {
                         Quantity
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Amount
+                        Value
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Method/Notes
+                        Details
                       </th>
                     </tr>
                   </thead>
@@ -1121,7 +1106,9 @@ export default function Suppliers() {
                           {txn.type === 'delivery' ? txn.quantity : '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {txn.type === 'payment' ? formatCurrency(txn.amount || 0) : '-'}
+                          {txn.type === 'delivery' 
+                            ? formatCurrency(txn.value || 0)
+                            : formatCurrency(txn.amount || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {txn.type === 'payment' ? (
@@ -1286,9 +1273,22 @@ export default function Suppliers() {
                     value={deliveryForm.quantity}
                     onChange={(e) => setDeliveryForm({...deliveryForm, quantity: Number(e.target.value)})}
                     required
-                    min="1"
-                    max={selectedItem.quantity - getTotalDelivered(selectedItem.id)}
+                    min="0.01"
+                    step="0.01"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Unit Price (UGX)
+                  </label>
+                  <input
+                    type="number"
+                    name="price"
+                    value={selectedItem.price}
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-100 focus:outline-none"
                   />
                 </div>
                 
@@ -1320,24 +1320,55 @@ export default function Suppliers() {
                 </div>
 
                 <div className="bg-blue-50 p-3 rounded-lg">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4 mb-2">
                     <div>
-                      <span className="text-sm font-medium">Previously Delivered:</span>
+                      <span className="text-sm font-medium">Unit Price:</span>
                       <div className="font-medium">
-                        {getTotalDelivered(selectedItem.id)}
+                        {formatCurrency(selectedItem.price)}
                       </div>
                     </div>
                     <div>
-                      <span className="text-sm font-medium">Pending After This:</span>
-                      <div className={`font-medium ${
-                        (selectedItem.quantity - getTotalDelivered(selectedItem.id) - deliveryForm.quantity) > 0 
-                          ? 'text-yellow-600' 
-                          : 'text-green-600'
-                      }`}>
-                        {selectedItem.quantity - getTotalDelivered(selectedItem.id) - deliveryForm.quantity}
+                      <span className="text-sm font-medium">Delivery Value:</span>
+                      <div className="font-medium">
+                        {formatCurrency(deliveryForm.quantity * selectedItem.price)}
                       </div>
                     </div>
                   </div>
+                  
+                  {supplierBalance && (
+                    <div className="mt-2">
+                      <span className="text-sm font-medium">Current Balance:</span>
+                      <div className={`font-medium ${
+                        supplierBalance.current_balance > 0 
+                          ? supplierBalance.balance_type === 'credit' 
+                            ? 'text-red-600' 
+                            : 'text-blue-600'
+                          : 'text-green-600'
+                      }`}>
+                        {supplierBalance.balance_type === 'credit' 
+                          ? `${formatCurrency(supplierBalance.current_balance)} (Supplier owes company)`
+                          : `${formatCurrency(supplierBalance.current_balance)} (Company owes supplier)`}
+                      </div>
+                      
+                      <span className="text-sm font-medium">Balance After Delivery:</span>
+                      <div className={`font-medium ${
+                        supplierBalance.balance_type === 'credit'
+                          ? (supplierBalance.current_balance - (deliveryForm.quantity * selectedItem.price)) > 0
+                            ? 'text-red-600'
+                            : 'text-green-600'
+                          : (supplierBalance.current_balance + (deliveryForm.quantity * selectedItem.price)) > 0
+                            ? 'text-blue-600'
+                            : 'text-green-600'
+                      }`}>
+                        {supplierBalance.balance_type === 'credit'
+                          ? formatCurrency(supplierBalance.current_balance - (deliveryForm.quantity * selectedItem.price))
+                          : formatCurrency(supplierBalance.current_balance + (deliveryForm.quantity * selectedItem.price))}
+                        {supplierBalance.balance_type === 'credit'
+                          ? ` (Supplier will ${supplierBalance.current_balance - (deliveryForm.quantity * selectedItem.price) > 0 ? 'still owe' : 'be settled with'})`
+                          : ` (Company will ${supplierBalance.current_balance + (deliveryForm.quantity * selectedItem.price) > 0 ? 'still owe' : 'be settled with'})`}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {error && (
@@ -1394,9 +1425,8 @@ export default function Suppliers() {
                     value={paymentForm.amount}
                     onChange={(e) => setPaymentForm({...paymentForm, amount: Number(e.target.value)})}
                     required
-                    min="0"
+                    min="0.01"
                     step="0.01"
-                    max={selectedItem.quantity * selectedItem.price - getTotalPaid(selectedItem.id)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -1446,32 +1476,40 @@ export default function Suppliers() {
                 </div>
 
                 <div className="bg-blue-50 p-3 rounded-lg">
-                  <div className="grid grid-cols-2 gap-4">
+                  {supplierBalance && (
                     <div>
-                      <span className="text-sm font-medium">Total Cost:</span>
-                      <div className="font-medium">
-                        {formatCurrency(selectedItem.quantity * selectedItem.price)}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium">Previously Paid:</span>
-                      <div className="font-medium">
-                        {formatCurrency(getTotalPaid(selectedItem.id))}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium">Balance After This:</span>
+                      <span className="text-sm font-medium">Current Balance:</span>
                       <div className={`font-medium ${
-                        (selectedItem.quantity * selectedItem.price - getTotalPaid(selectedItem.id) - paymentForm.amount) > 0 
-                          ? 'text-red-600' 
+                        supplierBalance.current_balance > 0 
+                          ? supplierBalance.balance_type === 'credit' 
+                            ? 'text-red-600' 
+                            : 'text-blue-600'
                           : 'text-green-600'
                       }`}>
-                        {formatCurrency(
-                          selectedItem.quantity * selectedItem.price - getTotalPaid(selectedItem.id) - paymentForm.amount
-                        )}
+                        {supplierBalance.balance_type === 'credit' 
+                          ? `${formatCurrency(supplierBalance.current_balance)} (Supplier owes company)`
+                          : `${formatCurrency(supplierBalance.current_balance)} (Company owes supplier)`}
+                      </div>
+                      
+                      <span className="text-sm font-medium">Balance After Payment:</span>
+                      <div className={`font-medium ${
+                        supplierBalance.balance_type === 'debit'
+                          ? (supplierBalance.current_balance - paymentForm.amount) > 0
+                            ? 'text-blue-600'
+                            : 'text-green-600'
+                          : (supplierBalance.current_balance + paymentForm.amount) > 0
+                            ? 'text-red-600'
+                            : 'text-green-600'
+                      }`}>
+                        {supplierBalance.balance_type === 'debit'
+                          ? formatCurrency(supplierBalance.current_balance - paymentForm.amount)
+                          : formatCurrency(supplierBalance.current_balance + paymentForm.amount)}
+                        {supplierBalance.balance_type === 'debit'
+                          ? ` (Company will ${supplierBalance.current_balance - paymentForm.amount > 0 ? 'still owe' : 'be settled with'})`
+                          : ` (Supplier will ${supplierBalance.current_balance + paymentForm.amount > 0 ? 'still owe' : 'be settled with'})`}
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {error && (
