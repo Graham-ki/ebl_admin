@@ -251,7 +251,11 @@ export default function MarketersPage() {
           unit_price: balance.amount,
           payment: 0,
           expense: 0,
-          status: balance.status
+          status: balance.status,
+          purpose: '',
+          mode_of_payment: '',
+          bank_name: '',
+          mobile_money_provider: ''
         })) || []),
         ...(ordersData?.map(order => ({
           type: 'order',
@@ -262,7 +266,12 @@ export default function MarketersPage() {
           unit_price: order.cost,
           amount: order.quantity * order.cost,
           payment: 0,
-          expense: 0
+          expense: 0,
+          purpose: '',
+          status: '',
+          mode_of_payment: '',
+          bank_name: '',
+          mobile_money_provider: ''
         })) || []),
         ...(paymentsData?.map(payment => ({
           type: 'payment',
@@ -276,7 +285,10 @@ export default function MarketersPage() {
           mode_of_payment: payment.mode_of_payment,
           bank_name: payment.bank_name,
           mobile_money_provider: payment.mode_of_mobilemoney,
-          purpose: payment.purpose
+          purpose: payment.purpose || '',
+          status: '',
+          quantity: 0,
+          unit_price: 0
         })) || []),
         ...(expensesData?.map(expense => ({
           type: 'expense',
@@ -286,7 +298,14 @@ export default function MarketersPage() {
           amount: 0,
           payment: 0,
           expense: expense.amount_spent,
-          description: `Expense: ${expense.item}`
+          description: `Expense: ${expense.item}`,
+          purpose: '',
+          status: '',
+          mode_of_payment: '',
+          bank_name: '',
+          mobile_money_provider: '',
+          quantity: 0,
+          unit_price: 0
         })) || [])
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -357,7 +376,7 @@ export default function MarketersPage() {
         mode_of_payment: "",
         bank_name: "",
         mobile_money_provider: "",
-        purpose: newPayment.purpose // Keep the purpose for debt clearance
+        purpose: newPayment.purpose
       });
     } catch (error) {
       console.error("Error adding payment:", error);
@@ -369,11 +388,9 @@ export default function MarketersPage() {
     if (!selectedMarketer || !newOrder.item || !newOrder.quantity || !newOrder.cost) return;
 
     try {
-      // First, find the product ID for the selected item
       const product = products.find(p => p.title === newOrder.item);
       if (!product) throw new Error("Product not found");
 
-      // Record the order in the order table
       const { data: orderData, error: orderError } = await supabase
         .from("order")
         .insert([{
@@ -388,13 +405,12 @@ export default function MarketersPage() {
 
       if (orderError) throw orderError;
       
-      // Record the outflow in the product_entries table
       const { error: entryError } = await supabase
         .from("product_entries")
         .insert([{
           product_id: product.id,
           title: newOrder.item,
-          quantity: -parseFloat(newOrder.quantity), // Negative for outflow
+          quantity: -parseFloat(newOrder.quantity),
           created_at: newOrder.date,
           created_by: 'Admin',
           transaction: `${selectedMarketer.name}-Order`
@@ -496,7 +512,6 @@ export default function MarketersPage() {
       
       await fetchOpeningBalances();
       
-      // If status is "Pay", show the payment form
       if (status === "Pay") {
         const balance = openingBalances.find(b => b.id === id);
         if (balance) {
