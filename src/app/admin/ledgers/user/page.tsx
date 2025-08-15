@@ -344,11 +344,10 @@ export default function MarketersPage() {
   };
 
   const addPayment = async () => {
-    if (!selectedMarketer || !newPayment.amount || !newPayment.mode_of_payment || !newPayment.order_id) return;
+    if (!selectedMarketer || !newPayment.amount || !newPayment.mode_of_payment) return;
 
     try {
       const paymentData: any = {
-        order_id: newPayment.order_id,
         amount_paid: parseFloat(newPayment.amount),
         created_at: newPayment.date,
         user_id: selectedMarketer.id,
@@ -356,6 +355,11 @@ export default function MarketersPage() {
         payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
         purpose: newPayment.purpose
       };
+
+      // Only include order_id if it's an order payment
+      if (newPayment.purpose === "Order Payment" && newPayment.order_id) {
+        paymentData.order_id = newPayment.order_id;
+      }
 
       if (newPayment.mode_of_payment === 'Bank') {
         paymentData.bank_name = newPayment.bank_name;
@@ -369,17 +373,48 @@ export default function MarketersPage() {
 
       if (error) throw error;
       
+      // If this is a debt clearance payment, update the opening balance
+      if (newPayment.purpose === "Debt Clearance") {
+        // Find the opening balance for this marketer
+        const { data: balances, error: balanceError } = await supabase
+          .from("opening_balances")
+          .select("*")
+          .eq("marketer_id", selectedMarketer.id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (balanceError) throw balanceError;
+        
+        if (balances && balances.length > 0) {
+          const balance = balances[0];
+          const newAmount = parseFloat(balance.amount) - parseFloat(newPayment.amount);
+          
+          // Update the opening balance
+          const { error: updateError } = await supabase
+            .from("opening_balances")
+            .update({ 
+              amount: newAmount.toString(),
+              status: newAmount <= 0 ? "Paid" : "Pending Clearance"
+            })
+            .eq("id", balance.id);
+
+          if (updateError) throw updateError;
+        }
+      }
+
       if (newPayment.order_id) {
         await fetchPayments(newPayment.order_id);
       }
       await fetchTransactions(selectedMarketer.id);
+      await fetchOpeningBalances(); // Refresh opening balances
+      
       setNewPayment({
         date: new Date().toISOString().split('T')[0],
         amount: "",
         mode_of_payment: "",
         bank_name: "",
         mobile_money_provider: "",
-        purpose: newPayment.purpose,
+        purpose: "Order Payment",
         order_id: ""
       });
       setShowPaymentForm(false);
@@ -858,7 +893,9 @@ export default function MarketersPage() {
         <DialogContent className="max-w-md rounded-lg">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">
-              Record Payment for {selectedMarketer?.name}
+              {newPayment.purpose === "Debt Clearance" 
+                ? "Record Payment for Debt Clearance" 
+                : "Record Payment for Order"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -875,29 +912,33 @@ export default function MarketersPage() {
                 })}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Order
-              </label>
-              <Select
-                value={newPayment.order_id}
-                onValueChange={(value) => setNewPayment({
-                  ...newPayment,
-                  order_id: value
-                })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select order" />
-                </SelectTrigger>
-                <SelectContent>
-                  {orders.map((order) => (
-                    <SelectItem key={order.id} value={order.id}>
-                      {order.item} (Qty: {order.quantity}) - {order.total_amount.toLocaleString()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            
+            {newPayment.purpose === "Order Payment" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Order
+                </label>
+                <Select
+                  value={newPayment.order_id}
+                  onValueChange={(value) => setNewPayment({
+                    ...newPayment,
+                    order_id: value
+                  })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select order" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {orders.map((order) => (
+                      <SelectItem key={order.id} value={order.id}>
+                        {order.item} (Qty: {order.quantity}) - {order.total_amount.toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Amount
@@ -973,34 +1014,17 @@ export default function MarketersPage() {
                 </Select>
               </div>
             )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Purpose
-              </label>
-              <Select
-                value={newPayment.purpose}
-                onValueChange={(value) => setNewPayment({
-                  ...newPayment,
-                  purpose: value
-                })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select purpose" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Order Payment">Order Payment</SelectItem>
-                  <SelectItem value="Debt Clearance">Debt Clearance</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           <DialogFooter>
             <Button
               onClick={addPayment}
-              disabled={!newPayment.amount || !newPayment.mode_of_payment || 
+              disabled={
+                !newPayment.amount || 
+                !newPayment.mode_of_payment || 
                 (newPayment.mode_of_payment === 'Bank' && !newPayment.bank_name) ||
                 (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider) ||
-                !newPayment.order_id}
+                (newPayment.purpose === "Order Payment" && !newPayment.order_id)
+              }
             >
               Record Payment
             </Button>
