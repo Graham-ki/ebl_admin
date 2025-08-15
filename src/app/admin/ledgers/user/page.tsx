@@ -37,7 +37,8 @@ export default function MarketersPage() {
     mode_of_payment: "",
     bank_name: "",
     mobile_money_provider: "",
-    purpose: "Order Payment"
+    purpose: "Order Payment",
+    order_id: ""
   });
   const [newOrder, setNewOrder] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -343,11 +344,11 @@ export default function MarketersPage() {
   };
 
   const addPayment = async () => {
-    if (!selectedOrder || !newPayment.amount || !newPayment.mode_of_payment) return;
+    if (!selectedMarketer || !newPayment.amount || !newPayment.mode_of_payment || !newPayment.order_id) return;
 
     try {
       const paymentData: any = {
-        order_id: selectedOrder.id,
+        order_id: newPayment.order_id,
         amount_paid: parseFloat(newPayment.amount),
         created_at: newPayment.date,
         user_id: selectedMarketer.id,
@@ -368,7 +369,9 @@ export default function MarketersPage() {
 
       if (error) throw error;
       
-      await fetchPayments(selectedOrder.id);
+      if (newPayment.order_id) {
+        await fetchPayments(newPayment.order_id);
+      }
       await fetchTransactions(selectedMarketer.id);
       setNewPayment({
         date: new Date().toISOString().split('T')[0],
@@ -376,8 +379,10 @@ export default function MarketersPage() {
         mode_of_payment: "",
         bank_name: "",
         mobile_money_provider: "",
-        purpose: newPayment.purpose
+        purpose: newPayment.purpose,
+        order_id: ""
       });
+      setShowPaymentForm(false);
     } catch (error) {
       console.error("Error adding payment:", error);
       alert("Error adding payment. Please try again.");
@@ -522,7 +527,8 @@ export default function MarketersPage() {
             mode_of_payment: "",
             bank_name: "",
             mobile_money_provider: "",
-            purpose: "Debt Clearance"
+            purpose: "Debt Clearance",
+            order_id: ""
           });
           setShowPaymentForm(true);
         }
@@ -847,12 +853,12 @@ export default function MarketersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Form for Debt Clearance */}
+      {/* Payment Form */}
       <Dialog open={showPaymentForm} onOpenChange={setShowPaymentForm}>
         <DialogContent className="max-w-md rounded-lg">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">
-              Record Payment for Debt Clearance
+              Record Payment for {selectedMarketer?.name}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -868,6 +874,29 @@ export default function MarketersPage() {
                   date: e.target.value
                 })}
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Order
+              </label>
+              <Select
+                value={newPayment.order_id}
+                onValueChange={(value) => setNewPayment({
+                  ...newPayment,
+                  order_id: value
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select order" />
+                </SelectTrigger>
+                <SelectContent>
+                  {orders.map((order) => (
+                    <SelectItem key={order.id} value={order.id}>
+                      {order.item} (Qty: {order.quantity}) - {order.total_amount.toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -944,16 +973,34 @@ export default function MarketersPage() {
                 </Select>
               </div>
             )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Purpose
+              </label>
+              <Select
+                value={newPayment.purpose}
+                onValueChange={(value) => setNewPayment({
+                  ...newPayment,
+                  purpose: value
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select purpose" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Order Payment">Order Payment</SelectItem>
+                  <SelectItem value="Debt Clearance">Debt Clearance</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button
-              onClick={() => {
-                addPayment();
-                setShowPaymentForm(false);
-              }}
+              onClick={addPayment}
               disabled={!newPayment.amount || !newPayment.mode_of_payment || 
                 (newPayment.mode_of_payment === 'Bank' && !newPayment.bank_name) ||
-                (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider)}
+                (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider) ||
+                !newPayment.order_id}
             >
               Record Payment
             </Button>
@@ -983,6 +1030,24 @@ export default function MarketersPage() {
               onClick={() => setShowExpenseDialog(true)}
             >
               Record Expense
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowPaymentForm(true);
+                setNewPayment({
+                  date: new Date().toISOString().split('T')[0],
+                  amount: "",
+                  mode_of_payment: "",
+                  bank_name: "",
+                  mobile_money_provider: "",
+                  purpose: "Order Payment",
+                  order_id: ""
+                });
+              }}
+            >
+              Record Payment
             </Button>
             <Button
               variant="outline"
@@ -1334,131 +1399,6 @@ export default function MarketersPage() {
                   )}
                 </TableBody>
               </Table>
-            </div>
-
-            <div className="border-t pt-4">
-              <h3 className="font-medium mb-3">Add New Payment</h3>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Date
-                    </label>
-                    <Input
-                      type="date"
-                      value={newPayment.date}
-                      onChange={(e) => setNewPayment({
-                        ...newPayment,
-                        date: e.target.value
-                      })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Amount
-                    </label>
-                    <Input
-                      type="number"
-                      placeholder="Enter amount"
-                      value={newPayment.amount}
-                      onChange={(e) => setNewPayment({
-                        ...newPayment,
-                        amount: e.target.value
-                      })}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Mode of Payment
-                  </label>
-                  <Select
-                    value={newPayment.mode_of_payment}
-                    onValueChange={(value) => setNewPayment({
-                      ...newPayment,
-                      mode_of_payment: value,
-                      bank_name: "",
-                      mobile_money_provider: ""
-                    })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select payment mode" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Cash">Cash</SelectItem>
-                      <SelectItem value="Bank">Bank</SelectItem>
-                      <SelectItem value="Mobile Money">Mobile Money</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {newPayment.mode_of_payment === 'Bank' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Bank Name
-                    </label>
-                    <Input
-                      type="text"
-                      placeholder="Enter bank name"
-                      value={newPayment.bank_name}
-                      onChange={(e) => setNewPayment({
-                        ...newPayment,
-                        bank_name: e.target.value
-                      })}
-                    />
-                  </div>
-                )}
-                {newPayment.mode_of_payment === 'Mobile Money' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Mobile Money Provider
-                    </label>
-                    <Select
-                      value={newPayment.mobile_money_provider}
-                      onValueChange={(value) => setNewPayment({
-                        ...newPayment,
-                        mobile_money_provider: value
-                      })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select provider" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="MTN">MTN</SelectItem>
-                        <SelectItem value="Airtel">Airtel</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Purpose
-                  </label>
-                  <Select
-                    value={newPayment.purpose}
-                    onValueChange={(value) => setNewPayment({
-                      ...newPayment,
-                      purpose: value
-                    })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select purpose" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Order Payment">Order Payment</SelectItem>
-                      <SelectItem value="Debt Clearance">Debt Clearance</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  onClick={addPayment}
-                  className="w-full"
-                  disabled={!newPayment.amount || !newPayment.mode_of_payment || 
-                    (newPayment.mode_of_payment === 'Bank' && !newPayment.bank_name) ||
-                    (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider)}
-                >
-                  Add Payment
-                </Button>
-              </div>
             </div>
           </div>
         </DialogContent>
