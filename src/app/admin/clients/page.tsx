@@ -516,7 +516,7 @@ export default function ClientsPage() {
   };
 
   const addOpeningBalance = async () => {
-    if (!newOpeningBalance.client_id || !newOpeningBalance.amount) return;
+    if (!newOpeningBalance.marketer_id || !newOpeningBalance.amount) return;
 
     try {
       const { data, error } = await supabase
