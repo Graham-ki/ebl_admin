@@ -86,7 +86,7 @@ export default function ClientsPage() {
           const { count, error: countError } = await supabase
             .from("order")
             .select("*", { count: "exact", head: true })
-            .eq("user", client.id); // Using 'user' column for client_id in orders table
+            .eq("user", client.id);
           
           if (countError) throw countError;
 
@@ -125,11 +125,12 @@ export default function ClientsPage() {
   const fetchOpeningBalances = async () => {
     setLoading(true);
     try {
+      // Updated to use the correct foreign key relationship
       const { data, error } = await supabase
         .from("opening_balances")
         .select(`
           *,
-          clients!inner(id, name)
+          clients!opening_balances_client_id_fkey(id, name)
         `)
         .order("created_at", { ascending: false });
 
@@ -148,7 +149,7 @@ export default function ClientsPage() {
       const { data, error } = await supabase
         .from("order")
         .select("*")
-        .eq("user", clientId) // Using 'user' column for client_id
+        .eq("user", clientId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -217,7 +218,6 @@ export default function ClientsPage() {
       if (clientError) throw clientError;
       if (!clientData) throw new Error("Client not found");
 
-      // Using 'user' column for client_id in orders table
       const { data: ordersData, error: ordersError } = await supabase
         .from("order")
         .select("*")
@@ -226,7 +226,6 @@ export default function ClientsPage() {
 
       if (ordersError) throw ordersError;
 
-      // Using 'user_id' column for client_id in finance table
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("finance")
         .select("*")
@@ -243,11 +242,11 @@ export default function ClientsPage() {
 
       if (expensesError) throw expensesError;
 
-      // Using 'marketer_id' column for client_id in opening_balances table
+      // Updated to use client_id instead of marketer_id
       const { data: openingBalancesData, error: openingBalancesError } = await supabase
         .from("opening_balances")
         .select("*")
-        .eq("marketer_id", clientId)
+        .eq("client_id", clientId)
         .order("created_at", { ascending: false });
 
       if (openingBalancesError) throw openingBalancesError;
@@ -361,7 +360,7 @@ export default function ClientsPage() {
       const paymentData: any = {
         amount_paid: parseFloat(newPayment.amount),
         created_at: newPayment.date,
-        user_id: selectedClient.id, // Using 'user_id' column in finance table
+        user_id: selectedClient.id,
         mode_of_payment: newPayment.mode_of_payment,
         payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
         purpose: newPayment.purpose
@@ -387,7 +386,7 @@ export default function ClientsPage() {
         const { data: balances, error: balanceError } = await supabase
           .from("opening_balances")
           .select("*")
-          .eq("marketer_id", selectedClient.id) // Using 'marketer_id' column
+          .eq("client_id", selectedClient.id) // Updated to use client_id
           .order("created_at", { ascending: false })
           .limit(1);
 
@@ -441,7 +440,7 @@ export default function ClientsPage() {
       const { data: orderData, error: orderError } = await supabase
         .from("order")
         .insert([{
-          user: selectedClient.id, // Using 'user' column in order table
+          user: selectedClient.id,
           material: newOrder.material,
           quantity: parseFloat(newOrder.quantity),
           cost: parseFloat(newOrder.cost),
@@ -525,7 +524,7 @@ export default function ClientsPage() {
       const { data, error } = await supabase
         .from("opening_balances")
         .insert([{
-          marketer_id: newOpeningBalance.client_id, // Using 'marketer_id' column
+          client_id: newOpeningBalance.client_id, // Updated to use client_id
           amount: parseFloat(newOpeningBalance.amount),
           status: newOpeningBalance.status,
           created_at: newOpeningBalance.date
@@ -589,7 +588,7 @@ export default function ClientsPage() {
       if (status === "Pay") {
         const balance = openingBalances.find(b => b.id === id);
         if (balance) {
-          setSelectedClient(clients.find(c => c.id === balance.marketer_id)); // Using marketer_id
+          setSelectedClient(clients.find(c => c.id === balance.client_id)); // Updated to use client_id
           setNewPayment({
             date: new Date().toISOString().split('T')[0],
             amount: balance.amount.toString(),
@@ -937,7 +936,7 @@ export default function ClientsPage() {
               </TableHeader>
               <TableBody>
                 {openingBalances.map((balance) => {
-                  const client = clients.find(c => c.id === balance.marketer_id); // Using marketer_id
+                  const client = clients.find(c => c.id === balance.client_id);
                   return (
                     <TableRow key={balance.id}>
                       <TableCell>
