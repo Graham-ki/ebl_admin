@@ -144,7 +144,7 @@ export default function ClientsPage() {
       const { data, error } = await supabase
         .from("order")
         .select("*")
-        .eq("client", clientId)
+        .eq("user", clientId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -216,7 +216,7 @@ export default function ClientsPage() {
       const { data: ordersData, error: ordersError } = await supabase
         .from("order")
         .select("*")
-        .eq("client", clientId)
+        .eq("user", clientId)
         .order("created_at", { ascending: false });
 
       if (ordersError) throw ordersError;
@@ -224,7 +224,7 @@ export default function ClientsPage() {
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("finance")
         .select("*")
-        .eq("client_id", clientId)
+        .eq("user_id", clientId)
         .order("created_at", { ascending: false });
 
       if (paymentsError) throw paymentsError;
@@ -240,7 +240,7 @@ export default function ClientsPage() {
       const { data: openingBalancesData, error: openingBalancesError } = await supabase
         .from("opening_balances")
         .select("*")
-        .eq("client_id", clientId)
+        .eq("marketer_id", clientId)
         .order("created_at", { ascending: false });
 
       if (openingBalancesError) throw openingBalancesError;
@@ -354,7 +354,7 @@ export default function ClientsPage() {
       const paymentData: any = {
         amount_paid: parseFloat(newPayment.amount),
         created_at: newPayment.date,
-        client_id: selectedClient.id,
+        user_id: selectedClient.id,
         mode_of_payment: newPayment.mode_of_payment,
         payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
         purpose: newPayment.purpose
@@ -380,7 +380,7 @@ export default function ClientsPage() {
         const { data: balances, error: balanceError } = await supabase
           .from("opening_balances")
           .select("*")
-          .eq("client_id", selectedClient.id)
+          .eq("marketer_id", selectedClient.id)
           .order("created_at", { ascending: false })
           .limit(1);
 
@@ -518,7 +518,7 @@ export default function ClientsPage() {
       const { data, error } = await supabase
         .from("opening_balances")
         .insert([{
-          client_id: newOpeningBalance.client_id,
+          marketer_id: newOpeningBalance.client_id,
           amount: parseFloat(newOpeningBalance.amount),
           status: newOpeningBalance.status,
           created_at: newOpeningBalance.date
