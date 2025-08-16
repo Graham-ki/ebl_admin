@@ -54,7 +54,7 @@ export default function ClientsPage() {
   const [newOpeningBalance, setNewOpeningBalance] = useState({
     date: new Date().toISOString().split('T')[0],
     amount: "",
-    marketer_id: "",
+    client_id: "",
     status: "Unpaid"
   });
   const [newClient, setNewClient] = useState({
@@ -86,7 +86,7 @@ export default function ClientsPage() {
           const { count, error: countError } = await supabase
             .from("order")
             .select("*", { count: "exact", head: true })
-            .eq("user", client.id);
+            .eq("user", client.id); // Using 'user' column for client_id in orders table
           
           if (countError) throw countError;
 
@@ -148,7 +148,7 @@ export default function ClientsPage() {
       const { data, error } = await supabase
         .from("order")
         .select("*")
-        .eq("user", clientId)
+        .eq("user", clientId) // Using 'user' column for client_id
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -217,6 +217,7 @@ export default function ClientsPage() {
       if (clientError) throw clientError;
       if (!clientData) throw new Error("Client not found");
 
+      // Using 'user' column for client_id in orders table
       const { data: ordersData, error: ordersError } = await supabase
         .from("order")
         .select("*")
@@ -225,6 +226,7 @@ export default function ClientsPage() {
 
       if (ordersError) throw ordersError;
 
+      // Using 'user_id' column for client_id in finance table
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("finance")
         .select("*")
@@ -241,6 +243,7 @@ export default function ClientsPage() {
 
       if (expensesError) throw expensesError;
 
+      // Using 'marketer_id' column for client_id in opening_balances table
       const { data: openingBalancesData, error: openingBalancesError } = await supabase
         .from("opening_balances")
         .select("*")
@@ -358,7 +361,7 @@ export default function ClientsPage() {
       const paymentData: any = {
         amount_paid: parseFloat(newPayment.amount),
         created_at: newPayment.date,
-        user_id: selectedClient.id,
+        user_id: selectedClient.id, // Using 'user_id' column in finance table
         mode_of_payment: newPayment.mode_of_payment,
         payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
         purpose: newPayment.purpose
@@ -384,7 +387,7 @@ export default function ClientsPage() {
         const { data: balances, error: balanceError } = await supabase
           .from("opening_balances")
           .select("*")
-          .eq("marketer_id", selectedClient.id)
+          .eq("marketer_id", selectedClient.id) // Using 'marketer_id' column
           .order("created_at", { ascending: false })
           .limit(1);
 
@@ -438,7 +441,7 @@ export default function ClientsPage() {
       const { data: orderData, error: orderError } = await supabase
         .from("order")
         .insert([{
-          client: selectedClient.id,
+          user: selectedClient.id, // Using 'user' column in order table
           material: newOrder.material,
           quantity: parseFloat(newOrder.quantity),
           cost: parseFloat(newOrder.cost),
@@ -516,13 +519,13 @@ export default function ClientsPage() {
   };
 
   const addOpeningBalance = async () => {
-    if (!newOpeningBalance.marketer_id || !newOpeningBalance.amount) return;
+    if (!newOpeningBalance.client_id || !newOpeningBalance.amount) return;
 
     try {
       const { data, error } = await supabase
         .from("opening_balances")
         .insert([{
-          marketer_id: newOpeningBalance.marketer_id,
+          marketer_id: newOpeningBalance.client_id, // Using 'marketer_id' column
           amount: parseFloat(newOpeningBalance.amount),
           status: newOpeningBalance.status,
           created_at: newOpeningBalance.date
@@ -531,11 +534,11 @@ export default function ClientsPage() {
       if (error) throw error;
       
       await fetchOpeningBalances();
-      await fetchTransactions(newOpeningBalance.marketer_id);
+      await fetchTransactions(newOpeningBalance.client_id);
       setNewOpeningBalance({
         date: new Date().toISOString().split('T')[0],
         amount: "",
-        marketer_id: "",
+        client_id: "",
         status: "Unpaid"
       });
       setShowOpeningBalanceDialog(false);
@@ -586,7 +589,7 @@ export default function ClientsPage() {
       if (status === "Pay") {
         const balance = openingBalances.find(b => b.id === id);
         if (balance) {
-          setSelectedClient(clients.find(c => c.id === balance.client_id));
+          setSelectedClient(clients.find(c => c.id === balance.marketer_id)); // Using marketer_id
           setNewPayment({
             date: new Date().toISOString().split('T')[0],
             amount: balance.amount.toString(),
@@ -933,44 +936,47 @@ export default function ClientsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {openingBalances.map((balance) => (
-                  <TableRow key={balance.id}>
-                    <TableCell>
-                      {new Date(balance.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{balance.clients?.name || 'Unknown Client'}</TableCell>
-                    <TableCell className="text-right">
-                      {parseFloat(balance.amount).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          balance.status === 'Paid' ? 'default' :
-                          balance.status === 'Pending Clearance' ? 'secondary' :
-                          'destructive'
-                        }
-                      >
-                        {balance.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Select
-                        value={balance.status}
-                        onValueChange={(value) => updateOpeningBalanceStatus(balance.id, value)}
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Change Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Unpaid">Unpaid</SelectItem>
-                          <SelectItem value="Pay">Pay</SelectItem>
-                          <SelectItem value="Paid">Paid</SelectItem>
-                          <SelectItem value="Pending Clearance">Pending Clearance</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {openingBalances.map((balance) => {
+                  const client = clients.find(c => c.id === balance.marketer_id); // Using marketer_id
+                  return (
+                    <TableRow key={balance.id}>
+                      <TableCell>
+                        {new Date(balance.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>{client?.name || 'Unknown Client'}</TableCell>
+                      <TableCell className="text-right">
+                        {parseFloat(balance.amount).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            balance.status === 'Paid' ? 'default' :
+                            balance.status === 'Pending Clearance' ? 'secondary' :
+                            'destructive'
+                          }
+                        >
+                          {balance.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Select
+                          value={balance.status}
+                          onValueChange={(value) => updateOpeningBalanceStatus(balance.id, value)}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Change Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Unpaid">Unpaid</SelectItem>
+                            <SelectItem value="Pay">Pay</SelectItem>
+                            <SelectItem value="Paid">Paid</SelectItem>
+                            <SelectItem value="Pending Clearance">Pending Clearance</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 {openingBalances.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-gray-500">
