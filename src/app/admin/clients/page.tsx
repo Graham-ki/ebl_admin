@@ -71,18 +71,6 @@ export default function ClientsPage() {
   const [showOpeningBalancesList, setShowOpeningBalancesList] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showAddClientDialog, setShowAddClientDialog] = useState(false);
-
-  // Client table schema would be:
-  /*
-    CREATE TABLE clients (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      name TEXT NOT NULL,
-      contact TEXT NOT NULL,
-      address TEXT NOT NULL,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    );
-  */
-
   const fetchClients = async () => {
     setLoading(true);
     try {
@@ -97,7 +85,7 @@ export default function ClientsPage() {
           const { count, error: countError } = await supabase
             .from("order")
             .select("*", { count: "exact", head: true })
-            .eq("client", client.id);
+            .eq("user", client.id);
           
           if (countError) throw countError;
 
