@@ -522,7 +522,7 @@ export default function ClientsPage() {
       const { data, error } = await supabase
         .from("opening_balances")
         .insert([{
-          marketer_id: newOpeningBalance.client_id,
+          marketer_id: newOpeningBalance.marketer_id,
           amount: parseFloat(newOpeningBalance.amount),
           status: newOpeningBalance.status,
           created_at: newOpeningBalance.date
