@@ -54,7 +54,7 @@ export default function ClientsPage() {
   const [newOpeningBalance, setNewOpeningBalance] = useState({
     date: new Date().toISOString().split('T')[0],
     amount: "",
-    client_id: "",
+    marketer_id: "",
     status: "Unpaid"
   });
   const [newClient, setNewClient] = useState({
@@ -71,6 +71,7 @@ export default function ClientsPage() {
   const [showOpeningBalancesList, setShowOpeningBalancesList] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showAddClientDialog, setShowAddClientDialog] = useState(false);
+
   const fetchClients = async () => {
     setLoading(true);
     try {
@@ -126,7 +127,10 @@ export default function ClientsPage() {
     try {
       const { data, error } = await supabase
         .from("opening_balances")
-        .select("*")
+        .select(`
+          *,
+          clients!inner(id, name)
+        `)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -527,11 +531,11 @@ export default function ClientsPage() {
       if (error) throw error;
       
       await fetchOpeningBalances();
-      await fetchTransactions(newOpeningBalance.client_id);
+      await fetchTransactions(newOpeningBalance.marketer_id);
       setNewOpeningBalance({
         date: new Date().toISOString().split('T')[0],
         amount: "",
-        client_id: "",
+        marketer_id: "",
         status: "Unpaid"
       });
       setShowOpeningBalanceDialog(false);
@@ -707,7 +711,7 @@ export default function ClientsPage() {
           variant="outline"
           onClick={() => setShowOpeningBalancesList(true)}
         >
-          View Opening Balances
+          View Client Balances
         </Button>
       </div>
 
@@ -825,7 +829,7 @@ export default function ClientsPage() {
         <DialogContent className="max-w-md rounded-lg">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">
-              Record Opening Balance
+              Record Client Opening Balance
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -909,12 +913,12 @@ export default function ClientsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Opening Balances List Dialog */}
+      {/* Client Opening Balances List Dialog */}
       <Dialog open={showOpeningBalancesList} onOpenChange={setShowOpeningBalancesList}>
         <DialogContent className="max-w-4xl rounded-lg">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">
-              Opening Balances
+              Client Opening Balances
             </DialogTitle>
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto">
@@ -929,51 +933,48 @@ export default function ClientsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {openingBalances.map((balance) => {
-                  const client = clients.find(c => c.id === balance.client_id);
-                  return (
-                    <TableRow key={balance.id}>
-                      <TableCell>
-                        {new Date(balance.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>{client?.name || 'Unknown'}</TableCell>
-                      <TableCell className="text-right">
-                        {parseFloat(balance.amount).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            balance.status === 'Paid' ? 'default' :
-                            balance.status === 'Pending Clearance' ? 'secondary' :
-                            'destructive'
-                          }
-                        >
-                          {balance.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Select
-                          value={balance.status}
-                          onValueChange={(value) => updateOpeningBalanceStatus(balance.id, value)}
-                        >
-                          <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="Change Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Unpaid">Unpaid</SelectItem>
-                            <SelectItem value="Pay">Pay</SelectItem>
-                            <SelectItem value="Paid">Paid</SelectItem>
-                            <SelectItem value="Pending Clearance">Pending Clearance</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {openingBalances.map((balance) => (
+                  <TableRow key={balance.id}>
+                    <TableCell>
+                      {new Date(balance.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>{balance.clients?.name || 'Unknown Client'}</TableCell>
+                    <TableCell className="text-right">
+                      {parseFloat(balance.amount).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          balance.status === 'Paid' ? 'default' :
+                          balance.status === 'Pending Clearance' ? 'secondary' :
+                          'destructive'
+                        }
+                      >
+                        {balance.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Select
+                        value={balance.status}
+                        onValueChange={(value) => updateOpeningBalanceStatus(balance.id, value)}
+                      >
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Change Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Unpaid">Unpaid</SelectItem>
+                          <SelectItem value="Pay">Pay</SelectItem>
+                          <SelectItem value="Paid">Paid</SelectItem>
+                          <SelectItem value="Pending Clearance">Pending Clearance</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                  </TableRow>
+                ))}
                 {openingBalances.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                      No opening balances recorded
+                      No client opening balances recorded
                     </TableCell>
                   </TableRow>
                 )}
