@@ -396,13 +396,19 @@ export default function Suppliers() {
         // Update deliveries state
         setDeliveries(prev => [...prev, data[0]]);
         
-        // Update balance immediately
+        // Update balance based on balance type
         setSupplierBalances(prev => {
           return prev.map(balance => {
             if (balance.supplier_id === selectedItem.supplier_id) {
-              const newBalance = balance.balance_type === 'credit'
-                ? balance.current_balance - deliveryValue  // Supplier owes less
-                : balance.current_balance + deliveryValue; // Company owes more
+              let newBalance = balance.current_balance;
+              
+              if (balance.balance_type === 'credit') {
+                // Supplier owes company (credit) - reduce debt when they deliver
+                newBalance = balance.current_balance - deliveryValue;
+              } else {
+                // Company owes supplier (debit) - increase debt when they deliver more
+                newBalance = balance.current_balance + deliveryValue;
+              }
               
               // Sync with database in background
               supabase
@@ -446,13 +452,19 @@ export default function Suppliers() {
         // Update payments state
         setPayments(prev => [...prev, paymentData[0]]);
         
-        // Update balance immediately
+        // Update balance based on balance type
         setSupplierBalances(prev => {
           return prev.map(balance => {
             if (balance.supplier_id === selectedItem.supplier_id) {
-              const newBalance = balance.balance_type === 'debit'
-                ? balance.current_balance - paymentForm.amount  // Company owes less
-                : balance.current_balance + paymentForm.amount; // Supplier owes more
+              let newBalance = balance.current_balance;
+              
+              if (balance.balance_type === 'debit') {
+                // Company owes supplier (debit) - reduce debt when we pay
+                newBalance = balance.current_balance - paymentForm.amount;
+              } else {
+                // Supplier owes company (credit) - increase debt when we pay them
+                newBalance = balance.current_balance + paymentForm.amount;
+              }
               
               // Sync with database in background
               supabase
