@@ -179,7 +179,7 @@ export default function Suppliers() {
     }));
 
     const itemPayments = getItemPayments(itemId).map(p => ({
-     极速5分钟
+      id: p.id,
       type: 'payment' as const,
       date: p.payment_date,
       amount: p.amount,
@@ -192,7 +192,7 @@ export default function Suppliers() {
   };
 
   const getTotalDeliveredValue = (itemId: string) => {
-    return get极速5分钟
+    return getItemDeliveries(itemId).reduce((sum, d) => sum + d.value, 0);
   };
 
   const getTotalPaid = (itemId: string) => {
@@ -269,7 +269,7 @@ export default function Suppliers() {
           { data: suppliersData, error: suppliersError },
           { data: itemsData, error: itemsError },
           { data: deliveriesData, error: deliveriesError },
-          { data: paymentsData, error: payments极速5分钟
+          { data: paymentsData, error: paymentsError },
           { data: materialsData, error: materialsError },
           { data: clientsData, error: clientsError },
           { data: balancesData, error: balancesError }
@@ -326,7 +326,7 @@ export default function Suppliers() {
         resetSupplierForm();
       }
     } catch (err) {
-      console.error('极速5分钟
+      console.error('Error saving supplier:', err);
       setError('Failed to save supplier. Please try again.');
     }
   };
@@ -373,7 +373,7 @@ export default function Suppliers() {
     try {
       if (!selectedSupplier) return;
       
-      const { data, error }极速5分钟
+      const { data, error } = await supabase
         .from('supply_items')
         .insert([{ ...itemForm, supplier_id: selectedSupplier.id }])
         .select();
@@ -390,7 +390,7 @@ export default function Suppliers() {
     }
   };
 
-  const handleDeliverySubmit = async (e: React.Form极速5分钟
+  const handleDeliverySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     
@@ -498,7 +498,7 @@ export default function Suppliers() {
         
         setSupplierBalances(prev => {
           return prev.map(balance => {
-            if (balance.s极速5分钟
+            if (balance.supplier_id === selectedItem.supplier_id) {
               let newBalance = balance.current_balance;
               
               if (balance.balance_type === 'debit') {
@@ -606,7 +606,7 @@ export default function Suppliers() {
       await supabase
         .from('payments')
         .delete()
-        .极速5分钟
+        .eq('supply_item_id', id);
 
       const { error } = await supabase
         .from('supply_items')
@@ -708,7 +708,7 @@ export default function Suppliers() {
           </div>
           <button
             onClick={() => setShowSupplierForm(true)}
-            className="px-4 py-2 bg-blue-极速5分钟
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
           >
             <span>+</span> Add new
           </button>
@@ -728,7 +728,7 @@ export default function Suppliers() {
               <span className="text-2xl">📭</span>
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-1">No data yet</h3>
-            <p className="text-gray-500 mb-4">Get started by adding your first service provider</极速5分钟
+            <p className="text-gray-500 mb-4">Get started by adding your first service provider</p>
             <button
               onClick={() => setShowSupplierForm(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
@@ -789,7 +789,7 @@ export default function Suppliers() {
                             setSelectedSupplier(supplier);
                             setShowSuppliesModal(true);
                           }}
-                          className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:极速5分钟
+                          className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
                         >
                           <span>📦</span> View Supplies
                         </button>
@@ -828,9 +828,9 @@ export default function Suppliers() {
       {showSupplierForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="p极速5分钟
+            <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="极速5分钟
+                <h3 className="text-lg font-medium text-gray-900">
                   Add New Supplier
                 </h3>
                 <button 
@@ -885,17 +885,17 @@ export default function Suppliers() {
                     {error}
                   </div>
                 )}
-                <div className="flex justify-end space极速5分钟
+                <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
                     onClick={resetSupplierForm}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
-                  </极速5分钟
+                  </button>
                   <button
                     type="submit"
-                    className="px-极速5分钟
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Save Supplier
                   </button>
@@ -933,7 +933,7 @@ export default function Suppliers() {
                       ...balanceForm,
                       balance_type: e.target.value as 'credit' | 'debit'
                     })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:极速5分钟
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="credit">Supplier owes company</option>
                     <option value="debit">Company owes supplier</option>
@@ -1020,7 +1020,7 @@ export default function Suppliers() {
                     No items found for this service provider.
                   </div>
                 ) : (
-                  <table className="min极速5分钟
+                  <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1032,12 +1032,12 @@ export default function Suppliers() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Delivered
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px极速5分钟
                           Total Paid
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Balance
-                        </极速5分钟
+                        </th>
                         <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
@@ -1051,7 +1051,7 @@ export default function Suppliers() {
 
                         return (
                           <tr key={item.id}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-极速5分钟
                               {item.name}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1073,7 +1073,7 @@ export default function Suppliers() {
                               <div className="flex justify-end space-x-2">
                                 <button
                                   onClick={() => {
-                                    setSelectedItem(item);
+                                    setSelected极速5分钟
                                     setShowTransactionsModal(true);
                                   }}
                                   className="text-purple-600 hover:text-purple-900"
@@ -1094,7 +1094,7 @@ export default function Suppliers() {
                                     setSelectedItem(item);
                                     setPaymentForm({
                                       ...paymentForm,
-                                      supply_item极速5分钟
+                                      supply_item_id: item.id,
                                       amount: Math.max(0, totalDelivered - totalPaid)
                                     });
                                     setShowPaymentForm(true);
@@ -1104,7 +1104,7 @@ export default function Suppliers() {
                                   Record Payment
                                 </button>
                                 <button
-                                  onClick={() => handleDelete极速5分钟
+                                  onClick={() => handleDeleteItem(item.id)}
                                   className="text-red-600 hover:text-red-900"
                                 >
                                   Delete
@@ -1126,7 +1126,7 @@ export default function Suppliers() {
       {/* Transactions History Modal */}
       {showTransactionsModal && selectedItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl w-full极速5分钟
             <div className="p-6 flex-shrink-0">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
@@ -1156,19 +1156,19 @@ export default function Suppliers() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Value
                       </th>
-                      <th className="极速5分钟
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Details
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide极速5分钟
+                  <tbody className="bg-white divide-y divide-gray-200">
                     {getCombinedTransactions(selectedItem.id).map((txn) => (
                       <tr key={`${txn.type}-${txn.id}`}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             txn.type === 'delivery' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
                           }`}>
-                            {txn.type === 'delivery'极速5分钟
+                            {txn.type === 'delivery' ? 'Delivery' : 'Payment'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1206,7 +1206,7 @@ export default function Suppliers() {
       {/* Item Form Modal */}
       {showItemForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+          <div className="极速5分钟
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
@@ -1221,7 +1221,7 @@ export default function Suppliers() {
               </div>
               <form onSubmit={handleItemSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-极速5分钟
                     Item Name
                   </label>
                   <select
@@ -1231,7 +1231,7 @@ export default function Suppliers() {
                   >
                     <option value="" disabled>Select item</option>
                     {materials.map((material) => (
-                      <option key={material.id} value极速5分钟
+                      <option key={material.id} value={material.name}>
                         {material.name}
                       </option>
                     ))}
@@ -1241,12 +1241,12 @@ export default function Suppliers() {
                   {showOtherInput && (
                     <input
                       type="text"
-                      name="name"
+                      name极速5分钟
                       value={itemForm.name}
                       onChange={(e) => setItemForm({...itemForm, name: e.target.value})}
                       required
                       placeholder="Enter supply item name"
-                      className="w-full mt-2 px-极速5分钟
+                      className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   )}
                 </div>
@@ -1256,13 +1256,13 @@ export default function Suppliers() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Quantity Ordered
                     </label>
-                    <极速5分钟
+                    <input
                       type="number"
                       name="quantity"
                       value={itemForm.quantity}
-                      onChange={(e) => setItemForm({...itemForm, quantity: Number(e.target.value)})}
+                      onChange={(极速5分钟
                       required
-                      min极速5分钟
+                      min="1"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
@@ -1274,7 +1274,7 @@ export default function Suppliers() {
                       type="number"
                       name="price"
                       value={itemForm.price}
-                      onChange={(e) => setItemForm({...itemForm, price: Number(e.target.value极速5分钟
+                      onChange={(e) => setItemForm({...itemForm, price: Number(e.target.value)})}
                       required
                       min="0"
                       step="0.01"
@@ -1302,7 +1302,7 @@ export default function Suppliers() {
                   <button
                     type="button"
                     onClick={resetItemForm}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="px-4 py极速5分钟
                   >
                     Cancel
                   </button>
@@ -1366,13 +1366,13 @@ export default function Suppliers() {
                 </div>
                 
                 <div>
-                  <label className="block text极速5分钟
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Delivery Type
                   </label>
                   <select
                     name="notes"
                     value={deliveryForm.notes}
-                    onChange={(e) => setDeliveryForm({...delivery极速5分钟
+                    onChange={(e) => setDeliveryForm({...deliveryForm, notes: e.target.value})}
                     className="w-full px-3极速5分钟
                   >
                     <option value="Stock">Stock</option>
@@ -1384,12 +1384,12 @@ export default function Suppliers() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Select Client
-                    </label>
+                    </极速5分钟
                     <select
                       value={selectedClient}
                       onChange={(e) => setSelectedClient(e.target.value)}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:极速5分钟
                     >
                       <option value="">Select a client</option>
                       {clients.map((client) => (
@@ -1405,7 +1405,7 @@ export default function Suppliers() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Delivery Date
                   </label>
-                  <input
+                  <极速5分钟
                     type="date"
                     name="delivery_date"
                     value={deliveryForm.delivery_date}
@@ -1415,7 +1415,7 @@ export default function Suppliers() {
                   />
                 </div>
 
-                <div className极速5分钟
+                <div className="bg-blue-50 p-3 rounded-lg">
                   <div className="grid grid-cols-2 gap-4 mb-2">
                     <div>
                       <span className="text-sm font-medium">Unit Price:</span>
@@ -1445,7 +1445,7 @@ export default function Suppliers() {
                           balanceOverride={{
                             ...getSupplierBalance(selectedItem.supplier_id)!,
                             current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
-                              ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price)
+                              ? getSupplierBalance(selected极速5分钟
                               : getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price)
                           }}
                         />
@@ -1460,7 +1460,7 @@ export default function Suppliers() {
                   </div>
                 )}
 
-                <div className="flex justify-end space-x-3 pt-4">
+                <div className="flex justify-end space极速5分钟
                   <button
                     type="button"
                     onClick={resetDeliveryForm}
@@ -1470,7 +1470,7 @@ export default function Suppliers() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-极速5分钟
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:极速5分钟
                   >
                     Record Delivery
                   </button>
@@ -1515,7 +1515,7 @@ export default function Suppliers() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-极速5分钟
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Payment Date
                   </label>
                   <input
@@ -1529,7 +1529,7 @@ export default function Suppliers() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text极速5分钟
                     Payment Method
                   </label>
                   <select
@@ -1538,7 +1538,7 @@ export default function Suppliers() {
                     onChange={(e) => setPaymentForm({...paymentForm, method: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value极速5分钟
+                    <option value="cash">Cash</option>
                     <option value="bank">Bank Transfer</option>
                     <option value="mobile_money">Mobile Money</option>
                   </select>
@@ -1570,7 +1570,7 @@ export default function Suppliers() {
                       value={paymentForm.mobile_money_provider}
                       onChange={(e) => setPaymentForm({...paymentForm, mobile_money_provider: e.target.value})}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500极速5分钟
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">Select provider</option>
                       <option value="MTN">MTN</option>
@@ -1593,7 +1593,7 @@ export default function Suppliers() {
                           supplierId={selectedItem.supplier_id}
                           balanceOverride={{
                             ...getSupplierBalance(selectedItem.supplier_id)!,
-                            current_balance: getSupplierBalance(selected极速5分钟
+                            current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
                               ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount
                               : getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount
                           }}
@@ -1616,7 +1616,7 @@ export default function Suppliers() {
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
-                  </button>
+                  </极速5分钟
                   <button
                     type="submit"
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
