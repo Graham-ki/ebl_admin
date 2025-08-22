@@ -1591,14 +1591,14 @@ export default function Suppliers() {
                     onChange={handlePaymentMethodChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="cash">Cash</option>
-                    <option value="bank">Bank Transfer</option>
-                    <option value="mobile_money">Mobile Money</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Bank">Bank Transfer</option>
+                    <option value="Mobile Money">Mobile Money</option>
                     <option value="other">Other</option>
                   </select>
                 </div>
                 
-                {paymentMethod === 'bank' && (
+                {paymentMethod === 'Bank' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Bank Name
@@ -1614,7 +1614,7 @@ export default function Suppliers() {
                   </div>
                 )}
                 
-                {paymentMethod === 'mobile_money' && (
+                {paymentMethod === 'Mobile Money' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Mobile Money Account
