@@ -102,7 +102,7 @@ export default function Suppliers() {
   const [supplierBalances, setSupplierBalances] = useState<SupplierBalance[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [showOtherInput, setShowOtherInput] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [deliveryNoteType, setDeliveryNoteType] = useState('');
   
   const getEastAfricanDate = () => {
