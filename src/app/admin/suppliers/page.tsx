@@ -824,7 +824,7 @@ export default function Suppliers() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <SupplierBalanceDisplay supplierId={supplier.id} />
                     </td>
-                    <td className="px-极 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
                         {getSupplierItems(supplier.id).length} items
                       </span>
@@ -860,7 +860,7 @@ export default function Suppliers() {
                         </button>
                         <button 
                           onClick={() => handleDeleteSupplier(supplier.id)}
-                          className="px-3 py-极 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
+                          className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
                         >
                           <span>🗑️</span> Delete
                         </button>
@@ -916,7 +916,7 @@ export default function Suppliers() {
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
-                </极>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Address
@@ -960,7 +960,7 @@ export default function Suppliers() {
       {showBalanceForm && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="极-6">
+            <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
                   Set Balance for {selectedSupplier.name}
@@ -1008,7 +1008,7 @@ export default function Suppliers() {
                   />
                 </div>
                 {error && (
-                  <div className="p-2 bg-red-极 text-red-700 text-sm rounded-lg">
+                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
                     {error}
                   </div>
                 )}
@@ -1082,7 +1082,7 @@ export default function Suppliers() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Delivered
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text极-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Paid
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1664,7 +1664,7 @@ export default function Suppliers() {
 
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
-                    type="极button"
+                    type="button"
                     onClick={resetPaymentForm}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
