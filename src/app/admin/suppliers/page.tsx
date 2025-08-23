@@ -40,6 +40,7 @@ interface Delivery {
 interface Payment {
   id: string;
   supply_item_id: string;
+  supplier_id: string;
   amount: number;
   payment_date: string;
   method: string;
@@ -134,14 +135,7 @@ export default function Suppliers() {
 
   const [selectedClient, setSelectedClient] = useState('');
   
-  const [paymentForm, setPaymentForm] = useState<Omit<Payment, "id" | "created_at">>({
-    supply_item_id: "",
-    amount: 0,
-    payment_date: getEastAfricanDate(),
-    method: "cash",
-    bank_name: "",
-    mode_of_mobilemoney: "",
-  });
+  const [paymentForm, setPaymentForm] = useState<Omit<Payment, "id" | "created_at">>({    supply_item_id: "",    supplier_id: "",    amount: 0,    payment_date: getEastAfricanDate(),    method: "cash",    bank_name: "",    mode_of_mobilemoney: "",  });
 
   const [balanceForm, setBalanceForm] = useState({
     supplier_id: "",
@@ -171,7 +165,7 @@ export default function Suppliers() {
   };
 
   const getItemPayments = (itemId: string) => {
-    return payments.filter(p => p.supply_item_id === itemId)
+    return payments.filter(p => p.supplier_id === itemId)
                   .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
   };
 
@@ -687,6 +681,7 @@ export default function Suppliers() {
   const resetPaymentForm = () => {
     setPaymentForm({
       supply_item_id: "",
+      supplier_id: "",
       amount: 0,
       payment_date: getEastAfricanDate(),
       method: "cash",
@@ -794,13 +789,13 @@ export default function Suppliers() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Provider
                   </th>
-                  <th className="px-6极 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Contact
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Balance
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium极 text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Supplies
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -813,7 +808,7 @@ export default function Suppliers() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {suppliers.map((supplier) => (
-                  <tr key={supplier.id} className="hover极:bg-gray-50">
+                  <tr key={supplier.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">{supplier.name}</div>
                       <div className="text-sm text-gray-500">{supplier.address}</div>
@@ -846,7 +841,7 @@ export default function Suppliers() {
                         <button
                           onClick={() => {
                             setSelectedSupplier(supplier);
-                            const balance = getSupplierBalance(s极upplier.id);
+                            const balance = getSupplierBalance(supplier.id);
                             setBalanceForm({
                               supplier_id: supplier.id,
                               opening_balance: balance?.current_balance || 0,
@@ -912,7 +907,7 @@ export default function Suppliers() {
                     type="text"
                     name="contact"
                     value={supplierForm.contact}
-                    onChange={(极) => setSupplierForm({...supplierForm, contact: e.target.value})}
+                    onChange={(e) => setSupplierForm({...supplierForm, contact: e.target.value})}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -1016,7 +1011,7 @@ export default function Suppliers() {
                   <button
                     type="button"
                     onClick={resetBalanceForm}
-                    className="px极-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-极0"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
                   </button>
@@ -1025,7 +1020,7 @@ export default function Suppliers() {
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Save Balance
-                  </极button>
+                  </button>
                 </div>
               </form>
             </div>
@@ -1190,7 +1185,7 @@ export default function Suppliers() {
                 </button>
               </div>
               
-              <div className="overflow-y-auto max-h-[70极vh]">
+              <div className="overflow-y-auto max-h-[70vh]">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -1240,7 +1235,7 @@ export default function Suppliers() {
                                 <div className="text-xs">Bank: {txn.bank_name}</div>
                               )}
                               {txn.method === 'mobile_money' && txn.mode_of_mobilemoney && (
-                                <div className="text-xs">Mobile Money: {txn.mode_of_mobilemoney}</极div>
+                                <div className="text-xs">Mobile Money: {txn.mode_of_mobilemoney}</div>
                               )}
                             </div>
                           ) : (
@@ -1307,7 +1302,7 @@ export default function Suppliers() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="极block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Quantity Ordered
                     </label>
                     <input
@@ -1332,14 +1327,14 @@ export default function Suppliers() {
                       required
                       min="0"
                       step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500极 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
 
                 <div className="bg-blue-50 p-3 rounded-lg">
                   <div className="flex justify-between">
-                    <span className="text极-sm font-medium">Total Cost:</span>
+                    <span className="text-sm font-medium">Total Cost:</span>
                     <span className="font-medium">
                       {formatCurrency((itemForm.quantity || 0) * (itemForm.price || 0))}
                     </span>
@@ -1375,7 +1370,7 @@ export default function Suppliers() {
 
       {/* Delivery Form Modal */}
       {showDeliveryForm && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50极 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -1419,7 +1414,7 @@ export default function Suppliers() {
                   />
                 </div>
                 
-                <极div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Delivery Date
                   </label>
@@ -1563,7 +1558,7 @@ export default function Suppliers() {
                     required
                     min="0.01"
                     step="0.01"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:极outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 
@@ -1571,11 +1566,11 @@ export default function Suppliers() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Payment Date
                   </label>
-                 极 <input
+                  <input
                     type="date"
                     name="payment_date"
                     value={paymentForm.payment_date}
-                    onChange={(e) => setPaymentForm({...payment极Form, payment_date: e.target.value})}
+                    onChange={(e) => setPaymentForm({...paymentForm, payment_date: e.target.value})}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -1618,7 +1613,7 @@ export default function Suppliers() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Mobile Money Account
-                    </极label>
+                    </label>
                     <select
                       name="mode_of_mobilemoney"
                       value={paymentForm.mode_of_mobilemoney || ''}
@@ -1672,7 +1667,7 @@ export default function Suppliers() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm极 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Record Payment
                   </button>
