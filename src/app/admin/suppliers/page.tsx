@@ -549,8 +549,8 @@ export default function Suppliers() {
           amount_spent: paymentForm.amount,
           date: paymentForm.payment_date,
           department: selectedItem.name,
-          account: paymentForm.method === 'mobile_money' ? paymentForm.mode_of_mobilemoney || '' : 
-                  paymentForm.method === 'bank' ? paymentForm.bank_name || '' : 'Cash',
+          account: paymentForm.method === 'Mobile Money' ? paymentForm.mode_of_mobilemoney || '' : 
+                  paymentForm.method === 'Bank' ? paymentForm.bank_name || '' : 'Cash',
           mode_of_payment: paymentForm.method,
           submittedby: 'Admin'
         };
@@ -684,12 +684,12 @@ export default function Suppliers() {
       supplier_id: "",
       amount: 0,
       payment_date: getEastAfricanDate(),
-      method: "cash",
+      method: "Cash",
       bank_name: "",
       mode_of_mobilemoney: "",
     });
     setShowPaymentForm(false);
-    setPaymentMethod('cash');
+    setPaymentMethod('Cash');
   };
 
   const resetBalanceForm = () => {
@@ -718,8 +718,8 @@ export default function Suppliers() {
     setPaymentForm({
       ...paymentForm,
       method,
-      bank_name: method === 'bank' ? paymentForm.bank_name : '',
-      mode_of_mobilemoney: method === 'mobile_money' ? paymentForm.mode_of_mobilemoney : ''
+      bank_name: method === 'Bank' ? paymentForm.bank_name : '',
+      mode_of_mobilemoney: method === 'Mobile Money' ? paymentForm.mode_of_mobilemoney : ''
     });
   };
 
@@ -1586,14 +1586,14 @@ export default function Suppliers() {
                     onChange={handlePaymentMethodChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="cash">Cash</option>
-                    <option value="bank">Bank Transfer</option>
-                    <option value="mobile_money">Mobile Money</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Bank">Bank Transfer</option>
+                    <option value="Mobile Money">Mobile Money</option>
                     <option value="other">Other</option>
                   </select>
                 </div>
                 
-                {paymentForm.method === 'bank' && (
+                {paymentForm.method === 'Bank' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Bank Name
@@ -1609,7 +1609,7 @@ export default function Suppliers() {
                   </div>
                 )}
                 
-                {paymentForm.method === 'mobile_money' && (
+                {paymentForm.method === 'Mobile Money' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Mobile Money Account
