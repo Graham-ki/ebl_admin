@@ -171,7 +171,7 @@ export default function Suppliers() {
   };
 
   const getItemPayments = (itemId: string) => {
-    return payments.filter(p => p.supply_item_id === itemId)
+    return payments.filter(p => p.supplier_id === itemId)
                   .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
   };
 
@@ -421,13 +421,11 @@ export default function Suppliers() {
       let notes = deliveryForm.notes;
       let clientId = null;
       
-      // If client is selected, record the order
       if (deliveryNoteType === 'client' && selectedClient) {
         const clientName = clients.find(c => c.id === selectedClient)?.name || '';
         notes = `Client: ${clientName}`;
         clientId = selectedClient;
         
-        // Create order record
         const { error: orderError } = await supabase
           .from('orders')
           .insert([{
@@ -459,24 +457,19 @@ export default function Suppliers() {
       if (error) throw error;
 
       if (data?.[0]) {
-        // Update deliveries state
         setDeliveries(prev => [...prev, data[0]]);
         
-        // Update balance based on balance type
         setSupplierBalances(prev => {
           return prev.map(balance => {
             if (balance.supplier_id === selectedItem.supplier_id) {
               let newBalance = balance.current_balance;
               
               if (balance.balance_type === 'credit') {
-                // Supplier owes company (credit) - reduce debt when they deliver
                 newBalance = balance.current_balance - deliveryValue;
               } else {
-                // Company owes supplier (debit) - increase debt when they deliver more
                 newBalance = balance.current_balance + deliveryValue;
               }
               
-              // Sync with database in background
               supabase
                 .from('supplier_balances')
                 .update({ current_balance: newBalance })
@@ -509,7 +502,6 @@ export default function Suppliers() {
     try {
       if (!selectedItem) return;
       
-      // Prepare payment data based on method
       const paymentData: any = {
         supply_item_id: selectedItem.id,
         amount: paymentForm.amount,
@@ -517,7 +509,6 @@ export default function Suppliers() {
         method: paymentForm.method
       };
       
-      // Add method-specific fields
       if (paymentForm.method === 'bank') {
         paymentData.bank_name = paymentForm.bank_name;
       } else if (paymentForm.method === 'mobile_money') {
@@ -532,24 +523,19 @@ export default function Suppliers() {
       if (paymentError) throw paymentError;
 
       if (paymentResponse?.[0]) {
-        // Update payments state
         setPayments(prev => [...prev, paymentResponse[0]]);
         
-        // Update balance based on balance type
         setSupplierBalances(prev => {
           return prev.map(balance => {
             if (balance.supplier_id === selectedItem.supplier_id) {
               let newBalance = balance.current_balance;
               
               if (balance.balance_type === 'debit') {
-                // Company owes supplier (debit) - reduce debt when we pay
                 newBalance = balance.current_balance - paymentForm.amount;
               } else {
-                // Supplier owes company (credit) - increase debt when we pay them
                 newBalance = balance.current_balance + paymentForm.amount;
               }
               
-              // Sync with database in background
               supabase
                 .from('supplier_balances')
                 .update({ current_balance: newBalance })
@@ -564,7 +550,6 @@ export default function Suppliers() {
           });
         });
 
-        // Record expense
         const expenseData = {
           item: 'Payment of Material',
           amount_spent: paymentForm.amount,
@@ -836,10 +821,10 @@ export default function Suppliers() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {supplier.contact}
                     </td>
-                    <td className="px极6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <SupplierBalanceDisplay supplierId={supplier.id} />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-极 py-4 whitespace-nowrap">
                       <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
                         {getSupplierItems(supplier.id).length} items
                       </span>
@@ -869,13 +854,13 @@ export default function Suppliers() {
                             });
                             setShowBalanceForm(true);
                           }}
-                          className="px-极 py-1 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 flex items-center gap-1"
+                          className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 flex items-center gap-1"
                         >
                           <span>💰</span> Set Balance
                         </button>
                         <button 
                           onClick={() => handleDeleteSupplier(supplier.id)}
-                          className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
+                          className="px-3 py-极 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
                         >
                           <span>🗑️</span> Delete
                         </button>
@@ -907,7 +892,7 @@ export default function Suppliers() {
               </div>
               <form onSubmit={handleSupplierSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-极 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Name
                   </label>
                   <input
@@ -926,12 +911,12 @@ export default function Suppliers() {
                   <input
                     type="text"
                     name="contact"
-                    value极{supplierForm.contact}
+                    value={supplierForm.contact}
                     onChange={(e) => setSupplierForm({...supplierForm, contact: e.target.value})}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500极 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
-                </div>
+                </极>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Address
@@ -960,7 +945,7 @@ export default function Suppliers() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm极 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Save Supplier
                   </button>
@@ -973,9 +958,9 @@ export default function Suppliers() {
 
       {/* Balance Form Modal */}
       {showBalanceForm && selectedSupplier && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center极 justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="p-6">
+            <div className="极-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
                   Set Balance for {selectedSupplier.name}
@@ -1005,11 +990,11 @@ export default function Suppliers() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb极1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Amount (UGX)
                   </label>
                   <input
-                    type极="number"
+                    type="number"
                     name="opening_balance"
                     value={balanceForm.opening_balance}
                     onChange={(e) => setBalanceForm({
@@ -1023,9 +1008,9 @@ export default function Suppliers() {
                   />
                 </div>
                 {error && (
-                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
+                  <div className="p-2 bg-red-极 text-red-700 text-sm rounded-lg">
                     {error}
-                  </极div>
+                  </div>
                 )}
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
@@ -1057,7 +1042,7 @@ export default function Suppliers() {
                 <h3 className="text-lg font-medium text-gray-900">
                   Services from {selectedSupplier.name}
                 </h3>
-                <div className="极flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
                       setItemForm({
@@ -1091,19 +1076,19 @@ export default function Suppliers() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Item
                         </th>
-                        <th className="px-6 py-3 text-left极 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Unit Price
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Delivered
-                        </极th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text极-500 uppercase tracking-wider">
                           Total Paid
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Balance
                         </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-极 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -1147,7 +1132,7 @@ export default function Suppliers() {
                                 </button>
                                 <button
                                   onClick={() => {
-                                    setSelected极Item(item);
+                                    setSelectedItem(item);
                                     setShowDeliveryForm(true);
                                   }}
                                   className="text-green-600 hover:text-green-900"
@@ -1191,11 +1176,11 @@ export default function Suppliers() {
       {/* Transactions History Modal */}
       {showTransactionsModal && selectedItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex极 flex-col">
-            <div className="p极-6 flex-shrink-0">
+          <div className="bg-white rounded-lg shadow-xl w-full极 max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="p-6 flex-shrink-0">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Transaction History for {selectedItem.name}
+                  Transaction History for {selected极Item.name}
                 </h3>
                 <button 
                   onClick={() => setShowTransactionsModal(false)}
@@ -1207,7 +1192,7 @@ export default function Suppliers() {
               
               <div className="overflow-y-auto max-h-[70vh]">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg极-gray-50">
+                  <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Type
@@ -1220,7 +1205,7 @@ export default function Suppliers() {
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Value
-                      </th>
+                      </极>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Details
                       </th>
@@ -1239,7 +1224,7 @@ export default function Suppliers() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {formatDate(txn.date)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text极-gray-500">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {txn.type === 'delivery' ? txn.quantity : '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1274,11 +1259,11 @@ export default function Suppliers() {
 
       {/* Item Form Modal */}
       {showItemForm && (
-        <div className="fixed inset-极 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <极h3 className="text-lg font-medium text-gray-900">
+                <h3 className="text-lg font-medium text-gray-900">
                   Add New Item
                 </h3>
                 <button 
@@ -1288,7 +1273,7 @@ export default function Suppliers() {
                   ✕
                 </button>
               </div>
-              <form onSubmit={handleItemSubmit} className="space-y-4">
+              <form onSubmit={handleItemSubmit} className="极-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Item Name
@@ -1329,7 +1314,7 @@ export default function Suppliers() {
                       type="number"
                       name="quantity"
                       value={itemForm.quantity}
-                      onChange={(极e) => setItemForm({...itemForm, quantity: Number(e.target.value)})}
+                      onChange={(e) => setItemForm({...itemForm, quantity: Number(e.target.value)})}
                       required
                       min="1"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -1341,7 +1326,7 @@ export default function Suppliers() {
                     </label>
                     <input
                       type="number"
-                      name="price"
+                      name极="price"
                       value={itemForm.price}
                       onChange={(e) => setItemForm({...itemForm, price: Number(e.target.value)})}
                       required
@@ -1371,10 +1356,10 @@ export default function Suppliers() {
                   <button
                     type="button"
                     onClick={resetItemForm}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-极 hover:bg-gray-50"
                   >
                     Cancel
-                  </极button>
+                  </button>
                   <button
                     type="submit"
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
@@ -1406,7 +1391,7 @@ export default function Suppliers() {
               </div>
               <form onSubmit={handleDeliverySubmit} className="space-y-4">
                 <div>
-                  <label className="block text极-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Quantity Delivered
                   </label>
                   <input
@@ -1430,7 +1415,7 @@ export default function Suppliers() {
                     name="price"
                     value={selectedItem.price}
                     readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-100 focus:极outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-100 focus:outline-none"
                   />
                 </div>
                 
@@ -1438,13 +1423,13 @@ export default function Suppliers() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Delivery Date
                   </label>
-                 极 <input
+                  <input
                     type="date"
                     name="delivery_date"
                     value={deliveryForm.delivery_date}
                     onChange={(e) => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
                     required
-                    className="w-full px-3 py-2 border极 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 
@@ -1455,7 +1440,7 @@ export default function Suppliers() {
                   <select
                     value={deliveryNoteType}
                     onChange={handleDeliveryNoteTypeChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:极-blue-500"
                   >
                     <option value="">Select type</option>
                     <option value="stock">Stock</option>
@@ -1475,7 +1460,7 @@ export default function Suppliers() {
                     >
                       <option value="">Select client</option>
                       {clients.map(client => (
-                        <option key={client.id} value极{client.id}>
+                        <option key={client.id} value={client.id}>
                           {client.name}
                         </option>
                       ))}
@@ -1484,7 +1469,7 @@ export default function Suppliers() {
                 )}
 
                 <div className="bg-blue-50 p-3 rounded-lg">
-                  <div className="grid grid-cols-2 gap-极 mb-2">
+                  <div className="grid grid-cols-2 gap-4 mb-2">
                     <div>
                       <span className="text-sm font-medium">Unit Price:</span>
                       <div className="font-medium">
@@ -1513,7 +1498,7 @@ export default function Suppliers() {
                           balanceOverride={{
                             ...getSupplierBalance(selectedItem.supplier_id)!,
                             current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
-                              ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selected极Item.price)
+                              ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price)
                               : getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price)
                           }}
                         />
@@ -1544,7 +1529,7 @@ export default function Suppliers() {
                   </button>
                 </div>
               </form>
-            </div>
+            </极>
           </div>
         </div>
       )}
@@ -1594,7 +1579,7 @@ export default function Suppliers() {
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
-                </极div>
+                </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1604,7 +1589,7 @@ export default function Suppliers() {
                     name="method"
                     value={paymentForm.method}
                     onChange={handlePaymentMethodChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3极 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="cash">Cash</option>
                     <option value="bank">Bank Transfer</option>
@@ -1630,15 +1615,15 @@ export default function Suppliers() {
                 )}
                 
                 {paymentForm.method === 'mobile_money' && (
-                  <极div>
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Mobile Money Account
                     </label>
                     <select
                       name="mode_of_mobilemoney"
-                      value={paymentForm.mode_of极mobilemoney || ''}
-                      onChange={(e)极 => setPaymentForm({...paymentForm, mode_of_mobilemoney: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-极500"
+                      value={paymentForm.mode_of_mobilemoney || ''}
+                      onChange={(e) => setPaymentForm({...paymentForm, mode_of_mobilemoney: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">Select account</option>
                       <option value="MTN">MTN Mobile Money</option>
@@ -1663,7 +1648,7 @@ export default function Suppliers() {
                             ...getSupplierBalance(selectedItem.supplier_id)!,
                             current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
                               ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount
-                              : getSupplierBalance(selectedItem.supplier_id)!.current极_balance + paymentForm.amount
+                              : getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount
                           }}
                         />
                       </div>
@@ -1679,7 +1664,7 @@ export default function Suppliers() {
 
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
-                    type="button"
+                    type="极button"
                     onClick={resetPaymentForm}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
