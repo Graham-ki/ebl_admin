@@ -33,6 +33,7 @@ interface Delivery {
   value: number;
   delivery_date: string;
   notes?: string;
+  client_id?: string;
   created_at: string;
 }
 
@@ -128,6 +129,7 @@ export default function Suppliers() {
     quantity: 0,
     delivery_date: getEastAfricanDate(),
     notes: "",
+    client_id: "",
   });
 
   const [selectedClient, setSelectedClient] = useState('');
@@ -227,6 +229,15 @@ export default function Suppliers() {
     }).format(amount);
   };
 
+  const formatPaymentMethod = (method: string) => {
+    switch (method) {
+      case 'cash': return 'Cash';
+      case 'bank': return 'Bank Transfer';
+      case 'mobile_money': return 'Mobile Money';
+      default: return method.charAt(0).toUpperCase() + method.slice(1);
+    }
+  };
+
   const SupplierBalanceDisplay = ({ 
     supplierId,
     balanceOverride 
@@ -294,7 +305,7 @@ export default function Suppliers() {
 
         if (suppliersError) throw suppliersError;
         if (itemsError) throw itemsError;
-        if (deliveriesError) throw deliveriesError;
+        if (deliversError) throw deliveriesError;
         if (paymentsError) throw paymentsError;
         if (materialsError) throw materialsError;
         if (balancesError) throw balancesError;
@@ -408,11 +419,13 @@ export default function Suppliers() {
       
       const deliveryValue = deliveryForm.quantity * selectedItem.price;
       let notes = deliveryForm.notes;
+      let clientId = null;
       
       // If client is selected, record the order
       if (deliveryNoteType === 'client' && selectedClient) {
         const clientName = clients.find(c => c.id === selectedClient)?.name || '';
         notes = `Client: ${clientName}`;
+        clientId = selectedClient;
         
         // Create order record
         const { error: orderError } = await supabase
@@ -434,7 +447,8 @@ export default function Suppliers() {
         ...deliveryForm,
         supply_item_id: selectedItem.id,
         value: deliveryValue,
-        notes
+        notes,
+        client_id: clientId
       };
 
       const { data, error } = await supabase
@@ -678,6 +692,7 @@ export default function Suppliers() {
       quantity: 0,
       delivery_date: getEastAfricanDate(),
       notes: "",
+      client_id: "",
     });
     setShowDeliveryForm(false);
     setDeliveryNoteType('');
@@ -1235,7 +1250,7 @@ export default function Suppliers() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {txn.type === 'payment' ? (
                             <div>
-                              <div className="font-medium">{txn.method}</div>
+                              <div className="font-medium">{formatPaymentMethod(txn.method || '')}</div>
                               {txn.method === 'bank' && txn.bank_name && (
                                 <div className="text-xs">Bank: {txn.bank_name}</div>
                               )}
@@ -1591,14 +1606,14 @@ export default function Suppliers() {
                     onChange={handlePaymentMethodChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="Cash">Cash</option>
-                    <option value="Bank">Bank Transfer</option>
-                    <option value="Mobile Money">Mobile Money</option>
+                    <option value="cash">Cash</option>
+                    <option value="bank">Bank Transfer</option>
+                    <option value="mobile_money">Mobile Money</option>
                     <option value="other">Other</option>
                   </select>
                 </div>
                 
-                {paymentMethod === 'Bank' && (
+                {paymentForm.method === 'bank' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Bank Name
@@ -1614,7 +1629,7 @@ export default function Suppliers() {
                   </div>
                 )}
                 
-                {paymentMethod === 'Mobile Money' && (
+                {paymentForm.method === 'mobile_money' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Mobile Money Account
