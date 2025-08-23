@@ -559,7 +559,7 @@ export default function Suppliers() {
 
         resetPaymentForm();
         setShowPaymentForm(false);
-        setPaymentMethod('cash');
+        setPaymentMethod('Cash');
       }
     } catch (err) {
       console.error('Error saving payment:', err);
