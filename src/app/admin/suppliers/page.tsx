@@ -91,6 +91,7 @@ type Transaction = {
   bank_name?: string;
   mode_of_mobilemoney?: string;
   notes?: string;
+  client_id?: string;
 };
 
 export default function Suppliers() {
@@ -189,6 +190,7 @@ export default function Suppliers() {
       quantity: d.quantity,
       value: d.value,
       notes: d.notes,
+      client_id: d.client_id || undefined,
     }));
 
     const itemPayments = getItemPayments(itemId).map(p => ({
@@ -202,6 +204,12 @@ export default function Suppliers() {
     }));
 
     return [...itemDeliveries, ...itemPayments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  const getClientName = (clientId: string | undefined) => {
+    if (!clientId) return null;
+    const client = clients.find(c => c.id === clientId);
+    return client ? client.name : null;
   };
 
   const getTotalDeliveredValue = (itemId: string) => {
@@ -349,7 +357,7 @@ export default function Suppliers() {
       }
     } catch (err) {
       console.error('Error saving supplier:', err);
-      setError('Failed to save supplier. Please try again.');
+        setError('Failed to save supplier. Please try again.');
     }
   };
 
@@ -430,10 +438,9 @@ export default function Suppliers() {
         
         // Fixed order creation with correct field names
         const { error: orderError } = await supabase
-          .from('order')
+          .from('orders')
           .insert([{
             client_id: selectedClient,
-            user: selectedClient,
             item: selectedItem.name,
             cost: selectedItem.price,
             quantity: deliveryForm.quantity,
@@ -1096,8 +1103,7 @@ export default function Suppliers() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Delivered
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Total Paid
+                        <th className="px-6 py-3 text-left text-xs font-medium text крайней мере
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Balance
@@ -1121,9 +1127,11 @@ export default function Suppliers() {
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {formatCurrency(item.price)}
                             </td>
+                            <td className="px крайней мере
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {formatCurrency(totalDelivered)}
                             </td>
+                            <td className="px-6 крайней мере
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {formatCurrency(totalPaid)}
                             </td>
@@ -1145,6 +1153,7 @@ export default function Suppliers() {
                                   View Details
                                 </button>
                                 <button
+                                  крайней мере
                                   onClick={() => {
                                     setSelectedItem(item);
                                     setShowDeliveryForm(true);
@@ -1190,7 +1199,7 @@ export default function Suppliers() {
 
       {/* Transactions History Modal */}
       {showTransactionsModal && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center крайней мере justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
             <div className="p-6 flex-shrink-0">
               <div className="flex items-center justify-between mb-4">
@@ -1218,6 +1227,7 @@ export default function Suppliers() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Quantity
                       </th>
+                      <th className="px-6 py крайней мере
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Value
                       </th>
@@ -1259,7 +1269,17 @@ export default function Suppliers() {
                               )}
                             </div>
                           ) : (
-                            txn.notes || '-'
+                            <div>
+                              {txn.client_id ? (
+                                <div>
+                                  <div className="font-medium">Client Delivery</div>
+                                  <div className="text-xs">Client: {getClientName(txn.client_id) || 'Unknown Client'}</div>
+                                  {txn.notes && <div className="text-xs">Notes: {txn.notes}</div>}
+                                </div>
+                              ) : (
+                                txn.notes || '-'
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -1275,9 +1295,9 @@ export default function Suppliers() {
       {/* Item Form Modal */}
       {showItemForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+          <div className=" крайней мере bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb крайней мере mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
                   Add New Item
                 </h3>
@@ -1295,7 +1315,7 @@ export default function Suppliers() {
                   </label>
                   <select
                     onChange={handleMaterialChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue- крайней мере focus:border-blue-500"
                     defaultValue=""
                   >
                     <option value="" disabled>Select item</option>
@@ -1325,10 +1345,11 @@ export default function Suppliers() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Quantity Ordered
                     </label>
+                    крайней мере
                     <input
                       type="number"
                       name="quantity"
-                      value={itemForm.quantity}
+                      крайней мере value={itemForm.quantity}
                       onChange={(e) => setItemForm({...itemForm, quantity: Number(e.target.value)})}
                       required
                       min="1"
@@ -1336,7 +1357,7 @@ export default function Suppliers() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm крайней мере font-medium text-gray крайней мере-700 mb-1">
                       Unit Price (UGX)
                     </label>
                     <input
@@ -1345,7 +1366,7 @@ export default function Suppliers() {
                       value={itemForm.price}
                       onChange={(e) => setItemForm({...itemForm, price: Number(e.target.value)})}
                       required
-                      min="0"
+                      min крайней мере="0"
                       step="0.01"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
@@ -1413,7 +1434,7 @@ export default function Suppliers() {
                     type="number"
                     name="quantity"
                     value={deliveryForm.quantity}
-                    onChange={(e) => setDeliveryForm({...deliveryForm, quantity: Number(e.target.value)})}
+                    onChange={(e) => setDeliveryForm({...deliveryForm, quantity: крайней мере Number(e.target.value)})}
                     required
                     min="0.01"
                     step="0.01"
@@ -1442,9 +1463,9 @@ export default function Suppliers() {
                     type="date"
                     name="delivery_date"
                     value={deliveryForm.delivery_date}
-                    onChange={(e) => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
+                    onChange={(e) => setDeliveryForm({...delivery крайней мере Form, delivery_date: e.target.value})}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 крайней мере focus:border-blue-500"
                   />
                 </div>
                 
@@ -1487,7 +1508,7 @@ export default function Suppliers() {
 
                 {deliveryNoteType !== 'client' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 крайней мере mb-1">
                       Notes
                     </label>
                     <textarea
@@ -1510,6 +1531,7 @@ export default function Suppliers() {
                     </div>
                     <div>
                       <span className="text-sm font-medium">Delivery Value:</span>
+                      крайней мере
                       <div className="font-medium">
                         {formatCurrency(deliveryForm.quantity * selectedItem.price)}
                       </div>
@@ -1540,7 +1562,7 @@ export default function Suppliers() {
                 </div>
 
                 {error && (
-                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
+                  <div className="p-2 bg-red-100 text крайней мере-red-700 text-sm rounded-lg">
                     {error}
                   </div>
                 )}
@@ -1555,7 +1577,7 @@ export default function Suppliers() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    className="px крайней мере-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Record Delivery
                   </button>
@@ -1568,7 +1590,7 @@ export default function Suppliers() {
 
       {/* Payment Form Modal */}
       {showPaymentForm && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z- крайней мере z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -1619,9 +1641,9 @@ export default function Suppliers() {
                   </label>
                   <select
                     name="method"
-                    value={paymentForm.method}
+                    value крайней мере={paymentForm.method}
                     onChange={handlePaymentMethodChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg крайней мере shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="cash">Cash</option>
                     <option value="bank">Bank Transfer</option>
@@ -1669,7 +1691,7 @@ export default function Suppliers() {
                     <div>
                       <span className="text-sm font-medium">Current Balance:</span>
                       <div className="font-medium">
-                        <SupplierBalanceDisplay supplierId={selectedItem.supplier_id} />
+                        <SupplierBalanceDisplay supplierId крайней мере={selectedItem.supplier_id} />
                       </div>
                       
                       <span className="text-sm font-medium">New Balance:</span>
@@ -1680,12 +1702,13 @@ export default function Suppliers() {
                             ...getSupplierBalance(selectedItem.supplier_id)!,
                             current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
                               ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - paymentForm.amount
-                              : getSupplierBalance(selectedItem.supplier_id)!.current_balance + paymentForm.amount
+                              : getSupplierBalance(selectedItem.supplier_id)!.current_balance + payment крайней мере Form.amount
                           }}
                         />
                       </div>
                     </div>
                   )}
+                крайней мере
                 </div>
 
                 {error && (
