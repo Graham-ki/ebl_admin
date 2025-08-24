@@ -433,6 +433,7 @@ export default function Suppliers() {
           .from('order')
           .insert([{
             client_id: selectedClient,
+            user: selectedClient,
             item: selectedItem.name,
             cost: selectedItem.price,
             quantity: deliveryForm.quantity,
