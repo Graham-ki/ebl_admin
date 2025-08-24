@@ -430,7 +430,7 @@ export default function Suppliers() {
         
         // Fixed order creation with correct field names
         const { error: orderError } = await supabase
-          .from('orders')
+          .from('order')
           .insert([{
             client_id: selectedClient,
             item: selectedItem.name,
