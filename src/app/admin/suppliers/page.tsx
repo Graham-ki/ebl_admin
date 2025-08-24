@@ -234,7 +234,7 @@ export default function Suppliers() {
   const formatPaymentMethod = (method: string) => {
     switch (method) {
       case 'cash': return 'Cash';
-      case 'bank': return 'Bank';
+      case 'bank': return 'Bank Transfer';
       case 'mobile_money': return 'Mobile Money';
       default: return method.charAt(0).toUpperCase() + method.slice(1);
     }
@@ -307,7 +307,7 @@ export default function Suppliers() {
 
         if (suppliersError) throw suppliersError;
         if (itemsError) throw itemsError;
-        if (deliveriesError) throw deliveriesError;
+        if (deliversError) throw deliveriesError;
         if (paymentsError) throw paymentsError;
         if (materialsError) throw materialsError;
         if (balancesError) throw balancesError;
@@ -428,19 +428,25 @@ export default function Suppliers() {
         notes = `Client: ${clientName}`;
         clientId = selectedClient;
         
+        // Fixed order creation with correct field names
         const { error: orderError } = await supabase
           .from('orders')
           .insert([{
-            user: selectedClient,
+            client_id: selectedClient,
             item: selectedItem.name,
             cost: selectedItem.price,
             quantity: deliveryForm.quantity,
-            created_at: deliveryForm.delivery_date
+            created_at: new Date().toISOString()
           }]);
 
-        if (orderError) throw orderError;
+        if (orderError) {
+          console.error('Order creation error:', orderError);
+          throw orderError;
+        }
       } else if (deliveryNoteType === 'stock') {
         notes = 'Stock';
+      } else if (deliveryNoteType === 'client' && !selectedClient) {
+        throw new Error('Please select a client');
       }
       
       const deliveryData = {
@@ -456,12 +462,14 @@ export default function Suppliers() {
         .insert([deliveryData])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Delivery creation error:', error);
+        throw error;
+      }
 
       if (data?.[0]) {
         setDeliveries(prev => [...prev, data[0]]);
         
-        // Update supplier balance
         setSupplierBalances(prev => {
           return prev.map(balance => {
             if (balance.supplier_id === selectedItem.supplier_id) {
@@ -473,7 +481,6 @@ export default function Suppliers() {
                 newBalance = balance.current_balance + deliveryValue;
               }
               
-              // Update balance in database
               supabase
                 .from('supplier_balances')
                 .update({ current_balance: newBalance })
@@ -495,7 +502,7 @@ export default function Suppliers() {
       }
     } catch (err) {
       console.error('Error saving delivery:', err);
-      setError('Failed to save delivery. Please try again.');
+      setError(err.message || 'Failed to save delivery. Please try again.');
     }
   };
 
@@ -508,7 +515,7 @@ export default function Suppliers() {
       
       const paymentData: any = {
         supply_item_id: selectedItem.id,
-        supplier_id: selectedItem.supplier_id, // Add supplier_id to payment
+        supplier_id: selectedItem.supplier_id,
         amount: paymentForm.amount,
         payment_date: paymentForm.payment_date,
         method: paymentForm.method
@@ -530,7 +537,6 @@ export default function Suppliers() {
       if (paymentResponse?.[0]) {
         setPayments(prev => [...prev, paymentResponse[0]]);
         
-        // Update supplier balance when payment is recorded
         setSupplierBalances(prev => {
           return prev.map(balance => {
             if (balance.supplier_id === selectedItem.supplier_id) {
@@ -542,7 +548,6 @@ export default function Suppliers() {
                 newBalance = balance.current_balance + paymentForm.amount;
               }
               
-              // Update balance in database
               supabase
                 .from('supplier_balances')
                 .update({ current_balance: newBalance })
@@ -557,7 +562,6 @@ export default function Suppliers() {
           });
         });
 
-        // Record expense
         const expenseData = {
           item: 'Payment of Material',
           amount_spent: paymentForm.amount,
@@ -789,12 +793,12 @@ export default function Suppliers() {
             <h3 className="text-lg font-medium text-gray-900 mb-1">No data yet</h3>
             <p className="text-gray-500 mb-4">Get started by adding your first service provider</p>
             <button
-              onClick={() => setShowSupplierForm(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-            >
-              Add new
-            </button>
-          </div>
+            onClick={() => setShowSupplierForm(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            Add new
+          </button>
+        </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -1451,6 +1455,7 @@ export default function Suppliers() {
                     value={deliveryNoteType}
                     onChange={handleDeliveryNoteTypeChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required={deliveryForm.notes !== ''}
                   >
                     <option value="">Select type</option>
                     <option value="stock">Stock</option>
@@ -1467,6 +1472,7 @@ export default function Suppliers() {
                       value={selectedClient}
                       onChange={(e) => setSelectedClient(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
                     >
                       <option value="">Select client</option>
                       {clients.map(client => (
@@ -1475,6 +1481,21 @@ export default function Suppliers() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+                {deliveryNoteType !== 'client' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Notes
+                    </label>
+                    <textarea
+                      name="notes"
+                      value={deliveryForm.notes}
+                      onChange={(e) => setDeliveryForm({...deliveryForm, notes: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      rows={2}
+                    />
                   </div>
                 )}
 
