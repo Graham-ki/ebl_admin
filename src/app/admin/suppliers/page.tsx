@@ -307,7 +307,7 @@ export default function Suppliers() {
 
         if (suppliersError) throw suppliersError;
         if (itemsError) throw itemsError;
-        if (deliversError) throw deliveriesError;
+        if (deliveriesError) throw deliveriesError;
         if (paymentsError) throw paymentsError;
         if (materialsError) throw materialsError;
         if (balancesError) throw balancesError;
