@@ -242,7 +242,7 @@ export default function Suppliers() {
   const formatPaymentMethod = (method: string) => {
     switch (method) {
       case 'cash': return 'Cash';
-      case 'bank': return 'Bank Transfer';
+      case 'bank': return 'Bank';
       case 'mobile_money': return 'Mobile Money';
       default: return method.charAt(0).toUpperCase() + method.slice(1);
     }
@@ -438,9 +438,10 @@ export default function Suppliers() {
         
         // Fixed order creation with correct field names
         const { error: orderError } = await supabase
-          .from('orders')
+          .from('order')
           .insert([{
             client_id: selectedClient,
+            user:selectedClient,
             item: selectedItem.name,
             cost: selectedItem.price,
             quantity: deliveryForm.quantity,
