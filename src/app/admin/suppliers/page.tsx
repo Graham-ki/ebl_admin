@@ -1,8 +1,18 @@
 // app/suppliers/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+
+// Environment variables type declaration
+declare global {
+  namespace NodeJS {
+    interface ProcessEnv {
+      NEXT_PUBLIC_SUPABASE_URL: string;
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
+    }
+  }
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -73,17 +83,11 @@ interface Client {
 
 interface Order {
   id: string;
-  user: string;
+  client_id: string;
   item: string;
   cost: number;
   quantity: number;
   created_at: string;
-}
-
-interface FinanceRecord {
-  mode_of_payment: string;
-  bank_name?: string;
-  mode_of_mobilemoney?: string;
 }
 
 type Transaction = {
@@ -100,6 +104,49 @@ type Transaction = {
   client_id?: string;
 };
 
+interface SupplierBalanceDisplayProps {
+  supplierId: string;
+  balanceOverride?: SupplierBalance;
+}
+
+const SupplierBalanceDisplay: React.FC<SupplierBalanceDisplayProps> = ({ 
+  supplierId,
+  balanceOverride 
+}) => {
+  const balance = balanceOverride || getSupplierBalance(supplierId);
+  
+  if (!balance) return <span className="text-gray-500">Not set</span>;
+
+  const amount = formatCurrency(Math.abs(balance.current_balance));
+  const isCredit = balance.balance_type === 'credit';
+  const isPositive = balance.current_balance > 0;
+
+  if (balance.current_balance === 0) {
+    return <span className="text-green-600">Settled (0)</span>;
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+        isPositive 
+          ? isCredit ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+          : 'bg-green-100 text-green-800'
+      }`}>
+        {amount}
+      </span>
+      <span className="text-sm text-gray-600">
+        {isPositive
+          ? isCredit 
+            ? "(Supplier owes company)"
+            : "(Company owes supplier)"
+          : isCredit
+            ? "(Company overpaid)"
+            : "(Supplier overpaid)"}
+      </span>
+    </div>
+  );
+};
+
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplyItems, setSupplyItems] = useState<SupplyItem[]>([]);
@@ -108,15 +155,15 @@ export default function Suppliers() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [supplierBalances, setSupplierBalances] = useState<SupplierBalance[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [financeRecords, setFinanceRecords] = useState<FinanceRecord[]>([]);
   const [showOtherInput, setShowOtherInput] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [deliveryNoteType, setDeliveryNoteType] = useState('');
   
   const getEastAfricanDate = () => {
     const now = new Date();
-    const offset = 3 * 60 * 60 * 1000;
-    const eastAfricanTime = new Date(now.getTime() + offset);
+    // East Africa Time is UTC+3
+    const offset = 3 * 60; // minutes
+    const eastAfricanTime = new Date(now.getTime() + offset * 60 * 1000);
     return eastAfricanTime.toISOString().split('T')[0];
   };
   
@@ -170,39 +217,6 @@ export default function Suppliers() {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
   const [showBalanceForm, setShowBalanceForm] = useState(false);
-
-  // Get unique payment methods from finance records
-  const getUniquePaymentMethods = () => {
-    const methods = new Set<string>();
-    financeRecords.forEach(record => {
-      if (record.mode_of_payment) {
-        methods.add(record.mode_of_payment.toLowerCase());
-      }
-    });
-    return Array.from(methods);
-  };
-
-  // Get unique bank names for Bank payment method
-  const getUniqueBankNames = () => {
-    const banks = new Set<string>();
-    financeRecords.forEach(record => {
-      if (record.mode_of_payment?.toLowerCase() === 'bank' && record.bank_name) {
-        banks.add(record.bank_name);
-      }
-    });
-    return Array.from(banks);
-  };
-
-  // Get unique mobile money modes for Mobile Money payment method
-  const getUniqueMobileMoneyModes = () => {
-    const modes = new Set<string>();
-    financeRecords.forEach(record => {
-      if (record.mode_of_payment?.toLowerCase() === 'mobile money' && record.mode_of_mobilemoney) {
-        modes.add(record.mode_of_mobilemoney);
-      }
-    });
-    return Array.from(modes);
-  };
 
   const getSupplierItems = (supplierId: string) => {
     return supplyItems.filter(item => item.supplier_id === supplierId);
@@ -282,51 +296,10 @@ export default function Suppliers() {
   const formatPaymentMethod = (method: string) => {
     switch (method) {
       case 'cash': return 'Cash';
-      case 'bank': return 'Bank';
+      case 'bank': return 'Bank Transfer';
       case 'mobile_money': return 'Mobile Money';
       default: return method.charAt(0).toUpperCase() + method.slice(1);
     }
-  };
-
-  const SupplierBalanceDisplay = ({ 
-    supplierId,
-    balanceOverride 
-  }: { 
-    supplierId: string;
-    balanceOverride?: SupplierBalance;
-  }) => {
-    const balance = balanceOverride || getSupplierBalance(supplierId);
-    
-    if (!balance) return <span className="text-gray-500">Not set</span>;
-
-    const amount = formatCurrency(Math.abs(balance.current_balance));
-    const isCredit = balance.balance_type === 'credit';
-    const isPositive = balance.current_balance > 0;
-
-    if (balance.current_balance === 0) {
-      return <span className="text-green-600">Settled (0)</span>;
-    }
-
-    return (
-      <div className="flex items-center gap-2">
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          isPositive 
-            ? isCredit ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-            : 'bg-green-100 text-green-800'
-        }`}>
-          {amount}
-        </span>
-        <span className="text-sm text-gray-600">
-          {isPositive
-            ? isCredit 
-              ? "(Supplier owes company)"
-              : "(Company owes supplier)"
-            : isCredit
-              ? "(Company overpaid)"
-              : "(Supplier overpaid)"}
-        </span>
-      </div>
-    );
   };
 
   useEffect(() => {
@@ -342,8 +315,7 @@ export default function Suppliers() {
           { data: paymentsData, error: paymentsError },
           { data: materialsData, error: materialsError },
           { data: balancesData, error: balancesError },
-          { data: clientsData, error: clientsError },
-          { data: financeData, error: financeError }
+          { data: clientsData, error: clientsError }
         ] = await Promise.all([
           supabase.from('suppliers').select('*').order('created_at', { ascending: false }),
           supabase.from('supply_items').select('*'),
@@ -351,8 +323,7 @@ export default function Suppliers() {
           supabase.from('payments').select('*'),
           supabase.from('materials').select('*').order('name', { ascending: true }),
           supabase.from('supplier_balances').select('*'),
-          supabase.from('clients').select('id, name, created_at').order('name', { ascending: true }),
-          supabase.from('finance').select('mode_of_payment, bank_name, mode_of_mobilemoney')
+          supabase.from('clients').select('id, name, created_at').order('name', { ascending: true })
         ]);
 
         if (suppliersError) throw suppliersError;
@@ -362,7 +333,6 @@ export default function Suppliers() {
         if (materialsError) throw materialsError;
         if (balancesError) throw balancesError;
         if (clientsError) throw clientsError;
-        if (financeError) throw financeError;
 
         setSuppliers(suppliersData || []);
         setSupplyItems(itemsData || []);
@@ -371,7 +341,6 @@ export default function Suppliers() {
         setMaterials(materialsData || []);
         setSupplierBalances(balancesData || []);
         setClients(clientsData || []);
-        setFinanceRecords(financeData || []);
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load data. Please try again.');
@@ -482,10 +451,9 @@ export default function Suppliers() {
         
         // Fixed order creation with correct field names
         const { error: orderError } = await supabase
-          .from('order')
+          .from('orders')
           .insert([{
             client_id: selectedClient,
-            user:selectedClient,
             item: selectedItem.name,
             cost: selectedItem.price,
             quantity: deliveryForm.quantity,
@@ -555,7 +523,7 @@ export default function Suppliers() {
       }
     } catch (err) {
       console.error('Error saving delivery:', err);
-      setError(err.message || 'Failed to save delivery. Please try again.');
+      setError((err as Error).message || 'Failed to save delivery. Please try again.');
     }
   };
 
@@ -953,7 +921,7 @@ export default function Suppliers() {
                   onClick={resetSupplierForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
               <form onSubmit={handleSupplierSubmit} className="space-y-4">
@@ -1035,14 +1003,14 @@ export default function Suppliers() {
                   onClick={resetBalanceForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
               <form onSubmit={handleBalanceSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Balance Type
-                  </label>
+                  </极端的label>
                   <select
                     value={balanceForm.balance_type}
                     onChange={(e) => setBalanceForm({
@@ -1082,7 +1050,7 @@ export default function Suppliers() {
                   <button
                     type="button"
                     onClick={resetBalanceForm}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg极端的-gray-50"
                   >
                     Cancel
                   </button>
@@ -1125,7 +1093,7 @@ export default function Suppliers() {
                     onClick={() => setShowSuppliesModal(false)}
                     className="text-gray-400 hover:text-gray-500"
                   >
-                    ✕
+                    ×
                   </button>
                 </div>
               </div>
@@ -1145,15 +1113,16 @@ export default function Suppliers() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Unit Price
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6-py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Delivered
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Total Paid                      </th>
+                          Total Paid
+                        </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Balance
                         </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray极端的-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -1234,7 +1203,7 @@ export default function Suppliers() {
                   </table>
                 )}
               </div>
-            </div>
+            </极端的div>
           </div>
         </div>
       )}
@@ -1252,7 +1221,7 @@ export default function Suppliers() {
                   onClick={() => setShowTransactionsModal(false)}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
               
@@ -1346,7 +1315,7 @@ export default function Suppliers() {
                   onClick={resetItemForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
               <form onSubmit={handleItemSubmit} className="space-y-4">
@@ -1393,7 +1362,7 @@ export default function Suppliers() {
                       onChange={(e) => setItemForm({...itemForm, quantity: Number(e.target.value)})}
                       required
                       min="1"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus极端的:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
@@ -1462,7 +1431,7 @@ export default function Suppliers() {
                   onClick={resetDeliveryForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
               <form onSubmit={handleDeliverySubmit} className="space-y-4">
@@ -1503,7 +1472,7 @@ export default function Suppliers() {
                     type="date"
                     name="delivery_date"
                     value={deliveryForm.delivery_date}
-                    onChange={(e) => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -1640,7 +1609,7 @@ export default function Suppliers() {
                   onClick={resetPaymentForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
               <form onSubmit={handlePaymentSubmit} className="space-y-4">
@@ -1668,7 +1637,7 @@ export default function Suppliers() {
                     type="date"
                     name="payment_date"
                     value={paymentForm.payment_date}
-                    onChange={(e) => setPaymentForm({...paymentForm, payment_date: e.target.value})}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPaymentForm({...paymentForm, payment_date: e.target.value})}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -1685,11 +1654,9 @@ export default function Suppliers() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="cash">Cash</option>
-                    {getUniquePaymentMethods().map(method => (
-                      <option key={method} value={method}>
-                        {formatPaymentMethod(method)}
-                      </option>
-                    ))}
+                    <option value="bank">Bank Transfer</option>
+                    <option value="mobile_money">Mobile Money</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
                 
@@ -1698,20 +1665,14 @@ export default function Suppliers() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Bank Name
                     </label>
-                    <select
+                    <input
+                      type="text"
                       name="bank_name"
                       value={paymentForm.bank_name || ''}
                       onChange={(e) => setPaymentForm({...paymentForm, bank_name: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       required
-                    >
-                      <option value="">Select bank</option>
-                      {getUniqueBankNames().map(bank => (
-                        <option key={bank} value={bank}>
-                          {bank}
-                        </option>
-                      ))}
-                    </select>
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
                   </div>
                 )}
                 
@@ -1725,14 +1686,10 @@ export default function Suppliers() {
                       value={paymentForm.mode_of_mobilemoney || ''}
                       onChange={(e) => setPaymentForm({...paymentForm, mode_of_mobilemoney: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
                     >
                       <option value="">Select account</option>
-                      {getUniqueMobileMoneyModes().map(mode => (
-                        <option key={mode} value={mode}>
-                          {mode}
-                        </option>
-                      ))}
+                      <option value="MTN">MTN Mobile Money</option>
+                      <option value="Airtel">Airtel Money</option>
                     </select>
                   </div>
                 )}
