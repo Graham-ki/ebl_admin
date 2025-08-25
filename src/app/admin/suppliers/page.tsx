@@ -1,18 +1,8 @@
 // app/suppliers/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-
-// Environment variables type declaration
-declare global {
-  namespace NodeJS {
-    interface ProcessEnv {
-      NEXT_PUBLIC_SUPABASE_URL: string;
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
-    }
-  }
-}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,7 +29,7 @@ interface SupplyItem {
 interface Delivery {
   id: string;
   supply_item_id: string;
-  quantity: number;
+  quantity:极端的 number;
   value: number;
   delivery_date: string;
   notes?: string;
@@ -83,11 +73,17 @@ interface Client {
 
 interface Order {
   id: string;
-  client_id: string;
+  user: string;
   item: string;
   cost: number;
   quantity: number;
   created_at: string;
+}
+
+interface FinanceRecord {
+  mode_of_payment: string;
+  bank_name?: string;
+  mode_of_mobilemoney?: string;
 }
 
 type Transaction = {
@@ -104,49 +100,6 @@ type Transaction = {
   client_id?: string;
 };
 
-interface SupplierBalanceDisplayProps {
-  supplierId: string;
-  balanceOverride?: SupplierBalance;
-}
-
-const SupplierBalanceDisplay: React.FC<SupplierBalanceDisplayProps> = ({ 
-  supplierId,
-  balanceOverride 
-}) => {
-  const balance = balanceOverride || getSupplierBalance(supplierId);
-  
-  if (!balance) return <span className="text-gray-500">Not set</span>;
-
-  const amount = formatCurrency(Math.abs(balance.current_balance));
-  const isCredit = balance.balance_type === 'credit';
-  const isPositive = balance.current_balance > 0;
-
-  if (balance.current_balance === 0) {
-    return <span className="text-green-600">Settled (0)</span>;
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-        isPositive 
-          ? isCredit ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-          : 'bg-green-100 text-green-800'
-      }`}>
-        {amount}
-      </span>
-      <span className="text-sm text-gray-600">
-        {isPositive
-          ? isCredit 
-            ? "(Supplier owes company)"
-            : "(Company owes supplier)"
-          : isCredit
-            ? "(Company overpaid)"
-            : "(Supplier overpaid)"}
-      </span>
-    </div>
-  );
-};
-
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplyItems, setSupplyItems] = useState<SupplyItem[]>([]);
@@ -155,19 +108,19 @@ export default function Suppliers() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [supplierBalances, setSupplierBalances] = useState<SupplierBalance[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [financeRecords, setFinanceRecords] = useState<FinanceRecord[]>([]);
   const [showOtherInput, setShowOtherInput] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [deliveryNoteType, setDeliveryNoteType] = useState('');
   
   const getEastAfricanDate = () => {
     const now = new Date();
-    // East Africa Time is UTC+3
-    const offset = 3 * 60; // minutes
-    const eastAfricanTime = new Date(now.getTime() + offset * 60 * 1000);
+    const offset = 3 * 60 * 60 * 1000;
+    const eastAfricanTime = new Date(now.getTime() + offset);
     return eastAfricanTime.toISOString().split('T')[0];
   };
   
-  const [supplierForm, setSupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
+  const [supplierForm, set极端的SupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
     name: "",
     contact: "",
     address: "",
@@ -218,6 +171,69 @@ export default function Suppliers() {
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
   const [showBalanceForm, setShowBalanceForm] = useState(false);
 
+  // Get unique payment methods from finance records
+  const getUniquePaymentMethods = () => {
+    const methods = new Set<string>();
+    financeRecords.forEach(record => {
+      if (record.mode_of_payment) {
+        // Normalize the payment method values for consistency
+        const normalizedMethod = record.mode_of_payment.toLowerCase()
+          .replace(/\s+/g, '_') // Replace spaces with underscores
+          .replace('mobile_money', 'mobile_money')
+          .replace('mobile money', 'mobile_money')
+          .replace('bank', 'bank')
+          .replace('cash', 'cash');
+        
+        methods.add(normalizedMethod);
+      }
+    });
+    
+    // Always include the basic methods
+    methods.add('cash');
+    methods.add('bank');
+    methods.add('mobile_money');
+    
+    return Array.from(methods);
+  };
+
+  // Get unique bank names for Bank payment method
+  const getUniqueBankNames = () => {
+    const banks = new Set<string>();
+    financeRecords.forEach(record => {
+      // Match both 'bank' and 'Bank' etc.
+      const isBank = record.mode_of_payment && 
+        (record.mode_of_payment.toLowerCase() === 'bank' || 
+         record.mode_of_payment.toLowerCase() === 'bank transfer');
+      
+      if (isBank && record.bank_name) {
+        banks.add(record.bank_name);
+      }
+    });
+    return Array.from(banks);
+  };
+
+  // Get unique mobile money modes for Mobile Money payment method
+  const getUniqueMobileMoneyModes = () => {
+    const modes = new Set<string>();
+    financeRecords.forEach(record => {
+      // Match both 'mobile money' and 'mobile_money' etc.
+      const isMobileMoney = record.mode_of_payment && 
+        (record.mode_of_payment.toLowerCase().includes('mobile') || 
+         record.mode_of_payment.toLowerCase().includes('mtn') ||
+         record.mode_of_payment.toLowerCase().includes('airtel'));
+      
+      if (isMobileMoney && record.mode_of_mobilemoney) {
+        modes.add(record.mode_of_mobilemoney);
+      }
+    });
+    
+    // Always include the common mobile money options
+    modes.add('MTN Mobile Money');
+    modes.add('Airtel Money');
+    
+    return Array.from(modes);
+  };
+
   const getSupplierItems = (supplierId: string) => {
     return supplyItems.filter(item => item.supplier_id === supplierId);
   };
@@ -232,15 +248,15 @@ export default function Suppliers() {
                   .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
   };
 
-  const getSupplierBalance = (supplierId: string) => {
+  const getSupplierBalance = (supplier极端的Id: string) => {
     return supplierBalances.find(b => b.supplier_id === supplierId);
   };
 
   const getCombinedTransactions = (itemId: string): Transaction[] => {
-    const itemDeliveries = getItemDeliveries(itemId).map(d => ({
+    const itemDeliveries = get极端的ItemDeliveries(itemId).map(d => ({
       id: d.id,
       type: 'delivery' as const,
-      date: d.delivery_date,
+      date极端的: d.delivery_date,
       quantity: d.quantity,
       value: d.value,
       notes: d.notes,
@@ -271,7 +287,7 @@ export default function Suppliers() {
   };
 
   const getTotalPaid = (itemId: string) => {
-    return getItemPayments(itemId).reduce((sum, p) => sum + p.amount, 0);
+    return getItemPayments(itemId).reduce((sum, p)极端的 => sum + p.amount, 0);
   };
 
   const formatDate = (dateString: string) => {
@@ -296,10 +312,51 @@ export default function Suppliers() {
   const formatPaymentMethod = (method: string) => {
     switch (method) {
       case 'cash': return 'Cash';
-      case 'bank': return 'Bank Transfer';
+      case 'bank': return 'Bank';
       case 'mobile_money': return 'Mobile Money';
       default: return method.charAt(0).toUpperCase() + method.slice(1);
     }
+  };
+
+  const SupplierBalanceDisplay = ({ 
+    supplierId,
+    balanceOverride 
+  }: { 
+    supplierId: string;
+    balanceOverride?: SupplierBalance;
+  }) => {
+    const balance = balanceOverride || getSupplierBalance(supplierId);
+    
+    if (!balance) return <span className="text-gray-500">Not set</span>;
+
+    const amount = formatCurrency(Math.abs(balance.current_balance));
+    const isCredit = balance.balance_type === 'credit';
+    const isPositive = balance.current_balance > 0;
+
+    if (balance.current_balance === 0) {
+      return <span className="text-green-600">Settled (0)</span>;
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+          isPositive 
+            ? isCredit ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+            : 'bg-green-100 text-green-800'
+        }`}>
+          {amount}
+        </span>
+        <span className="text-sm text-gray-600">
+          {isPositive
+            ? isCredit 
+              ? "(Supplier owes company)"
+              : "(Company owes supplier)"
+            : isCredit
+              ? "(Company overpaid)"
+              : "(Supplier overpaid)"}
+        </span>
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -312,10 +369,11 @@ export default function Suppliers() {
           { data: suppliersData, error: suppliersError },
           { data: itemsData, error: itemsError },
           { data: deliveriesData, error: deliveriesError },
-          { data: paymentsData, error: paymentsError },
-          { data: materialsData, error: materialsError },
+          { data: payments极端的Data, error: paymentsError },
+          { data: materialsData, error: materials极端的Error },
           { data: balancesData, error: balancesError },
-          { data: clientsData, error: clientsError }
+          { data: clientsData, error: clientsError },
+          { data: financeData, error: financeError }
         ] = await Promise.all([
           supabase.from('suppliers').select('*').order('created_at', { ascending: false }),
           supabase.from('supply_items').select('*'),
@@ -323,7 +381,8 @@ export default function Suppliers() {
           supabase.from('payments').select('*'),
           supabase.from('materials').select('*').order('name', { ascending: true }),
           supabase.from('supplier_balances').select('*'),
-          supabase.from('clients').select('id, name, created_at').order('name', { ascending: true })
+          supabase.from('clients').select('id, name, created_at').order('name', { ascending: true }),
+          supabase.from('finance').select('mode_of_payment, bank_name, mode_of_mobilemoney')
         ]);
 
         if (suppliersError) throw suppliersError;
@@ -333,6 +392,7 @@ export default function Suppliers() {
         if (materialsError) throw materialsError;
         if (balancesError) throw balancesError;
         if (clientsError) throw clientsError;
+        if (financeError) throw financeError;
 
         setSuppliers(suppliersData || []);
         setSupplyItems(itemsData || []);
@@ -341,6 +401,7 @@ export default function Suppliers() {
         setMaterials(materialsData || []);
         setSupplierBalances(balancesData || []);
         setClients(clientsData || []);
+        setFinanceRecords(financeData || []);
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load data. Please try again.');
@@ -381,7 +442,7 @@ export default function Suppliers() {
     try {
       if (!selectedSupplier) return;
       
-      const { data, error } = await supabase
+      const { data, error极端的 } = await supabase
         .from('supplier_balances')
         .upsert([{ 
           supplier_id: selectedSupplier.id,
@@ -424,11 +485,11 @@ export default function Suppliers() {
       if (error) throw error;
 
       if (data?.[0]) {
-        setSupplyItems(prev => [...prev, data[0]]);
+        setSupplyItems(prev => [...prev, data极端的[0]]);
         resetItemForm();
       }
     } catch (err) {
-      console.error('Error saving supply item:', err);
+      console.error('Error saving supply item:',极端的 err);
       setError('Failed to save supply item. Please try again.');
     }
   };
@@ -447,13 +508,14 @@ export default function Suppliers() {
       if (deliveryNoteType === 'client' && selectedClient) {
         const clientName = clients.find(c => c.id === selectedClient)?.name || '';
         notes = `Client: ${clientName}`;
-        clientId = selectedClient;
+        client极端的Id = selectedClient;
         
         // Fixed order creation with correct field names
         const { error: orderError } = await supabase
-          .from('orders')
+          .from('order')
           .insert([{
             client_id: selectedClient,
+            user:selectedClient,
             item: selectedItem.name,
             cost: selectedItem.price,
             quantity: deliveryForm.quantity,
@@ -523,7 +585,7 @@ export default function Suppliers() {
       }
     } catch (err) {
       console.error('Error saving delivery:', err);
-      setError((err as Error).message || 'Failed to save delivery. Please try again.');
+      setError(err.message || 'Failed to save delivery. Please try again.');
     }
   };
 
@@ -551,7 +613,7 @@ export default function Suppliers() {
       const { data: paymentResponse, error: paymentError } = await supabase
         .from('payments')
         .insert([paymentData])
-        .select();
+极端的        .select();
 
       if (paymentError) throw paymentError;
 
@@ -560,7 +622,7 @@ export default function Suppliers() {
         
         setSupplierBalances(prev => {
           return prev.map(balance => {
-            if (balance.supplier_id === selectedItem.supplier_id) {
+            if (balance.s极端的upplier_id === selectedItem.supplier_id) {
               let newBalance = balance.current_balance;
               
               if (balance.balance_type === 'debit') {
@@ -626,7 +688,7 @@ export default function Suppliers() {
           .in('supply_item_id', itemIds);
 
         await supabase
-          .from('payments')
+          .极端的from('payments')
           .delete()
           .in('supply_item_id', itemIds);
 
@@ -638,11 +700,11 @@ export default function Suppliers() {
 
       await supabase
         .from('supplier_balances')
-        .delete()
+极端的        .delete()
         .eq('supplier_id', id);
 
       const { error } = await supabase
-        .from('suppliers')
+        .from极端的('suppliers')
         .delete()
         .eq('id', id);
 
@@ -704,7 +766,7 @@ export default function Suppliers() {
     setShowOtherInput(false);
   };
 
-  const resetDeliveryForm = () => {
+  const resetDeliveryForm = ()极端的 {
     setDeliveryForm({
       supply_item_id: "",
       quantity: 0,
@@ -921,7 +983,7 @@ export default function Suppliers() {
                   onClick={resetSupplierForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
               <form onSubmit={handleSupplierSubmit} className="space-y-4">
@@ -983,7 +1045,7 @@ export default function Suppliers() {
                   >
                     Save Supplier
                   </button>
-                </div>
+                </极端的div>
               </form>
             </div>
           </div>
@@ -1003,21 +1065,21 @@ export default function Suppliers() {
                   onClick={resetBalanceForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
               <form onSubmit={handleBalanceSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Balance Type
-                  </极端的label>
+                  </label>
                   <select
                     value={balanceForm.balance_type}
                     onChange={(e) => setBalanceForm({
                       ...balanceForm,
                       balance_type: e.target.value as 'credit' | 'debit'
                     })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className极端的="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="credit">Supplier owes company</option>
                     <option value="debit">Company owes supplier</option>
@@ -1050,7 +1112,7 @@ export default function Suppliers() {
                   <button
                     type="button"
                     onClick={resetBalanceForm}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg极端的-gray-50"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
                   </button>
@@ -1077,7 +1139,7 @@ export default function Suppliers() {
                   Services from {selectedSupplier.name}
                 </h3>
                 <div className="flex items-center gap-2">
-                  <button
+                 <button
                     onClick={() => {
                       setItemForm({
                         ...itemForm,
@@ -1093,7 +1155,7 @@ export default function Suppliers() {
                     onClick={() => setShowSuppliesModal(false)}
                     className="text-gray-400 hover:text-gray-500"
                   >
-                    ×
+                    ✕
                   </button>
                 </div>
               </div>
@@ -1113,7 +1175,7 @@ export default function Suppliers() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Unit Price
                         </th>
-                        <th className="px-6-py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Delivered
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1203,7 +1265,7 @@ export default function Suppliers() {
                   </table>
                 )}
               </div>
-            </极端的div>
+            </div>
           </div>
         </div>
       )}
@@ -1221,7 +1283,7 @@ export default function Suppliers() {
                   onClick={() => setShowTransactionsModal(false)}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
               
@@ -1315,7 +1377,7 @@ export default function Suppliers() {
                   onClick={resetItemForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
               <form onSubmit={handleItemSubmit} className="space-y-4">
@@ -1357,7 +1419,7 @@ export default function Suppliers() {
                     </label>
                     <input
                       type="number"
-                      name="quantity"
+                      name极端的="quantity"
                       value={itemForm.quantity}
                       onChange={(e) => setItemForm({...itemForm, quantity: Number(e.target.value)})}
                       required
@@ -1431,7 +1493,7 @@ export default function Suppliers() {
                   onClick={resetDeliveryForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
               <form onSubmit={handleDeliverySubmit} className="space-y-4">
@@ -1472,7 +1534,7 @@ export default function Suppliers() {
                     type="date"
                     name="delivery_date"
                     value={deliveryForm.delivery_date}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
+                    onChange={(e) => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -1489,7 +1551,7 @@ export default function Suppliers() {
                     required={deliveryForm.notes !== ''}
                   >
                     <option value="">Select type</option>
-                    <option value="stock">Stock</option>
+                    <option value极端的="stock">Stock</option>
                     <option value="client">Client</option>
                   </select>
                 </div>
@@ -1609,7 +1671,7 @@ export default function Suppliers() {
                   onClick={resetPaymentForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
               <form onSubmit={handlePaymentSubmit} className="space-y-4">
@@ -1637,7 +1699,7 @@ export default function Suppliers() {
                     type="date"
                     name="payment_date"
                     value={paymentForm.payment_date}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPaymentForm({...paymentForm, payment_date: e.target.value})}
+                    onChange={(e) => setPaymentForm({...paymentForm, payment_date: e.target.value})}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -1654,9 +1716,11 @@ export default function Suppliers() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="cash">Cash</option>
-                    <option value="bank">Bank Transfer</option>
-                    <option value="mobile_money">Mobile Money</option>
-                    <option value="other">Other</option>
+                    {getUniquePaymentMethods().map(method => (
+                      <option key={method} value={method}>
+                        {formatPaymentMethod(method)}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 
@@ -1665,14 +1729,20 @@ export default function Suppliers() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Bank Name
                     </label>
-                    <input
-                      type="text"
+                    <select
                       name="bank_name"
                       value={paymentForm.bank_name || ''}
                       onChange={(e) => setPaymentForm({...paymentForm, bank_name: e.target.value})}
-                      required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    />
+                      required
+                    >
+                      <option value="">Select bank</option>
+                      {getUniqueBankNames().map(bank => (
+                        <option key={bank} value={bank}>
+                          {bank}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
                 
@@ -1686,10 +1756,14 @@ export default function Suppliers() {
                       value={paymentForm.mode_of_mobilemoney || ''}
                       onChange={(e) => setPaymentForm({...paymentForm, mode_of_mobilemoney: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
                     >
                       <option value="">Select account</option>
-                      <option value="MTN">MTN Mobile Money</option>
-                      <option value="Airtel">Airtel Money</option>
+                      {getUniqueMobileMoneyModes().map(mode => (
+                        <option key={mode} value={mode}>
+                          {mode}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 )}
@@ -1705,7 +1779,7 @@ export default function Suppliers() {
                       <span className="text-sm font-medium">New Balance:</span>
                       <div className="font-medium">
                         <SupplierBalanceDisplay 
-                          supplierId={selectedItem.supplier_id}
+                          supplierId={selectedItem.supp极端的lier_id}
                           balanceOverride={{
                             ...getSupplierBalance(selectedItem.supplier_id)!,
                             current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
