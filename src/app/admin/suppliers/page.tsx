@@ -29,7 +29,7 @@ interface SupplyItem {
 interface Delivery {
   id: string;
   supply_item_id: string;
-  quantity:极端的 number;
+  quantity: number;
   value: number;
   delivery_date: string;
   notes?: string;
@@ -248,15 +248,15 @@ export default function Suppliers() {
                   .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
   };
 
-  const getSupplierBalance = (supplier极端的Id: string) => {
+  const getSupplierBalance = (supplierId: string) => {
     return supplierBalances.find(b => b.supplier_id === supplierId);
   };
 
   const getCombinedTransactions = (itemId: string): Transaction[] => {
-    const itemDeliveries = get极端的ItemDeliveries(itemId).map(d => ({
+    const itemDeliveries = getItemDeliveries(itemId).map(d => ({
       id: d.id,
       type: 'delivery' as const,
-      date极端的: d.delivery_date,
+      date: d.delivery_date,
       quantity: d.quantity,
       value: d.value,
       notes: d.notes,
@@ -287,7 +287,7 @@ export default function Suppliers() {
   };
 
   const getTotalPaid = (itemId: string) => {
-    return getItemPayments(itemId).reduce((sum, p)极端的 => sum + p.amount, 0);
+    return getItemPayments(itemId).reduce((sum, p) => sum + p.amount, 0);
   };
 
   const formatDate = (dateString: string) => {
@@ -369,7 +369,7 @@ export default function Suppliers() {
           { data: suppliersData, error: suppliersError },
           { data: itemsData, error: itemsError },
           { data: deliveriesData, error: deliveriesError },
-          { data: payments极端的Data, error: paymentsError },
+          { data: paymentsData, error: paymentsError },
           { data: materialsData, error: materials极端的Error },
           { data: balancesData, error: balancesError },
           { data: clientsData, error: clientsError },
@@ -442,7 +442,7 @@ export default function Suppliers() {
     try {
       if (!selectedSupplier) return;
       
-      const { data, error极端的 } = await supabase
+      const { data, error } = await supabase
         .from('supplier_balances')
         .upsert([{ 
           supplier_id: selectedSupplier.id,
@@ -485,11 +485,11 @@ export default function Suppliers() {
       if (error) throw error;
 
       if (data?.[0]) {
-        setSupplyItems(prev => [...prev, data极端的[0]]);
+        setSupplyItems(prev => [...prev, data[0]]);
         resetItemForm();
       }
     } catch (err) {
-      console.error('Error saving supply item:',极端的 err);
+      console.error('Error saving supply item:', err);
       setError('Failed to save supply item. Please try again.');
     }
   };
@@ -508,7 +508,7 @@ export default function Suppliers() {
       if (deliveryNoteType === 'client' && selectedClient) {
         const clientName = clients.find(c => c.id === selectedClient)?.name || '';
         notes = `Client: ${clientName}`;
-        client极端的Id = selectedClient;
+        clientId = selectedClient;
         
         // Fixed order creation with correct field names
         const { error: orderError } = await supabase
@@ -613,7 +613,7 @@ export default function Suppliers() {
       const { data: paymentResponse, error: paymentError } = await supabase
         .from('payments')
         .insert([paymentData])
-极端的        .select();
+        .select();
 
       if (paymentError) throw paymentError;
 
@@ -622,7 +622,7 @@ export default function Suppliers() {
         
         setSupplierBalances(prev => {
           return prev.map(balance => {
-            if (balance.s极端的upplier_id === selectedItem.supplier_id) {
+            if (balance.supplier_id === selectedItem.supplier_id) {
               let newBalance = balance.current_balance;
               
               if (balance.balance_type === 'debit') {
@@ -688,7 +688,7 @@ export default function Suppliers() {
           .in('supply_item_id', itemIds);
 
         await supabase
-          .极端的from('payments')
+          .from('payments')
           .delete()
           .in('supply_item_id', itemIds);
 
@@ -700,11 +700,11 @@ export default function Suppliers() {
 
       await supabase
         .from('supplier_balances')
-极端的        .delete()
+        .delete()
         .eq('supplier_id', id);
 
       const { error } = await supabase
-        .from极端的('suppliers')
+        .from('suppliers')
         .delete()
         .eq('id', id);
 
@@ -766,7 +766,7 @@ export default function Suppliers() {
     setShowOtherInput(false);
   };
 
-  const resetDeliveryForm = ()极端的 {
+  const resetDeliveryForm = () {
     setDeliveryForm({
       supply_item_id: "",
       quantity: 0,
@@ -1045,7 +1045,7 @@ export default function Suppliers() {
                   >
                     Save Supplier
                   </button>
-                </极端的div>
+                </div>
               </form>
             </div>
           </div>
@@ -1079,7 +1079,7 @@ export default function Suppliers() {
                       ...balanceForm,
                       balance_type: e.target.value as 'credit' | 'debit'
                     })}
-                    className极端的="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="credit">Supplier owes company</option>
                     <option value="debit">Company owes supplier</option>
@@ -1419,7 +1419,7 @@ export default function Suppliers() {
                     </label>
                     <input
                       type="number"
-                      name极端的="quantity"
+                      name="quantity"
                       value={itemForm.quantity}
                       onChange={(e) => setItemForm({...itemForm, quantity: Number(e.target.value)})}
                       required
@@ -1551,7 +1551,7 @@ export default function Suppliers() {
                     required={deliveryForm.notes !== ''}
                   >
                     <option value="">Select type</option>
-                    <option value极端的="stock">Stock</option>
+                    <option value="stock">Stock</option>
                     <option value="client">Client</option>
                   </select>
                 </div>
@@ -1779,7 +1779,7 @@ export default function Suppliers() {
                       <span className="text-sm font-medium">New Balance:</span>
                       <div className="font-medium">
                         <SupplierBalanceDisplay 
-                          supplierId={selectedItem.supp极端的lier_id}
+                          supplierId={selectedItem.supplier_id}
                           balanceOverride={{
                             ...getSupplierBalance(selectedItem.supplier_id)!,
                             current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'debit'
