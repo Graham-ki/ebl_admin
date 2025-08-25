@@ -247,8 +247,8 @@ export default function Suppliers() {
       });
     
     // Always include the common mobile money options
-    modes.add('MTN Mobile Money');
-    modes.add('Airtel Money');
+    //modes.add('MTN Mobile Money');
+    //modes.add('Airtel Money');
     
     return Array.from(modes);
   };
