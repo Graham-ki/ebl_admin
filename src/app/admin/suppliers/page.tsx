@@ -94,6 +94,12 @@ type Transaction = {
   client_id?: string;
 };
 
+interface PaymentMode {
+  mode_of_payment: string;
+  bank_name?: string;
+  mode_of_mobilemoney?: string;
+}
+
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplyItems, setSupplyItems] = useState<SupplyItem[]>([]);
@@ -102,6 +108,9 @@ export default function Suppliers() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [supplierBalances, setSupplierBalances] = useState<SupplierBalance[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [paymentModes, setPaymentModes] = useState<PaymentMode[]>([]);
+  const [bankNames, setBankNames] = useState<string[]>([]);
+  const [mobileMoneyProviders, setMobileMoneyProviders] = useState<string[]>([]);
   const [showOtherInput, setShowOtherInput] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [deliveryNoteType, setDeliveryNoteType] = useState('');
@@ -242,7 +251,7 @@ export default function Suppliers() {
   const formatPaymentMethod = (method: string) => {
     switch (method) {
       case 'cash': return 'Cash';
-      case 'bank': return 'Bank';
+      case 'bank': return 'Bank Transfer';
       case 'mobile_money': return 'Mobile Money';
       default: return method.charAt(0).toUpperCase() + method.slice(1);
     }
@@ -302,7 +311,8 @@ export default function Suppliers() {
           { data: paymentsData, error: paymentsError },
           { data: materialsData, error: materialsError },
           { data: balancesData, error: balancesError },
-          { data: clientsData, error: clientsError }
+          { data: clientsData, error: clientsError },
+          { data: expensesData, error: expensesError }
         ] = await Promise.all([
           supabase.from('suppliers').select('*').order('created_at', { ascending: false }),
           supabase.from('supply_items').select('*'),
@@ -310,7 +320,8 @@ export default function Suppliers() {
           supabase.from('payments').select('*'),
           supabase.from('materials').select('*').order('name', { ascending: true }),
           supabase.from('supplier_balances').select('*'),
-          supabase.from('clients').select('id, name, created_at').order('name', { ascending: true })
+          supabase.from('clients').select('id, name, created_at').order('name', { ascending: true }),
+          supabase.from('expenses').select('mode_of_payment, account')
         ]);
 
         if (suppliersError) throw suppliersError;
@@ -320,6 +331,7 @@ export default function Suppliers() {
         if (materialsError) throw materialsError;
         if (balancesError) throw balancesError;
         if (clientsError) throw clientsError;
+        if (expensesError) throw expensesError;
 
         setSuppliers(suppliersData || []);
         setSupplyItems(itemsData || []);
@@ -328,7 +340,52 @@ export default function Suppliers() {
         setMaterials(materialsData || []);
         setSupplierBalances(balancesData || []);
         setClients(clientsData || []);
-      } catch (err) {
+        
+        // Process payment modes from expenses table
+        if (expensesData) {
+          const uniquePaymentModes = Array.from(new Set(expensesData.map(expense => expense.mode_of_payment)));
+          const uniqueBankNames = Array.from(new Set(expensesData
+            .filter(expense => expense.mode_of_payment === 'Bank Transfer' && expense.account)
+            .map(expense => expense.account)));
+          const uniqueMobileMoneyProviders = Array.from(new Set(expensesData
+            .filter(expense => expense.mode_of_payment === 'Mobile Money' && expense.account)
+            .map(expense => expense.account)));
+          
+          // Create payment modes array with submodes
+          const modes: PaymentMode[] = [];
+          
+          // Add default payment modes if none exist in database
+          if (uniquePaymentModes.length === 0) {
+            modes.push({ mode_of_payment: 'Cash' });
+            modes.push({ mode_of_payment: 'Bank Transfer' });
+            modes.push({ mode_of_payment: 'Mobile Money' });
+            modes.push({ mode_of_payment: 'Other' });
+          } else {
+            // Add existing payment modes
+            uniquePaymentModes.forEach(mode => {
+              modes.push({ mode_of_payment: mode });
+            });
+            
+            // Ensure we have the basic payment types
+            if (!modes.some(m => m.mode_of_payment === 'Cash')) {
+              modes.push({ mode_of_payment: 'Cash' });
+            }
+            if (!modes.some(m => m.mode_of_payment === 'Bank Transfer')) {
+              modes.push({ mode_of_payment: 'Bank Transfer' });
+            }
+            if (!modes.some(m => m.mode_of_payment === 'Mobile Money')) {
+              modes.push({ mode_of_payment: 'Mobile Money' });
+            }
+            if (!modes.some(m => m.mode_of_payment === 'Other')) {
+              modes.push({ mode_of_payment: 'Other' });
+            }
+          }
+          
+          setPaymentModes(modes);
+          setBankNames(uniqueBankNames.length > 0 ? uniqueBankNames : ['Stanbic', 'Centenary', 'DFCU', 'Equity']);
+          setMobileMoneyProviders(uniqueMobileMoneyProviders.length > 0 ? uniqueMobileMoneyProviders : ['MTN', 'Airtel']);
+        }
+      } catch (err: any) {
         console.error('Error fetching data:', err);
         setError('Failed to load data. Please try again.');
       } finally {
@@ -355,7 +412,7 @@ export default function Suppliers() {
         setSuppliers(prev => [data[0], ...prev]);
         resetSupplierForm();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving supplier:', err);
       setError('Failed to save supplier. Please try again.');
     }
@@ -390,7 +447,7 @@ export default function Suppliers() {
         });
         setShowBalanceForm(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving balance:', err);
       setError('Failed to save balance. Please try again.');
     }
@@ -414,7 +471,7 @@ export default function Suppliers() {
         setSupplyItems(prev => [...prev, data[0]]);
         resetItemForm();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving supply item:', err);
       setError('Failed to save supply item. Please try again.');
     }
@@ -438,10 +495,9 @@ export default function Suppliers() {
         
         // Fixed order creation with correct field names
         const { error: orderError } = await supabase
-          .from('order')
+          .from('orders')
           .insert([{
             client_id: selectedClient,
-            user:selectedClient,
             item: selectedItem.name,
             cost: selectedItem.price,
             quantity: deliveryForm.quantity,
@@ -509,7 +565,7 @@ export default function Suppliers() {
         setDeliveryNoteType('');
         setSelectedClient('');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving delivery:', err);
       setError(err.message || 'Failed to save delivery. Please try again.');
     }
@@ -571,6 +627,9 @@ export default function Suppliers() {
           });
         });
 
+        // Get the display name of the payment method for the expense record
+        const paymentMethodDisplayName = getPaymentMethodDisplayName(paymentForm.method);
+        
         const expenseData = {
           item: 'Payment of Material',
           amount_spent: paymentForm.amount,
@@ -578,17 +637,26 @@ export default function Suppliers() {
           department: selectedItem.name,
           account: paymentForm.method === 'mobile_money' ? paymentForm.mode_of_mobilemoney || '' : 
                   paymentForm.method === 'bank' ? paymentForm.bank_name || '' : 'Cash',
-          mode_of_payment: formatPaymentMethod(paymentForm.method),
+          mode_of_payment: paymentMethodDisplayName,
           submittedby: 'Admin'
         };
 
+        // Insert the expense record which will be used for future payment mode options
         await supabase.from('expenses').insert([expenseData]);
+        
+        // Update payment modes if this is a new mode or submode
+        if (paymentForm.method === 'bank' && paymentForm.bank_name && !bankNames.includes(paymentForm.bank_name)) {
+          setBankNames(prev => [...prev, paymentForm.bank_name!]);
+        } else if (paymentForm.method === 'mobile_money' && paymentForm.mode_of_mobilemoney && 
+                  !mobileMoneyProviders.includes(paymentForm.mode_of_mobilemoney)) {
+          setMobileMoneyProviders(prev => [...prev, paymentForm.mode_of_mobilemoney!]);
+        }
 
         resetPaymentForm();
         setShowPaymentForm(false);
         setPaymentMethod('cash');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving payment:', err);
       setError('Failed to save payment. Please try again.');
     }
@@ -638,7 +706,7 @@ export default function Suppliers() {
 
       setSuppliers(prev => prev.filter(s => s.id !== id));
       setSupplierBalances(prev => prev.filter(b => b.supplier_id !== id));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting supplier:', err);
       setError('Failed to delete supplier. Please try again.');
     }
@@ -666,7 +734,7 @@ export default function Suppliers() {
       if (error) throw error;
 
       setSupplyItems(prev => prev.filter(i => i.id !== id));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting item:', err);
       setError('Failed to delete item. Please try again.');
     }
@@ -748,6 +816,26 @@ export default function Suppliers() {
       bank_name: method === 'bank' ? paymentForm.bank_name : '',
       mode_of_mobilemoney: method === 'mobile_money' ? paymentForm.mode_of_mobilemoney : ''
     });
+  };
+  
+  // Convert payment method display name to database value
+  const getPaymentMethodValue = (displayName: string): string => {
+    switch (displayName) {
+      case 'Cash': return 'cash';
+      case 'Bank Transfer': return 'bank';
+      case 'Mobile Money': return 'mobile_money';
+      default: return displayName.toLowerCase();
+    }
+  };
+  
+  // Convert database value to display name
+  const getPaymentMethodDisplayName = (value: string): string => {
+    switch (value) {
+      case 'cash': return 'Cash';
+      case 'bank': return 'Bank Transfer';
+      case 'mobile_money': return 'Mobile Money';
+      default: return value.charAt(0).toUpperCase() + value.slice(1);
+    }
   };
 
   const handleDeliveryNoteTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1641,10 +1729,11 @@ export default function Suppliers() {
                     onChange={handlePaymentMethodChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="cash">Cash</option>
-                    <option value="bank">Bank Transfer</option>
-                    <option value="mobile_money">Mobile Money</option>
-                    <option value="other">Other</option>
+                    {paymentModes.map((mode) => (
+                      <option key={mode.mode_of_payment} value={getPaymentMethodValue(mode.mode_of_payment)}>
+                        {mode.mode_of_payment}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 
@@ -1653,20 +1742,24 @@ export default function Suppliers() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Bank Name
                     </label>
-                    <input
-                      type="text"
+                    <select
                       name="bank_name"
                       value={paymentForm.bank_name || ''}
                       onChange={(e) => setPaymentForm({...paymentForm, bank_name: e.target.value})}
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    >
+                      <option value="">Select bank</option>
+                      {bankNames.map((bank) => (
+                        <option key={bank} value={bank}>{bank}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
                 
                 {paymentForm.method === 'mobile_money' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-极端的1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Mobile Money Account
                     </label>
                     <select
@@ -1674,10 +1767,12 @@ export default function Suppliers() {
                       value={paymentForm.mode_of_mobilemoney || ''}
                       onChange={(e) => setPaymentForm({...paymentForm, mode_of_mobilemoney: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
                     >
-                      <option value="">Select account</option>
-                      <option value="MTN">MTN Mobile Money</option>
-                      <option value="Airtel">Airtel Money</option>
+                      <option value="">Select provider</option>
+                      {mobileMoneyProviders.map((provider) => (
+                        <option key={provider} value={provider}>{provider}</option>
+                      ))}
                     </select>
                   </div>
                 )}
