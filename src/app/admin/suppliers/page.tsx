@@ -765,8 +765,7 @@ export default function Suppliers() {
     setShowItemForm(false);
     setShowOtherInput(false);
   };
-
-  const resetDeliveryForm = () {
+const resetDeliveryForm = (){
     setDeliveryForm({
       supply_item_id: "",
       quantity: 0,
