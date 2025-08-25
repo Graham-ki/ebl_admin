@@ -1447,7 +1447,7 @@ export default function Suppliers() {
                     name="price"
                     value={selectedItem.price}
                     readOnly
-                    className="w-full px-3 py-2 border border-gray-极端的 rounded-lg shadow-sm bg-gray-100 focus:outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-100 focus:outline-none"
                   />
                 </div>
                 
@@ -1459,7 +1459,7 @@ export default function Suppliers() {
                     type="date"
                     name="delivery_date"
                     value={deliveryForm.delivery_date}
-                    onChange={(e)极端的 => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
+                    onChange={(e) => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -1541,13 +1541,13 @@ export default function Suppliers() {
                       </div>
                       
                       <span className="text-sm font-medium">New Balance:</span>
-                      <极端的 div className="font-medium">
+                      <div className="font-medium">
                         <SupplierBalanceDisplay 
                           supplierId={selectedItem.supplier_id}
                           balanceOverride={{
                             ...getSupplierBalance(selectedItem.supplier_id)!,
                             current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
-                              ? getSupplierBalance(selected极端的Item.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price)
+                              ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price)
                               : getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price)
                           }}
                         />
@@ -1587,7 +1587,7 @@ export default function Suppliers() {
       {showPaymentForm && selectedItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <极端的 div className="p-6">
+            <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
                   Record Payment for {selectedItem.name}
@@ -1624,9 +1624,9 @@ export default function Suppliers() {
                     type="date"
                     name="payment_date"
                     value={paymentForm.payment_date}
-                    onChange={(e) => setPaymentForm({...paymentForm, payment_date: e.target.value极端的})}
+                    onChange={(e) => setPaymentForm({...paymentForm, payment_date: e.target.value})}
                     required
-                    className="极端的 w-full px-3 py-2 border border-gray-300 rounded-lg shadow极端的-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 
@@ -1714,11 +1714,11 @@ export default function Suppliers() {
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
-                    onClick极端的={resetPaymentForm}
+                    onClick={resetPaymentForm}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
-                  </极端的button>
+                  </button>
                   <button
                     type="submit"
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
