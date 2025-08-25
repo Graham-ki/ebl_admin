@@ -663,20 +663,34 @@ export default function Suppliers() {
           });
         });
 
-        const financeData = {
-          item: 'Payment of Material',
+        // Get supplier and item details for the expense record
+        const supplier = suppliers.find(s => s.id === selectedItem.supplier_id);
+        const item = supplyItems.find(i => i.id === selectedItem.id);
+        
+        // Create expense record
+        const expenseData = {
+          item: 'Payment To Supplier',
           amount_spent: paymentForm.amount,
           date: paymentForm.payment_date,
-          department: selectedItem.name,
-          account: paymentForm.method === 'mobile_money' ? paymentForm.mode_of_mobilemoney || '' : 
-                  paymentForm.method === 'bank' ? paymentForm.bank_name || '' : 'Cash',
+          department: `${supplier?.name || 'Unknown Supplier'} | ${item?.name || 'Unknown Item'}`,
+          account: paymentForm.method === 'mobile_money' 
+            ? paymentForm.mode_of_mobilemoney || 'Mobile Money'
+            : paymentForm.method === 'bank' 
+            ? paymentForm.bank_name || 'Bank'
+            : 'Cash',
           mode_of_payment: formatPaymentMethod(paymentForm.method),
-          bank_name: paymentForm.method === 'bank' ? paymentForm.bank_name || '' : null,
-          mode_of_mobilemoney: paymentForm.method === 'mobile_money' ? paymentForm.mode_of_mobilemoney || '' : null,
           submittedby: 'Admin'
         };
 
-        await supabase.from('finance').insert([financeData]);
+        // Insert into expenses table
+        const { error: expenseError } = await supabase
+          .from('expenses')
+          .insert([expenseData]);
+
+        if (expenseError) {
+          console.error('Error saving expense record:', expenseError);
+          // Don't throw the error as the payment was successful
+        }
 
         resetPaymentForm();
         setShowPaymentForm(false);
@@ -1403,7 +1417,7 @@ export default function Suppliers() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Item Name
-                  </label>
+                    </label>
                   <select
                     onChange={handleMaterialChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
