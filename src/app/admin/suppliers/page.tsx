@@ -120,7 +120,7 @@ export default function Suppliers() {
     return eastAfricanTime.toISOString().split('T')[0];
   };
   
-  const [supplierForm, set极端的SupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
+  const [supplierForm, setSupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
     name: "",
     contact: "",
     address: "",
@@ -178,7 +178,7 @@ export default function Suppliers() {
       if (record.mode_of_payment) {
         // Normalize the payment method values for consistency
         const normalizedMethod = record.mode_of_payment.toLowerCase()
-          .replace(/\s+/g, '_') // Replace spaces with underscores
+          .replace(/\s+/g, '_')
           .replace('mobile_money', 'mobile_money')
           .replace('mobile money', 'mobile_money')
           .replace('bank', 'bank')
@@ -370,7 +370,7 @@ export default function Suppliers() {
           { data: itemsData, error: itemsError },
           { data: deliveriesData, error: deliveriesError },
           { data: paymentsData, error: paymentsError },
-          { data: materialsData, error: materials极端的Error },
+          { data: materialsData, error: materialsError },
           { data: balancesData, error: balancesError },
           { data: clientsData, error: clientsError },
           { data: financeData, error: financeError }
@@ -510,12 +510,11 @@ export default function Suppliers() {
         notes = `Client: ${clientName}`;
         clientId = selectedClient;
         
-        // Fixed order creation with correct field names
         const { error: orderError } = await supabase
           .from('order')
           .insert([{
             client_id: selectedClient,
-            user:selectedClient,
+            user: selectedClient,
             item: selectedItem.name,
             cost: selectedItem.price,
             quantity: deliveryForm.quantity,
@@ -585,7 +584,7 @@ export default function Suppliers() {
       }
     } catch (err) {
       console.error('Error saving delivery:', err);
-      setError(err.message || 'Failed to save delivery. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to save delivery. Please try again.');
     }
   };
 
@@ -765,7 +764,8 @@ export default function Suppliers() {
     setShowItemForm(false);
     setShowOtherInput(false);
   };
-const resetDeliveryForm = (){
+
+  const resetDeliveryForm = () => {
     setDeliveryForm({
       supply_item_id: "",
       quantity: 0,
@@ -1138,7 +1138,7 @@ const resetDeliveryForm = (){
                   Services from {selectedSupplier.name}
                 </h3>
                 <div className="flex items-center gap-2">
-                 <button
+                  <button
                     onClick={() => {
                       setItemForm({
                         ...itemForm,
@@ -1173,7 +1173,7 @@ const resetDeliveryForm = (){
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Unit Price
-                        </th>
+                        </极端的th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Delivered
                         </th>
@@ -1300,8 +1300,7 @@ const resetDeliveryForm = (){
                         Quantity
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Value
-                      </th>
+                        Value                      </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Details
                       </th>
@@ -1327,7 +1326,7 @@ const resetDeliveryForm = (){
                           {txn.type === 'delivery' 
                             ? formatCurrency(txn.value || 0)
                             : formatCurrency(txn.amount || 0)}
-                        </td>
+                        </极端的td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {txn.type === 'payment' ? (
                             <div>
@@ -1358,7 +1357,7 @@ const resetDeliveryForm = (){
                   </tbody>
                 </table>
               </div>
-            </div>
+            </极端的div>
           </div>
         </div>
       )}
