@@ -86,6 +86,20 @@ interface FinanceRecord {
   mode_of_mobilemoney?: string;
 }
 
+// Define helper functions first
+let supplierBalances: SupplierBalance[] = [];
+
+const getSupplierBalance = (supplierId: string) => {
+  return supplierBalances.find(b => b.supplier_id === supplierId);
+};
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'UGX'
+  }).format(amount);
+};
+
 type Transaction = {
   id: string;
   type: 'delivery' | 'payment';
@@ -106,7 +120,12 @@ export default function Suppliers() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [supplierBalances, setSupplierBalances] = useState<SupplierBalance[]>([]);
+  const [localSupplierBalances, setLocalSupplierBalances] = useState<SupplierBalance[]>([]);
+  
+  // Update the global supplierBalances variable when localSupplierBalances changes
+  useEffect(() => {
+    supplierBalances = localSupplierBalances;
+  }, [localSupplierBalances]);
   const [clients, setClients] = useState<Client[]>([]);
   const [financeRecords, setFinanceRecords] = useState<FinanceRecord[]>([]);
   const [showOtherInput, setShowOtherInput] = useState(false);
@@ -173,20 +192,20 @@ export default function Suppliers() {
 
   // Get unique payment methods from finance records
   const getUniquePaymentMethods = () => {
-    const methods = new Set<string>();
-    financeRecords.forEach(record => {
-      if (record.mode_of_payment) {
-        // Normalize the payment method values for consistency
-        const normalizedMethod = record.mode_of_payment.toLowerCase()
-          .replace(/\s+/g, '_')
-          .replace('mobile_money', 'mobile_money')
-          .replace('mobile money', 'mobile_money')
-          .replace('bank', 'bank')
-          .replace('cash', 'cash');
-        
-        methods.add(normalizedMethod);
-      }
-    });
+      const methods = new Set<string>();
+      financeRecords.forEach(record => {
+        if (record.mode_of_payment) {
+          // Normalize the payment method values for consistency
+          const normalizedMethod = record.mode_of_payment.toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace('mobile_money', 'mobile_money')
+            .replace('mobile money', 'mobile_money')
+            .replace('bank', 'bank')
+            .replace('cash', 'cash');
+
+          methods.add(normalizedMethod);
+        }
+      });
     
     // Always include the basic methods
     methods.add('cash');
@@ -198,34 +217,34 @@ export default function Suppliers() {
 
   // Get unique bank names for Bank payment method
   const getUniqueBankNames = () => {
-    const banks = new Set<string>();
-    financeRecords.forEach(record => {
-      // Match both 'bank' and 'Bank' etc.
-      const isBank = record.mode_of_payment && 
-        (record.mode_of_payment.toLowerCase() === 'bank' || 
-         record.mode_of_payment.toLowerCase() === 'bank transfer');
-      
-      if (isBank && record.bank_name) {
-        banks.add(record.bank_name);
-      }
-    });
-    return Array.from(banks);
+      const banks = new Set<string>();
+      financeRecords.forEach(record => {
+        // Match both 'bank' and 'Bank' etc.
+        const isBank = record.mode_of_payment && 
+          (record.mode_of_payment.toLowerCase() === 'bank' ||
+           record.mode_of_payment.toLowerCase() === 'bank transfer');
+
+        if (isBank && record.bank_name) {
+          banks.add(record.bank_name);
+        }
+      });
+      return Array.from(banks);
   };
 
   // Get unique mobile money modes for Mobile Money payment method
   const getUniqueMobileMoneyModes = () => {
-    const modes = new Set<string>();
-    financeRecords.forEach(record => {
-      // Match both 'mobile money' and 'mobile_money' etc.
-      const isMobileMoney = record.mode_of_payment && 
-        (record.mode_of_payment.toLowerCase().includes('mobile') || 
-         record.mode_of_payment.toLowerCase().includes('mtn') ||
-         record.mode_of_payment.toLowerCase().includes('airtel'));
-      
-      if (isMobileMoney && record.mode_of_mobilemoney) {
-        modes.add(record.mode_of_mobilemoney);
-      }
-    });
+      const modes = new Set<string>();
+      financeRecords.forEach(record => {
+        // Match both 'mobile money' and 'mobile_money' etc.
+        const isMobileMoney = record.mode_of_payment &&
+          (record.mode_of_payment.toLowerCase().includes('mobile') ||
+           record.mode_of_payment.toLowerCase().includes('mtn') ||
+           record.mode_of_payment.toLowerCase().includes('airtel'));
+
+        if (isMobileMoney && record.mode_of_mobilemoney) {
+          modes.add(record.mode_of_mobilemoney);
+        }
+      });
     
     // Always include the common mobile money options
     modes.add('MTN Mobile Money');
@@ -399,7 +418,7 @@ export default function Suppliers() {
         setDeliveries(deliveriesData || []);
         setPayments(paymentsData || []);
         setMaterials(materialsData || []);
-        setSupplierBalances(balancesData || []);
+        setLocalSupplierBalances(balancesData || []);
         setClients(clientsData || []);
         setFinanceRecords(financeData || []);
       } catch (err) {
@@ -455,7 +474,7 @@ export default function Suppliers() {
       if (error) throw error;
 
       if (data?.[0]) {
-        setSupplierBalances(prev => {
+        setLocalSupplierBalances(prev => {
           const existing = prev.find(b => b.supplier_id === selectedSupplier.id);
           if (existing) {
             return prev.map(b => b.supplier_id === selectedSupplier.id ? data[0] : b);
@@ -552,9 +571,9 @@ export default function Suppliers() {
       if (data?.[0]) {
         setDeliveries(prev => [...prev, data[0]]);
         
-        setSupplierBalances(prev => {
-          return prev.map(balance => {
-            if (balance.supplier_id === selectedItem.supplier_id) {
+        setLocalSupplierBalances(prev => {
+            return prev.map(balance => {
+              if (balance.supplier_id === selectedItem.supplier_id) {
               let newBalance = balance.current_balance;
               
               if (balance.balance_type === 'credit') {
@@ -619,9 +638,9 @@ export default function Suppliers() {
       if (paymentResponse?.[0]) {
         setPayments(prev => [...prev, paymentResponse[0]]);
         
-        setSupplierBalances(prev => {
-          return prev.map(balance => {
-            if (balance.supplier_id === selectedItem.supplier_id) {
+        setLocalSupplierBalances(prev => {
+            return prev.map(balance => {
+              if (balance.supplier_id === selectedItem.supplier_id) {
               let newBalance = balance.current_balance;
               
               if (balance.balance_type === 'debit') {
@@ -644,7 +663,7 @@ export default function Suppliers() {
           });
         });
 
-        const expenseData = {
+        const financeData = {
           item: 'Payment of Material',
           amount_spent: paymentForm.amount,
           date: paymentForm.payment_date,
@@ -652,10 +671,12 @@ export default function Suppliers() {
           account: paymentForm.method === 'mobile_money' ? paymentForm.mode_of_mobilemoney || '' : 
                   paymentForm.method === 'bank' ? paymentForm.bank_name || '' : 'Cash',
           mode_of_payment: formatPaymentMethod(paymentForm.method),
+          bank_name: paymentForm.method === 'bank' ? paymentForm.bank_name || '' : null,
+          mode_of_mobilemoney: paymentForm.method === 'mobile_money' ? paymentForm.mode_of_mobilemoney || '' : null,
           submittedby: 'Admin'
         };
 
-        await supabase.from('expenses').insert([expenseData]);
+        await supabase.from('finance').insert([financeData]);
 
         resetPaymentForm();
         setShowPaymentForm(false);
@@ -710,7 +731,7 @@ export default function Suppliers() {
       if (error) throw error;
 
       setSuppliers(prev => prev.filter(s => s.id !== id));
-      setSupplierBalances(prev => prev.filter(b => b.supplier_id !== id));
+      setLocalSupplierBalances(prev => prev.filter(b => b.supplier_id !== id));
     } catch (err) {
       console.error('Error deleting supplier:', err);
       setError('Failed to delete supplier. Please try again.');
@@ -1173,7 +1194,7 @@ export default function Suppliers() {
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Unit Price
-                        </极端的th>
+                        </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Delivered
                         </th>
@@ -1326,7 +1347,7 @@ export default function Suppliers() {
                           {txn.type === 'delivery' 
                             ? formatCurrency(txn.value || 0)
                             : formatCurrency(txn.amount || 0)}
-                        </极端的td>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {txn.type === 'payment' ? (
                             <div>
@@ -1357,7 +1378,7 @@ export default function Suppliers() {
                   </tbody>
                 </table>
               </div>
-            </极端的div>
+            </div>
           </div>
         </div>
       )}
