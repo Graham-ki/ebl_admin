@@ -161,8 +161,8 @@ export default function ClientsPage() {
   };
 
   const fetchPayments = async (orderId: string) => {
-    // Add validation to prevent invalid queries
-    if (!orderId || orderId.trim() === '') {
+    // Fixed: Removed .trim() since order_id is an integer
+    if (!orderId || orderId === '') {
       console.error('Invalid orderId:', orderId);
       setPayments([]);
       return;
