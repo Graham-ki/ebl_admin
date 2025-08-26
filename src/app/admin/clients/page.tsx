@@ -125,7 +125,6 @@ export default function ClientsPage() {
   const fetchOpeningBalances = async () => {
     setLoading(true);
     try {
-      // Updated to use the correct foreign key relationship
       const { data, error } = await supabase
         .from("opening_balances")
         .select(`
@@ -162,6 +161,13 @@ export default function ClientsPage() {
   };
 
   const fetchPayments = async (orderId: string) => {
+    // Add validation to prevent invalid queries
+    if (!orderId || orderId.trim() === '') {
+      console.error('Invalid orderId:', orderId);
+      setPayments([]);
+      return;
+    }
+    
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -170,7 +176,10 @@ export default function ClientsPage() {
         .eq("order_id", orderId)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error fetching payments:", error);
+        throw error;
+      }
       setPayments(data || []);
     } catch (error) {
       console.error("Error fetching payments:", error);
@@ -242,7 +251,6 @@ export default function ClientsPage() {
 
       if (expensesError) throw expensesError;
 
-      // Updated to use client_id instead of marketer_id
       const { data: openingBalancesData, error: openingBalancesError } = await supabase
         .from("opening_balances")
         .select("*")
@@ -386,7 +394,7 @@ export default function ClientsPage() {
         const { data: balances, error: balanceError } = await supabase
           .from("opening_balances")
           .select("*")
-          .eq("client_id", selectedClient.id) // Updated to use client_id
+          .eq("client_id", selectedClient.id)
           .order("created_at", { ascending: false })
           .limit(1);
 
@@ -524,7 +532,7 @@ export default function ClientsPage() {
       const { data, error } = await supabase
         .from("opening_balances")
         .insert([{
-          client_id: newOpeningBalance.client_id, // Updated to use client_id
+          client_id: newOpeningBalance.client_id,
           amount: parseFloat(newOpeningBalance.amount),
           status: newOpeningBalance.status,
           created_at: newOpeningBalance.date
@@ -588,7 +596,7 @@ export default function ClientsPage() {
       if (status === "Pay") {
         const balance = openingBalances.find(b => b.id === id);
         if (balance) {
-          setSelectedClient(clients.find(c => c.id === balance.client_id)); // Updated to use client_id
+          setSelectedClient(clients.find(c => c.id === balance.client_id));
           setNewPayment({
             date: new Date().toISOString().split('T')[0],
             amount: balance.amount.toString(),
@@ -626,7 +634,7 @@ export default function ClientsPage() {
     const csvRows = [
       headers.join(","),
       ...transactions.map(t => [
-        new Date(t.date).toLocaleDateString(),
+        new Date(t.date || new Date()).toLocaleDateString(),
         t.type,
         t.type === 'order' ? 
           `${t.item} (Order #${t.id})` : 
@@ -636,12 +644,12 @@ export default function ClientsPage() {
           `Opening Balance (${t.status})` :
           `Expense: ${t.item}`,
         t.type === 'order' || t.type === 'opening_balance' ? t.quantity : '',
-        t.type === 'order' || t.type === 'opening_balance' ? t.unit_price : '',
-        t.type === 'order' || t.type === 'opening_balance' ? t.amount : '',
-        t.type === 'payment' ? t.payment : '',
-        t.type === 'expense' ? t.expense : '',
-        t.order_balance,
-        t.net_balance
+        t.type === 'order' || t.type === 'opening_balance' ? (t.unit_price?.toLocaleString() || '0') : '',
+        t.type === 'order' || t.type === 'opening_balance' ? (t.amount?.toLocaleString() || '0') : '',
+        t.type === 'payment' ? (t.payment?.toLocaleString() || '0') : '',
+        t.type === 'expense' ? (t.expense?.toLocaleString() || '0') : '',
+        t.order_balance?.toLocaleString() || '0',
+        t.net_balance?.toLocaleString() || '0'
       ].map(v => `"${v}"`).join(","))
     ];
 
@@ -657,9 +665,9 @@ export default function ClientsPage() {
     document.body.removeChild(link);
   };
 
-  const totalPaid = payments.reduce((sum, payment) => sum + payment.amount_paid, 0);
-  const balance = selectedOrder ? selectedOrder.total_amount - totalPaid : 0;
-  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount_spent, 0);
+  const totalPaid = payments.reduce((sum, payment) => sum + (payment.amount_paid || 0), 0);
+  const balance = selectedOrder ? (selectedOrder.total_amount || 0) - totalPaid : 0;
+  const totalExpenses = expenses.reduce((sum, expense) => sum + (expense.amount_spent || 0), 0);
 
   useEffect(() => {
     fetchClients();
@@ -944,7 +952,7 @@ export default function ClientsPage() {
                       </TableCell>
                       <TableCell>{client?.name || 'Unknown Client'}</TableCell>
                       <TableCell className="text-right">
-                        {parseFloat(balance.amount).toLocaleString()}
+                        {parseFloat(balance.amount || 0).toLocaleString()}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -1032,7 +1040,7 @@ export default function ClientsPage() {
                   <SelectContent>
                     {orders.map((order) => (
                       <SelectItem key={order.id} value={order.id}>
-                        {order.material} (Qty: {order.quantity}) - {order.total_amount.toLocaleString()}
+                        {order.material} (Qty: {order.quantity}) - {(order.total_amount || 0).toLocaleString()}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1202,9 +1210,9 @@ export default function ClientsPage() {
                     </TableCell>
                     <TableCell>{order.material}</TableCell>
                     <TableCell>{order.quantity}</TableCell>
-                    <TableCell>{order.cost.toLocaleString()}</TableCell>
+                    <TableCell>{(order.cost || 0).toLocaleString()}</TableCell>
                     <TableCell>
-                      {(order.quantity * order.cost).toLocaleString()}
+                      {((order.quantity || 0) * (order.cost || 0)).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -1407,7 +1415,7 @@ export default function ClientsPage() {
                 {transactions.map((transaction, index) => (
                   <TableRow key={`${transaction.type}-${transaction.id}-${index}`}>
                     <TableCell>
-                      {new Date(transaction.date).toLocaleDateString()}
+                      {new Date(transaction.date || new Date()).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
                       {transaction.type === 'order' ? 
@@ -1424,26 +1432,26 @@ export default function ClientsPage() {
                       {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.quantity : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.unit_price.toLocaleString() : '-'}
+                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? (transaction.unit_price || 0).toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.amount.toLocaleString() : '-'}
+                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? (transaction.amount || 0).toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'payment' ? transaction.payment.toLocaleString() : '-'}
+                      {transaction.type === 'payment' ? (transaction.payment || 0).toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'expense' ? transaction.expense.toLocaleString() : '-'}
+                      {transaction.type === 'expense' ? (transaction.expense || 0).toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className={`text-right font-medium ${
-                      transaction.order_balance > 0 ? 'text-red-600' : 'text-green-600'
+                      (transaction.order_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'
                     }`}>
-                      {transaction.order_balance.toLocaleString()}
+                      {(transaction.order_balance || 0).toLocaleString()}
                     </TableCell>
                     <TableCell className={`text-right font-medium ${
-                      transaction.net_balance > 0 ? 'text-red-600' : 'text-green-600'
+                      (transaction.net_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'
                     }`}>
-                      {transaction.net_balance.toLocaleString()}
+                      {(transaction.net_balance || 0).toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1472,7 +1480,7 @@ export default function ClientsPage() {
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="border rounded-lg p-3">
                 <p className="text-sm text-gray-500">Total Amount</p>
-                <p className="font-bold">{selectedOrder?.total_amount.toLocaleString()}</p>
+                <p className="font-bold">{(selectedOrder?.total_amount || 0).toLocaleString()}</p>
               </div>
               <div className="border rounded-lg p-3">
                 <p className="text-sm text-gray-500">Amount Paid</p>
@@ -1511,7 +1519,7 @@ export default function ClientsPage() {
                         {payment.mode_of_payment === 'Mobile Money' && payment.mode_of_mobilemoney}
                       </TableCell>
                       <TableCell>
-                        {payment.amount_paid.toLocaleString()}
+                        {(payment.amount_paid || 0).toLocaleString()}
                       </TableCell>
                     </TableRow>
                   ))}
