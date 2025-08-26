@@ -577,7 +577,6 @@ const MaterialsPage = () => {
             <SelectTrigger><SelectValue placeholder="Action" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="Damaged">Damaged</SelectItem>
-              <SelectItem value="Sold">Sold</SelectItem>
               <SelectItem value="Used in production">Used in production</SelectItem>
             </SelectContent>
           </Select>
