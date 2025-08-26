@@ -466,6 +466,8 @@ export default function ClientsPage() {
           name: newOrder.material,
           quantity: -parseFloat(newOrder.quantity),
           created_at: newOrder.date,
+          date:newOrder.date,
+          action: 'Sold to Client',
           created_by: 'Admin',
           transaction: `${selectedClient.name}-Order`
         }]);
