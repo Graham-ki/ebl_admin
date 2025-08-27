@@ -133,19 +133,11 @@ export default function Suppliers() {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [deliveryNoteType, setDeliveryNoteType] = useState('');
   
-  const getEastAfricanDateTime = () => {
+  const getEastAfricanDate = () => {
     const now = new Date();
-    const offset = 3 * 60 * 60 * 1000; // East Africa Time (UTC+3)
+    const offset = 3 * 60 * 60 * 1000;
     const eastAfricanTime = new Date(now.getTime() + offset);
-    
-    // Format as YYYY-MM-DDTHH:MM for datetime-local input
-    const year = eastAfricanTime.getUTCFullYear();
-    const month = String(eastAfricanTime.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(eastAfricanTime.getUTCDate()).padStart(2, '0');
-    const hours = String(eastAfricanTime.getUTCHours()).padStart(2, '0');
-    const minutes = String(eastAfricanTime.getUTCMinutes()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+    return eastAfricanTime.toISOString().split('T')[0];
   };
   
   const [supplierForm, setSupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
@@ -164,7 +156,7 @@ export default function Suppliers() {
   const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at" | "value">>({
     supply_item_id: "",
     quantity: 0,
-    delivery_date: getEastAfricanDateTime(),
+    delivery_date: getEastAfricanDate(),
     notes: "",
     client_id: "",
   });
@@ -175,7 +167,7 @@ export default function Suppliers() {
     supply_item_id: "",    
     supplier_id: "",    
     amount: 0,    
-    payment_date: getEastAfricanDateTime(),    
+    payment_date: getEastAfricanDate(),    
     method: "cash",    
     bank_name: "",    
     mode_of_mobilemoney: "",  
@@ -711,7 +703,7 @@ export default function Suppliers() {
     }
   };
 
-  const handleDeleteSupplier = async (id: string) {
+  const handleDeleteSupplier = async (id: string) => {
     setError(null);
     
     try {
@@ -813,7 +805,7 @@ export default function Suppliers() {
     setDeliveryForm({
       supply_item_id: "",
       quantity: 0,
-      delivery_date: getEastAfricanDateTime(),
+      delivery_date: getEastAfricanDate(),
       notes: "",
       client_id: "",
     });
@@ -822,12 +814,12 @@ export default function Suppliers() {
     setSelectedClient('');
   };
 
-  const resetPaymentForm = () {
+  const resetPaymentForm = () => {
     setPaymentForm({
       supply_item_id: "",
       supplier_id: "",
       amount: 0,
-      payment_date: getEastAfricanDateTime(),
+      payment_date: getEastAfricanDate(),
       method: "cash",
       bank_name: "",
       mode_of_mobilemoney: "",
@@ -1305,7 +1297,7 @@ export default function Suppliers() {
                         );
                       })}
                     </tbody>
-                    </table>
+                  </table>
                 )}
               </div>
             </div>
@@ -1570,10 +1562,10 @@ export default function Suppliers() {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Delivery Date & Time
+                    Delivery Date
                   </label>
                   <input
-                    type="datetime-local"
+                    type="date"
                     name="delivery_date"
                     value={deliveryForm.delivery_date}
                     onChange={(e) => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
@@ -1735,10 +1727,10 @@ export default function Suppliers() {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Payment Date & Time
+                    Payment Date
                   </label>
                   <input
-                    type="datetime-local"
+                    type="date"
                     name="payment_date"
                     value={paymentForm.payment_date}
                     onChange={(e) => setPaymentForm({...paymentForm, payment_date: e.target.value})}
@@ -1863,3 +1855,4 @@ export default function Suppliers() {
     </div>
   );
 }
+I'll h
