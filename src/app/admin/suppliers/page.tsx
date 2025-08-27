@@ -121,7 +121,6 @@ export default function Suppliers() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [localSupplierBalances, setLocalSupplierBalances] = useState<SupplierBalance[]>([]);
-  // date formatter
   
   // Update the global supplierBalances variable when localSupplierBalances changes
   useEffect(() => {
@@ -133,11 +132,19 @@ export default function Suppliers() {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [deliveryNoteType, setDeliveryNoteType] = useState('');
   
-  const getEastAfricanDate = () => {
+  const getEastAfricanDateTime = () => {
     const now = new Date();
-    const offset = 3 * 60 * 60 * 1000;
+    const offset = 3 * 60 * 60 * 1000; // East Africa Time (UTC+3)
     const eastAfricanTime = new Date(now.getTime() + offset);
-    return eastAfricanTime.toISOString().split('T')[0];
+    
+    // Format as YYYY-MM-DDTHH:MM for datetime-local input
+    const year = eastAfricanTime.getFullYear();
+    const month = String(eastAfricanTime.getMonth() + 1).padStart(2, '0');
+    const day = String(eastAfricanTime.getDate()).padStart(2, '0');
+    const hours = String(eastAfricanTime.getHours()).padStart(2, '0');
+    const minutes = String(eastAfricanTime.getMinutes()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
   
   const [supplierForm, setSupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
@@ -156,7 +163,7 @@ export default function Suppliers() {
   const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at" | "value">>({
     supply_item_id: "",
     quantity: 0,
-    delivery_date: getEastAfricanDate(),
+    delivery_date: getEastAfricanDateTime(),
     notes: "",
     client_id: "",
   });
@@ -167,7 +174,7 @@ export default function Suppliers() {
     supply_item_id: "",    
     supplier_id: "",    
     amount: 0,    
-    payment_date: getEastAfricanDate(),    
+    payment_date: getEastAfricanDateTime(),    
     method: "cash",    
     bank_name: "",    
     mode_of_mobilemoney: "",  
@@ -311,6 +318,8 @@ export default function Suppliers() {
   };
 
   const formatDate = (dateString: string) => {
+    // Handle both date-only and datetime strings
+    const date = new Date(dateString);
     const options: Intl.DateTimeFormatOptions = {
       timeZone: 'Africa/Nairobi',
       year: 'numeric',
@@ -319,7 +328,7 @@ export default function Suppliers() {
       hour: '2-digit',
       minute: '2-digit'
     };
-    return new Date(dateString).toLocaleString('en-US', options);
+    return date.toLocaleString('en-US', options);
   };
 
   const formatCurrency = (amount: number) => {
@@ -805,7 +814,7 @@ export default function Suppliers() {
     setDeliveryForm({
       supply_item_id: "",
       quantity: 0,
-      delivery_date: getEastAfricanDate(),
+      delivery_date: getEastAfricanDateTime(),
       notes: "",
       client_id: "",
     });
@@ -819,7 +828,7 @@ export default function Suppliers() {
       supply_item_id: "",
       supplier_id: "",
       amount: 0,
-      payment_date: getEastAfricanDate(),
+      payment_date: getEastAfricanDateTime(),
       method: "cash",
       bank_name: "",
       mode_of_mobilemoney: "",
@@ -1000,7 +1009,7 @@ export default function Suppliers() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
           </div>
         )}
       </div>
@@ -1562,10 +1571,10 @@ export default function Suppliers() {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Delivery Date
+                    Delivery Date & Time
                   </label>
                   <input
-                    type="date"
+                    type="datetime-local"
                     name="delivery_date"
                     value={deliveryForm.delivery_date}
                     onChange={(e) => setDeliveryForm({...deliveryForm, delivery_date: e.target.value})}
@@ -1727,10 +1736,10 @@ export default function Suppliers() {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Payment Date
+                    Payment Date & Time
                   </label>
                   <input
-                    type="date"
+                    type="datetime-local"
                     name="payment_date"
                     value={paymentForm.payment_date}
                     onChange={(e) => setPaymentForm({...paymentForm, payment_date: e.target.value})}
@@ -1855,4 +1864,3 @@ export default function Suppliers() {
     </div>
   );
 }
-I'll h
