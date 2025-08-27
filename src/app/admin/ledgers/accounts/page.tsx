@@ -132,7 +132,8 @@ export default function FinancialSummaryPage() {
       amount_available: amountPaid,
       submittedby: "Admin",
       purpose: purpose,
-      name: name // Added name to deposit data
+      name: name,// Added name to deposit data
+      created_at: new Date()
     };
 
     if (modeOfPayment === "Mobile Money") {
