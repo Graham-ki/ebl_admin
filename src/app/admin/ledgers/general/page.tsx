@@ -19,6 +19,7 @@ export default function CashFlowLedgerPage() {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<"daily" | "monthly" | "yearly" | "all" | "custom">("all");
   const [users, setUsers] = useState<Record<string, string>>({});
+  const [clients, setClients] = useState<Record<string, string>>({});
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [modeDetails, setModeDetails] = useState<any[]>([]);
@@ -33,23 +34,54 @@ export default function CashFlowLedgerPage() {
     mobileMoney: { inflow: 0, outflow: 0, balance: 0 }
   });
 
-  const fetchUsers = async () => {
+  const fetchUsersAndClients = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch users
+      const { data: usersData, error: usersError } = await supabase
         .from("users")
         .select("id, name");
       
-      if (error) throw error;
+      if (usersError) throw usersError;
 
-      const usersMap = data.reduce((acc, user) => {
+      const usersMap = usersData.reduce((acc, user) => {
         acc[user.id] = user.name;
         return acc;
       }, {} as Record<string, string>);
 
       setUsers(usersMap);
+
+      // Fetch clients
+      const { data: clientsData, error: clientsError } = await supabase
+        .from("clients")
+        .select("id, name");
+      
+      if (clientsError) throw clientsError;
+
+      const clientsMap = clientsData.reduce((acc, client) => {
+        acc[client.id] = client.name;
+        return acc;
+      }, {} as Record<string, string>);
+
+      setClients(clientsMap);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Error fetching users and clients:", error);
     }
+  };
+
+  const getNameFromUserId = (userId: string | null) => {
+    if (!userId) return "Unknown";
+    
+    // Check if user exists in users table
+    if (users[userId]) {
+      return users[userId];
+    }
+    
+    // Check if user exists in clients table
+    if (clients[userId]) {
+      return clients[userId];
+    }
+    
+    return "Unknown";
   };
 
   const fetchCashFlowData = async (filterType: "daily" | "monthly" | "yearly" | "all" | "custom") => {
@@ -138,7 +170,7 @@ export default function CashFlowLedgerPage() {
       const transformedInflows = (inflows || []).map(item => ({
         id: item.id,
         date: item.created_at,
-        name: item.user_id ? (users[item.user_id] || "Unknown") : (item.name || "Unknown"),
+        name: item.user_id ? getNameFromUserId(item.user_id) : (item.name || "Unknown"),
         reason: item.purpose || "N/A",
         inflow: item.amount_paid,
         outflow: null,
@@ -289,8 +321,8 @@ export default function CashFlowLedgerPage() {
     return new Date(dateString).toLocaleString('en-US', options);
   };
 
-  const handleDownloadCSV = () => {
-    if (cashFlowData.length === 0) {
+  const handleDownloadCSV = (data: any[], filename: string) => {
+    if (data.length === 0) {
       alert("No data to download");
       return;
     }
@@ -302,17 +334,21 @@ export default function CashFlowLedgerPage() {
       "Inflow (Debit)",
       "Outflow (Credit)",
       "Balance",
-      "Type"
+      "Type",
+      "Payment Mode",
+      "Sub Mode"
     ];
 
-    const rows = cashFlowData.map(item => [
+    const rows = data.map(item => [
       formatDate(item.date),
       item.name,
       item.reason,
       item.inflow || "",
       item.outflow || "",
       item.balance,
-      item.type === "inflow" ? "Inflow" : "Outflow"
+      item.type === "inflow" ? "Inflow" : "Outflow",
+      item.mode || "",
+      item.subMode || ""
     ]);
 
     const csvContent = [
@@ -324,7 +360,7 @@ export default function CashFlowLedgerPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `cash_flow_${filter}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", filename);
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
@@ -345,14 +381,14 @@ export default function CashFlowLedgerPage() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchUsersAndClients();
   }, []);
 
   useEffect(() => {
-    if (Object.keys(users).length > 0) {
+    if (Object.keys(users).length > 0 && Object.keys(clients).length > 0) {
       fetchCashFlowData(filter);
     }
-  }, [filter, users]);
+  }, [filter, users, clients]);
 
   return (
     <div className="container mx-auto p-4 md:p-6">
@@ -469,7 +505,7 @@ export default function CashFlowLedgerPage() {
 
         <Button 
           variant="outline" 
-          onClick={handleDownloadCSV}
+          onClick={() => handleDownloadCSV(cashFlowData, `cash_flow_${filter}_${new Date().toISOString().slice(0, 10)}.csv`)}
           className="ml-auto"
           disabled={cashFlowData.length === 0}
         >
@@ -529,7 +565,17 @@ export default function CashFlowLedgerPage() {
       <Dialog open={showModeDialog} onOpenChange={setShowModeDialog}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{currentMode} Transactions</DialogTitle>
+            <DialogTitle className="flex justify-between items-center">
+              <span>{currentMode} Transactions</span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleDownloadCSV(modeDetails, `${currentMode}_transactions_${new Date().toISOString().slice(0, 10)}.csv`)}
+                disabled={modeDetails.length === 0}
+              >
+                Download CSV
+              </Button>
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             {(currentMode === "Bank" || currentMode === "Mobile Money") && (
@@ -592,7 +638,17 @@ export default function CashFlowLedgerPage() {
       <Dialog open={showSubModeDialog} onOpenChange={setShowSubModeDialog}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{currentSubMode} {currentMode} Transactions</DialogTitle>
+            <DialogTitle className="flex justify-between items-center">
+              <span>{currentSubMode} {currentMode} Transactions</span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleDownloadCSV(subModeDetails, `${currentSubMode}_${currentMode}_transactions_${new Date().toISOString().slice(0, 10)}.csv`)}
+                disabled={subModeDetails.length === 0}
+              >
+                Download CSV
+              </Button>
+            </DialogTitle>
           </DialogHeader>
           <Table>
             <TableHeader>
