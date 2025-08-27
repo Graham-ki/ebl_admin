@@ -308,9 +308,30 @@ export default function CashFlowLedgerPage() {
     }).format(amount);
   };
 
+  // Format date to East African Time (Kampala)
   const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    
+    // Convert to East African Time (UTC+3)
+    const offset = 3 * 60; // EAT is UTC+3
+    const eatDate = new Date(date.getTime() + offset * 60 * 1000);
+    
     const options: Intl.DateTimeFormatOptions = {
-      timeZone: 'Africa/Nairobi',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Africa/Nairobi'
+    };
+    
+    return eatDate.toLocaleString('en-US', options);
+  };
+
+  // Format date for CSV (without timezone conversion to preserve original data)
+  const formatDateForCSV = (dateString: string) => {
+    const date = new Date(dateString);
+    const options: Intl.DateTimeFormatOptions = {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -318,7 +339,7 @@ export default function CashFlowLedgerPage() {
       minute: '2-digit'
     };
     
-    return new Date(dateString).toLocaleString('en-US', options);
+    return date.toLocaleString('en-US', options);
   };
 
   const handleDownloadCSV = (data: any[], filename: string) => {
@@ -340,7 +361,7 @@ export default function CashFlowLedgerPage() {
     ];
 
     const rows = data.map(item => [
-      formatDate(item.date),
+      formatDateForCSV(item.date),
       item.name,
       item.reason,
       item.inflow || "",
@@ -398,6 +419,9 @@ export default function CashFlowLedgerPage() {
         </h1>
         <p className="text-gray-600 dark:text-gray-300">
           Track all cash inflows and outflows with running balance
+        </p>
+        <p className="text-sm text-gray-500 mt-1">
+          All times displayed in East Africa Time (EAT)
         </p>
       </div>
 
@@ -517,7 +541,7 @@ export default function CashFlowLedgerPage() {
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
-              <TableHead className="font-semibold text-gray-700">Date & Time</TableHead>
+              <TableHead className="font-semibold text-gray-700">Date & Time (EAT)</TableHead>
               <TableHead className="font-semibold text-gray-700">Name</TableHead>
               <TableHead className="font-semibold text-gray-700">Reason</TableHead>
               <TableHead className="font-semibold text-gray-700 text-right">Inflow (Debit)</TableHead>
@@ -596,7 +620,7 @@ export default function CashFlowLedgerPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Date (EAT)</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
@@ -653,7 +677,7 @@ export default function CashFlowLedgerPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
+                <TableHead>Date (EAT)</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Reason</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
