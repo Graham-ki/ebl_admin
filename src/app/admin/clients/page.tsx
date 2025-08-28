@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -54,17 +54,72 @@ const datetimeLocalToISO = (datetimeLocal: string): string => {
   return new Date(datetimeLocal).toISOString();
 };
 
+interface Client {
+  id: string;
+  name: string;
+  contact: string;
+  address: string;
+  orderCount?: number;
+}
+
+interface Material {
+  id: string;
+  name: string;
+}
+
+interface Order {
+  id: string;
+  user: string;
+  material: string;
+  quantity: number;
+  cost: number;
+  created_at: string;
+  total_amount?: number;
+}
+
+interface Payment {
+  id: string;
+  amount_paid: number;
+  created_at: string;
+  mode_of_payment: string;
+  bank_name?: string;
+  mode_of_mobilemoney?: string;
+  purpose?: string;
+  order_id?: string;
+}
+
+interface Expense {
+  id: string;
+  date: string;
+  item: string;
+  amount_spent: number;
+  department: string;
+}
+
+interface OpeningBalance {
+  id: string;
+  client_id: string;
+  amount: string;
+  status: string;
+  created_at: string;
+  clients?: {
+    id: string;
+    name: string;
+  };
+}
+
 export default function ClientsPage() {
-  const [clients, setClients] = useState<any[]>([]);
-  const [materials, setMaterials] = useState<any[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<any>(null);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
-  const [payments, setPayments] = useState<any[]>([]);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [openingBalances, setOpeningBalances] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [openingBalances, setOpeningBalances] = useState<OpeningBalance[]>([]);
+  
   const [newPayment, setNewPayment] = useState({
     date: getCurrentEATDateTime(),
     amount: "",
@@ -74,28 +129,33 @@ export default function ClientsPage() {
     purpose: "Order Payment",
     order_id: ""
   });
+  
   const [newOrder, setNewOrder] = useState({
     date: getCurrentEATDateTime(),
     material: "",
     quantity: "",
     cost: ""
   });
+  
   const [newExpense, setNewExpense] = useState({
     date: getCurrentEATDateTime(),
     item: "",
     amount: ""
   });
+  
   const [newOpeningBalance, setNewOpeningBalance] = useState({
     date: getCurrentEATDateTime(),
     amount: "",
     client_id: "",
     status: "Unpaid"
   });
+  
   const [newClient, setNewClient] = useState({
     name: "",
     contact: "",
     address: ""
   });
+  
   const [showOrdersDialog, setShowOrdersDialog] = useState(false);
   const [showPaymentsDialog, setShowPaymentsDialog] = useState(false);
   const [showAddOrderDialog, setShowAddOrderDialog] = useState(false);
@@ -116,7 +176,7 @@ export default function ClientsPage() {
       if (clientsError) throw clientsError;
 
       const clientsWithCounts = await Promise.all(
-        clients.map(async (client) => {
+        (clients || []).map(async (client) => {
           const { count, error: countError } = await supabase
             .from("order")
             .select("*", { count: "exact", head: true })
@@ -131,7 +191,7 @@ export default function ClientsPage() {
         })
       );
 
-      setClients(clientsWithCounts);
+      setClients(clientsWithCounts || []);
     } catch (error) {
       console.error("Error fetching clients:", error);
     } finally {
@@ -298,9 +358,9 @@ export default function ClientsPage() {
           id: balance.id,
           date: balance.created_at,
           item: `Opening Balance`,
-          amount: balance.amount,
+          amount: parseFloat(balance.amount || "0"),
           quantity: 1,
-          unit_price: balance.amount,
+          unit_price: parseFloat(balance.amount || "0"),
           payment: 0,
           expense: 0,
           status: balance.status,
@@ -309,7 +369,7 @@ export default function ClientsPage() {
           bank_name: '',
           mobile_money_provider: ''
         })) || []),
-        ...(ordersData?.map(order => ({
+        ...((ordersData || []).map(order => ({
           type: 'order',
           id: order.id,
           date: order.created_at,
@@ -325,7 +385,7 @@ export default function ClientsPage() {
           bank_name: '',
           mobile_money_provider: ''
         })) || []),
-        ...(paymentsData?.map(payment => ({
+        ...((paymentsData || []).map(payment => ({
           type: 'payment',
           id: payment.id,
           date: payment.created_at,
@@ -342,7 +402,7 @@ export default function ClientsPage() {
           quantity: 0,
           unit_price: 0
         })) || []),
-        ...(expensesData?.map(expense => ({
+        ...((expensesData || []).map(expense => ({
           type: 'expense',
           id: expense.id,
           date: expense.date,
@@ -400,7 +460,7 @@ export default function ClientsPage() {
     try {
       const paymentData: any = {
         amount_paid: parseFloat(newPayment.amount),
-        created_at: formatToEATDateTime(datetimeLocalToISO(newPayment.date)), // Format to EAT with time
+        created_at: formatToEATDateTime(datetimeLocalToISO(newPayment.date)),
         user_id: selectedClient.id,
         mode_of_payment: newPayment.mode_of_payment,
         payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
@@ -417,7 +477,7 @@ export default function ClientsPage() {
         paymentData.mode_of_mobilemoney = newPayment.mobile_money_provider;
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("finance")
         .insert([paymentData]);
 
@@ -478,17 +538,16 @@ export default function ClientsPage() {
       const material = materials.find(m => m.name === newOrder.material);
       if (!material) throw new Error("Material not found");
 
-      const { data: orderData, error: orderError } = await supabase
+      const { error: orderError } = await supabase
         .from("order")
         .insert([{
           user: selectedClient.id,
           material: newOrder.material,
           quantity: parseFloat(newOrder.quantity),
           cost: parseFloat(newOrder.cost),
-          created_at: formatToEATDateTime(datetimeLocalToISO(newOrder.date)), // Format to EAT with time
+          created_at: formatToEATDateTime(datetimeLocalToISO(newOrder.date)),
           total_amount: parseFloat(newOrder.quantity) * parseFloat(newOrder.cost)
-        }])
-        .select();
+        }]);
 
       if (orderError) throw orderError;
       
@@ -498,8 +557,8 @@ export default function ClientsPage() {
           material_id: material.id,
           name: newOrder.material,
           quantity: -parseFloat(newOrder.quantity),
-          created_at: formatToEATDateTime(datetimeLocalToISO(newOrder.date)), // Format to EAT with time
-          date: formatToEATDateTime(datetimeLocalToISO(newOrder.date)), // Format to EAT with time
+          created_at: formatToEATDateTime(datetimeLocalToISO(newOrder.date)),
+          date: formatToEATDateTime(datetimeLocalToISO(newOrder.date)),
           action: 'Sold to Client',
           created_by: 'Admin',
           transaction: `${selectedClient.name}-Order`
@@ -535,10 +594,10 @@ export default function ClientsPage() {
       if (clientError) throw clientError;
       if (!clientData) throw new Error("Client not found");
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("expenses")
         .insert([{
-          date: formatToEATDateTime(datetimeLocalToISO(newExpense.date)), // Format to EAT with time
+          date: formatToEATDateTime(datetimeLocalToISO(newExpense.date)),
           item: newExpense.item,
           amount_spent: parseFloat(newExpense.amount),
           department: clientData.name
@@ -564,13 +623,13 @@ export default function ClientsPage() {
     if (!newOpeningBalance.client_id || !newOpeningBalance.amount) return;
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("opening_balances")
         .insert([{
           client_id: newOpeningBalance.client_id,
           amount: parseFloat(newOpeningBalance.amount),
           status: newOpeningBalance.status,
-          created_at: formatToEATDateTime(datetimeLocalToISO(newOpeningBalance.date)) // Format to EAT with time
+          created_at: formatToEATDateTime(datetimeLocalToISO(newOpeningBalance.date))
         }]);
 
       if (error) throw error;
@@ -594,7 +653,7 @@ export default function ClientsPage() {
     if (!newClient.name || !newClient.contact) return;
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("clients")
         .insert([{
           name: newClient.name,
@@ -631,7 +690,7 @@ export default function ClientsPage() {
       if (status === "Pay") {
         const balance = openingBalances.find(b => b.id === id);
         if (balance) {
-          setSelectedClient(clients.find(c => c.id === balance.client_id));
+          setSelectedClient(clients.find(c => c.id === balance.client_id) || null);
           setNewPayment({
             date: getCurrentEATDateTime(),
             amount: balance.amount.toString(),
@@ -702,7 +761,6 @@ export default function ClientsPage() {
 
   const totalPaid = payments.reduce((sum, payment) => sum + (payment.amount_paid || 0), 0);
   const balance = selectedOrder ? (selectedOrder.total_amount || 0) - totalPaid : 0;
-  const totalExpenses = expenses.reduce((sum, expense) => sum + (expense.amount_spent || 0), 0);
 
   useEffect(() => {
     fetchClients();
@@ -710,7 +768,7 @@ export default function ClientsPage() {
     fetchOpeningBalances();
   }, []);
 
-  const handleViewOrders = (client: any) => {
+  const handleViewOrders = (client: Client) => {
     setSelectedClient(client);
     fetchOrders(client.id);
     fetchExpenses(client.id);
@@ -718,7 +776,7 @@ export default function ClientsPage() {
     setShowOrdersDialog(true);
   };
 
-  const handleViewPayments = (order: any) => {
+  const handleViewPayments = (order: Order) => {
     setSelectedOrder(order);
     fetchPayments(order.id);
     setShowPaymentsDialog(true);
@@ -987,7 +1045,7 @@ export default function ClientsPage() {
                       </TableCell>
                       <TableCell>{client?.name || 'Unknown Client'}</TableCell>
                       <TableCell className="text-right">
-                        {parseFloat(balance.amount || 0).toLocaleString()}
+                        {parseFloat(balance.amount || "0").toLocaleString()}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -1147,430 +1205,430 @@ export default function ClientsPage() {
                     ...newPayment,
                     mobile_money_provider: value
                   })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MTN">MTN</SelectItem>
-                  <SelectItem value="Airtel">Airtel</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button
-            onClick={addPayment}
-            disabled={
-              !newPayment.amount || 
-              !newPayment.mode_of_payment || 
-              (newPayment.mode_of_payment === 'Bank' && !newPayment.bank_name) ||
-              (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider) ||
-              (newPayment.purpose === "Order Payment" && !newPayment.order_id)
-            }
-          >
-            Record Payment
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    {/* Orders Dialog */}
-    <Dialog open={showOrdersDialog} onOpenChange={setShowOrdersDialog}>
-      <DialogContent className="max-w-6xl rounded-lg">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
-            Orders for {selectedClient?.name}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="flex justify-end mb-4 space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAddOrderDialog(true)}
-          >
-            Add New Order
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowExpenseDialog(true)}
-          >
-            Record Expense
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setShowPaymentForm(true);
-              setNewPayment({
-                date: getCurrentEATDateTime(),
-                amount: "",
-                mode_of_payment: "",
-                bank_name: "",
-                mobile_money_provider: "",
-                purpose: "Order Payment",
-                order_id: ""
-              });
-            }}
-          >
-            Record Payment
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleViewLedger}
-          >
-            View General Ledger
-          </Button>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto">
-          <Table>
-            <TableHeader className="bg-gray-50">
-              <TableRow>
-                <TableHead className="font-semibold">Date & Time</TableHead>
-                <TableHead className="font-semibold">Material</TableHead>
-                <TableHead className="font-semibold">Quantity</TableHead>
-                <TableHead className="font-semibold">Unit Price</TableHead>
-                <TableHead className="font-semibold">Total Amount</TableHead>
-                <TableHead className="font-semibold text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order.id}>
-                  <TableCell>
-                    {new Date(order.created_at).toLocaleString()}
-                  </TableCell>
-                  <TableCell>{order.material}</TableCell>
-                  <TableCell>{order.quantity}</TableCell>
-                  <TableCell>{(order.cost || 0).toLocaleString()}</TableCell>
-                  <TableCell>
-                    {((order.quantity || 0) * (order.cost || 0)).toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewPayments(order)}
-                    >
-                      View Payments
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {orders.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                    No orders found for this client
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </DialogContent>
-    </Dialog>
-
-    {/* Add Order Dialog */}
-    <Dialog open={showAddOrderDialog} onOpenChange={setShowAddOrderDialog}>
-      <DialogContent className="max-w-md rounded-lg">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
-            Add New Order for {selectedClient?.name}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date & Time
-            </label>
-            <Input
-              type="datetime-local"
-              value={newOrder.date}
-              onChange={(e) => setNewOrder({
-                ...newOrder,
-                date: e.target.value
-              })}
-            />
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MTN">MTN</SelectItem>
+                    <SelectItem value="Airtel">Airtel</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Material
-            </label>
-            <Select
-              value={newOrder.material}
-              onValueChange={(value) => setNewOrder({
-                ...newOrder,
-                material: value
-              })}
+          <DialogFooter>
+            <Button
+              onClick={addPayment}
+              disabled={
+                !newPayment.amount || 
+                !newPayment.mode_of_payment || 
+                (newPayment.mode_of_payment === 'Bank' && !newPayment.bank_name) ||
+                (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider) ||
+                (newPayment.purpose === "Order Payment" && !newPayment.order_id)
+              }
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a material" />
-              </SelectTrigger>
-              <SelectContent>
-                {materials.map((material) => (
-                  <SelectItem key={material.name} value={material.name}>
-                    {material.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Quantity
-            </label>
-            <Input
-              type="number"
-              placeholder="Enter quantity"
-              value={newOrder.quantity}
-              onChange={(e) => setNewOrder({
-                ...newOrder,
-                quantity: e.target.value
-              })}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Unit Price
-            </label>
-            <Input
-              type="number"
-              placeholder="Enter unit price"
-              value={newOrder.cost}
-              onChange={(e) => setNewOrder({
-                ...newOrder,
-                cost: e.target.value
-              })}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button onClick={addOrder} disabled={!newOrder.material || !newOrder.quantity || !newOrder.cost}>
-            Add Order
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              Record Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-    {/* Add Expense Dialog */}
-    <Dialog open={showExpenseDialog} onOpenChange={setShowExpenseDialog}>
-      <DialogContent className="max-w-md rounded-lg">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
-            Record Expense for {selectedClient?.name}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date & Time
-            </label>
-            <Input
-              type="datetime-local"
-              value={newExpense.date}
-              onChange={(e) => setNewExpense({
-                ...newExpense,
-                date: e.target.value
-              })}
-            />
+      {/* Orders Dialog */}
+      <Dialog open={showOrdersDialog} onOpenChange={setShowOrdersDialog}>
+        <DialogContent className="max-w-6xl rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Orders for {selectedClient?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-end mb-4 space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddOrderDialog(true)}
+            >
+              Add New Order
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowExpenseDialog(true)}
+            >
+              Record Expense
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowPaymentForm(true);
+                setNewPayment({
+                  date: getCurrentEATDateTime(),
+                  amount: "",
+                  mode_of_payment: "",
+                  bank_name: "",
+                  mobile_money_provider: "",
+                  purpose: "Order Payment",
+                  order_id: ""
+                });
+              }}
+            >
+              Record Payment
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleViewLedger}
+            >
+              View General Ledger
+            </Button>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Item
-            </label>
-            <Input
-              type="text"
-              placeholder="Enter expense item"
-              value={newExpense.item}
-              onChange={(e) => setNewExpense({
-                ...newExpense,
-                item: e.target.value
-              })}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Amount
-            </label>
-            <Input
-              type="number"
-              placeholder="Enter amount"
-              value={newExpense.amount}
-              onChange={(e) => setNewExpense({
-                ...newExpense,
-                amount: e.target.value
-              })}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button onClick={addExpense} disabled={!newExpense.item || !newExpense.amount}>
-            Record Expense
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    {/* General Ledger Dialog */}
-    <Dialog open={showLedgerDialog} onOpenChange={setShowLedgerDialog}>
-      <DialogContent className="max-w-6xl rounded-lg">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
-            General Ledger for {selectedClient?.name}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="flex justify-end mb-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={downloadLedger}
-          >
-            Download as CSV
-          </Button>
-        </div>
-        <div className="max-h-[70vh] overflow-y-auto">
-          <Table>
-            <TableHeader className="bg-gray-50">
-              <TableRow>
-                <TableHead className="font-semibold">Date & Time</TableHead>
-                <TableHead className="font-semibold">Description</TableHead>
-                <TableHead className="font-semibold text-right">Quantity</TableHead>
-                <TableHead className="font-semibold text-right">Unit Price</TableHead>
-                <TableHead className="font-semibold text-right">Order Amount</TableHead>
-                <TableHead className="font-semibold text-right">Payment</TableHead>
-                <TableHead className="font-semibold text-right">Expense</TableHead>
-                <TableHead className="font-semibold text-right">Order Balance</TableHead>
-                <TableHead className="font-semibold text-right">Net Balance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.map((transaction, index) => (
-                <TableRow key={`${transaction.type}-${transaction.id}-${index}`}>
-                  <TableCell>
-                    {new Date(transaction.date || new Date()).toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    {transaction.type === 'order' ? 
-                      `${transaction.item} (Order #${transaction.id})` : 
-                      transaction.type === 'payment' ?
-                      `Payment (${transaction.mode_of_payment})` :
-                      transaction.type === 'opening_balance' ?
-                      `Opening Balance (${transaction.status)` :
-                      `Expense: ${transaction.item}`}
-                    {transaction.bank_name && ` - ${transaction.bank_name}`}
-                    {transaction.mobile_money_provider && ` - ${transaction.mobile_money_provider}`}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.quantity : '-'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {transaction.type === 'order' || transaction.type === 'opening_balance' ? (transaction.unit_price || 0).toLocaleString() : '-'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {transaction.type === 'order' || transaction.type === 'opening_balance' ? (transaction.amount || 0).toLocaleString() : '-'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {transaction.type === 'payment' ? (transaction.payment || 0).toLocaleString() : '-'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {transaction.type === 'expense' ? (transaction.expense || 0).toLocaleString() : '-'}
-                  </TableCell>
-                  <TableCell className={`text-right font-medium ${
-                    (transaction.order_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'
-                  }`}>
-                    {(transaction.order_balance || 0).toLocaleString()}
-                  </TableCell>
-                  <TableCell className={`text-right font-medium ${
-                    (transaction.net_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'
-                  }`}>
-                    {(transaction.net_balance || 0).toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {transactions.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                    No transactions found for this client
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </DialogContent>
-    </Dialog>
-
-    {/* Payments Dialog */}
-    <Dialog open={showPaymentsDialog} onOpenChange={setShowPaymentsDialog}>
-      <DialogContent className="max-w-2xl rounded-lg">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
-            Payments for Order #{selectedOrder?.id}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            <div className="border rounded-lg p-3">
-              <p className="text-sm text-gray-500">Total Amount</p>
-              <p className="font-bold">{(selectedOrder?.total_amount || 0).toLocaleString()}</p>
-            </div>
-            <div className="border rounded-lg p-3">
-              <p className="text-sm text-gray-500">Amount Paid</p>
-              <p className="font-bold">{totalPaid.toLocaleString()}</p>
-            </div>
-            <div className="border rounded-lg p-3">
-              <p className="text-sm text-gray-500">Balance</p>
-              <p className={`font-bold ${
-                balance > 0 ? 'text-red-600' : 'text-green-600'
-              }`}>
-                {balance.toLocaleString()}
-              </p>
-            </div>
-          </div>
-
-          <h3 className="font-medium">Payment History</h3>
-          <div className="border rounded-lg overflow-hidden">
+          <div className="max-h-[60vh] overflow-y-auto">
             <Table>
               <TableHeader className="bg-gray-50">
                 <TableRow>
-                  <TableHead>Date & Time</TableHead>
-                  <TableHead>Mode</TableHead>
-                  <TableHead>Details</TableHead>
-                  <TableHead>Amount</TableHead>
+                  <TableHead className="font-semibold">Date & Time</TableHead>
+                  <TableHead className="font-semibold">Material</TableHead>
+                  <TableHead className="font-semibold">Quantity</TableHead>
+                  <TableHead className="font-semibold">Unit Price</TableHead>
+                  <TableHead className="font-semibold">Total Amount</TableHead>
+                  <TableHead className="font-semibold text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {payments.map((payment) => (
-                  <TableRow key={payment.id}>
+                {orders.map((order) => (
+                  <TableRow key={order.id}>
                     <TableCell>
-                      {new Date(payment.created_at).toLocaleString()}
+                      {new Date(order.created_at).toLocaleString()}
                     </TableCell>
-                    <TableCell>{payment.mode_of_payment}</TableCell>
+                    <TableCell>{order.material}</TableCell>
+                    <TableCell>{order.quantity}</TableCell>
+                    <TableCell>{(order.cost || 0).toLocaleString()}</TableCell>
                     <TableCell>
-                      {payment.mode_of_payment === 'Bank' && payment.bank_name}
-                      {payment.mode_of_payment === 'Mobile Money' && payment.mode_of_mobilemoney}
+                      {((order.quantity || 0) * (order.cost || 0)).toLocaleString()}
                     </TableCell>
-                    <TableCell>
-                      {(payment.amount_paid || 0).toLocaleString()}
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewPayments(order)}
+                      >
+                        View Payments
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
-                {payments.length === 0 && (
+                {orders.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-4 text-gray-500">
-                      No payments recorded
+                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                      No orders found for this client
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Order Dialog */}
+      <Dialog open={showAddOrderDialog} onOpenChange={setShowAddOrderDialog}>
+        <DialogContent className="max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Add New Order for {selectedClient?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date & Time
+              </label>
+              <Input
+                type="datetime-local"
+                value={newOrder.date}
+                onChange={(e) => setNewOrder({
+                  ...newOrder,
+                  date: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Material
+              </label>
+              <Select
+                value={newOrder.material}
+                onValueChange={(value) => setNewOrder({
+                  ...newOrder,
+                  material: value
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a material" />
+                </SelectTrigger>
+                <SelectContent>
+                  {materials.map((material) => (
+                    <SelectItem key={material.name} value={material.name}>
+                      {material.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Quantity
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter quantity"
+                value={newOrder.quantity}
+                onChange={(e) => setNewOrder({
+                  ...newOrder,
+                  quantity: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Unit Price
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter unit price"
+                value={newOrder.cost}
+                onChange={(e) => setNewOrder({
+                  ...newOrder,
+                  cost: e.target.value
+                })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={addOrder} disabled={!newOrder.material || !newOrder.quantity || !newOrder.cost}>
+              Add Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Expense Dialog */}
+      <Dialog open={showExpenseDialog} onOpenChange={setShowExpenseDialog}>
+        <DialogContent className="max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Record Expense for {selectedClient?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date & Time
+              </label>
+              <Input
+                type="datetime-local"
+                value={newExpense.date}
+                onChange={(e) => setNewExpense({
+                  ...newExpense,
+                  date: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Item
+              </label>
+              <Input
+                type="text"
+                placeholder="Enter expense item"
+                value={newExpense.item}
+                onChange={(e) => setNewExpense({
+                  ...newExpense,
+                  item: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Amount
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter amount"
+                value={newExpense.amount}
+                onChange={(e) => setNewExpense({
+                  ...newExpense,
+                  amount: e.target.value
+                })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={addExpense} disabled={!newExpense.item || !newExpense.amount}>
+              Record Expense
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* General Ledger Dialog */}
+      <Dialog open={showLedgerDialog} onOpenChange={setShowLedgerDialog}>
+        <DialogContent className="max-w-6xl rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              General Ledger for {selectedClient?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-end mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={downloadLedger}
+            >
+              Download as CSV
+            </Button>
+          </div>
+          <div className="max-h-[70vh] overflow-y-auto">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead className="font-semibold">Date & Time</TableHead>
+                  <TableHead className="font-semibold">Description</TableHead>
+                  <TableHead className="font-semibold text-right">Quantity</TableHead>
+                  <TableHead className="font-semibold text-right">Unit Price</TableHead>
+                  <TableHead className="font-semibold text-right">Order Amount</TableHead>
+                  <TableHead className="font-semibold text-right">Payment</TableHead>
+                  <TableHead className="font-semibold text-right">Expense</TableHead>
+                  <TableHead className="font-semibold text-right">Order Balance</TableHead>
+                  <TableHead className="font-semibold text-right">Net Balance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((transaction, index) => (
+                  <TableRow key={`${transaction.type}-${transaction.id}-${index}`}>
+                    <TableCell>
+                      {new Date(transaction.date || new Date()).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      {transaction.type === 'order' ? 
+                        `${transaction.item} (Order #${transaction.id})` : 
+                        transaction.type === 'payment' ?
+                        `Payment (${transaction.mode_of_payment})` :
+                        transaction.type === 'opening_balance' ?
+                        `Opening Balance (${transaction.status})` :
+                        `Expense: ${transaction.item}`}
+                      {transaction.bank_name && ` - ${transaction.bank_name}`}
+                      {transaction.mobile_money_provider && ` - ${transaction.mobile_money_provider}`}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.quantity : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? (transaction.unit_price || 0).toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? (transaction.amount || 0).toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {transaction.type === 'payment' ? (transaction.payment || 0).toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {transaction.type === 'expense' ? (transaction.expense || 0).toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell className={`text-right font-medium ${
+                      (transaction.order_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'
+                    }`}>
+                      {(transaction.order_balance || 0).toLocaleString()}
+                    </TableCell>
+                    <TableCell className={`text-right font-medium ${
+                      (transaction.net_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'
+                    }`}>
+                      {(transaction.net_balance || 0).toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {transactions.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                      No transactions found for this client
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payments Dialog */}
+      <Dialog open={showPaymentsDialog} onOpenChange={setShowPaymentsDialog}>
+        <DialogContent className="max-w-2xl rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Payments for Order #{selectedOrder?.id}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="border rounded-lg p-3">
+                <p className="text-sm text-gray-500">Total Amount</p>
+                <p className="font-bold">{(selectedOrder?.total_amount || 0).toLocaleString()}</p>
+              </div>
+              <div className="border rounded-lg p-3">
+                <p className="text-sm text-gray-500">Amount Paid</p>
+                <p className="font-bold">{totalPaid.toLocaleString()}</p>
+              </div>
+              <div className="border rounded-lg p-3">
+                <p className="text-sm text-gray-500">Balance</p>
+                <p className={`font-bold ${
+                  balance > 0 ? 'text-red-600' : 'text-green-600'
+                }`}>
+                  {balance.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <h3 className="font-medium">Payment History</h3>
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader className="bg-gray-50">
+                  <TableRow>
+                    <TableHead>Date & Time</TableHead>
+                    <TableHead>Mode</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead>Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payments.map((payment) => (
+                    <TableRow key={payment.id}>
+                      <TableCell>
+                        {new Date(payment.created_at).toLocaleString()}
+                      </TableCell>
+                      <TableCell>{payment.mode_of_payment}</TableCell>
+                      <TableCell>
+                        {payment.mode_of_payment === 'Bank' && payment.bank_name}
+                        {payment.mode_of_payment === 'Mobile Money' && payment.mode_of_mobilemoney}
+                      </TableCell>
+                      <TableCell>
+                        {(payment.amount_paid || 0).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {payments.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-4 text-gray-500">
+                        No payments recorded
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
