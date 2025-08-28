@@ -530,7 +530,17 @@ export default function Suppliers() {
     try {
       if (!selectedItem) return;
       
-      const deliveryValue = deliveryForm.quantity * selectedItem.price;
+      // Get the fresh item data to ensure we have the latest name
+      const { data: freshItem, error: itemError } = await supabase
+        .from('supply_items')
+        .select('*')
+        .eq('id', selectedItem.id)
+        .single();
+
+      if (itemError) throw itemError;
+      if (!freshItem) throw new Error('Item not found');
+
+      const deliveryValue = deliveryForm.quantity * freshItem.price;
       let notes = deliveryForm.notes;
       let clientId = null;
       
@@ -539,19 +549,28 @@ export default function Suppliers() {
         notes = `Client: ${clientName}`;
         clientId = selectedClient;
         
+        console.log('Creating order with item:', freshItem.name);
+        
         const { error: orderError } = await supabase
           .from('order')
           .insert([{
             client_id: selectedClient,
             user: selectedClient,
-            item: selectedItem.name,
-            cost: selectedItem.price,
+            item: freshItem.name, // Use the fresh item data
+            cost: freshItem.price,
             quantity: deliveryForm.quantity,
             created_at: new Date().toISOString()
           }]);
 
         if (orderError) {
-          console.error('Order creation error:', orderError);
+          console.error('Order creation error details:', {
+            error: orderError,
+            itemData: {
+              name: freshItem.name,
+              price: freshItem.price,
+              quantity: deliveryForm.quantity
+            }
+          });
           throw orderError;
         }
       } else if (deliveryNoteType === 'stock') {
@@ -1124,7 +1143,7 @@ export default function Suppliers() {
                       balance_type: e.target.value as 'credit' | 'debit'
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
+                    >
                     <option value="credit">Supplier owes company</option>
                     <option value="debit">Company owes supplier</option>
                   </select>
