@@ -20,8 +20,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Utility function to format date to EAT (Kampala) timezone
-const formatToEAT = (dateString: string): string => {
+// Utility function to format date to EAT (Kampala) timezone with time
+const formatToEATDateTime = (dateString: string): string => {
   const date = new Date(dateString);
   
   // Convert to EAT (UTC+3)
@@ -29,17 +29,29 @@ const formatToEAT = (dateString: string): string => {
   const localOffset = date.getTimezoneOffset();
   const eatTime = new Date(date.getTime() + (localOffset + eatOffset) * 60000);
   
-  return eatTime.toISOString().split('T')[0];
+  return eatTime.toISOString();
 };
 
-// Utility function to get current date in EAT format
-const getCurrentEATDate = (): string => {
+// Utility function to get current datetime in EAT format for datetime-local input
+const getCurrentEATDateTime = (): string => {
   const now = new Date();
   const eatOffset = 3 * 60; // EAT is UTC+3 (180 minutes)
   const localOffset = now.getTimezoneOffset();
   const eatTime = new Date(now.getTime() + (localOffset + eatOffset) * 60000);
   
-  return eatTime.toISOString().split('T')[0];
+  // Format for datetime-local input: YYYY-MM-DDTHH:MM
+  const year = eatTime.getFullYear();
+  const month = String(eatTime.getMonth() + 1).padStart(2, '0');
+  const day = String(eatTime.getDate()).padStart(2, '0');
+  const hours = String(eatTime.getHours()).padStart(2, '0');
+  const minutes = String(eatTime.getMinutes()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+// Utility function to convert datetime-local string to ISO string
+const datetimeLocalToISO = (datetimeLocal: string): string => {
+  return new Date(datetimeLocal).toISOString();
 };
 
 export default function ClientsPage() {
@@ -54,7 +66,7 @@ export default function ClientsPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [openingBalances, setOpeningBalances] = useState<any[]>([]);
   const [newPayment, setNewPayment] = useState({
-    date: getCurrentEATDate(),
+    date: getCurrentEATDateTime(),
     amount: "",
     mode_of_payment: "",
     bank_name: "",
@@ -63,18 +75,18 @@ export default function ClientsPage() {
     order_id: ""
   });
   const [newOrder, setNewOrder] = useState({
-    date: getCurrentEATDate(),
+    date: getCurrentEATDateTime(),
     material: "",
     quantity: "",
     cost: ""
   });
   const [newExpense, setNewExpense] = useState({
-    date: getCurrentEATDate(),
+    date: getCurrentEATDateTime(),
     item: "",
     amount: ""
   });
   const [newOpeningBalance, setNewOpeningBalance] = useState({
-    date: getCurrentEATDate(),
+    date: getCurrentEATDateTime(),
     amount: "",
     client_id: "",
     status: "Unpaid"
@@ -388,7 +400,7 @@ export default function ClientsPage() {
     try {
       const paymentData: any = {
         amount_paid: parseFloat(newPayment.amount),
-        created_at: formatToEAT(newPayment.date), // Format to EAT
+        created_at: formatToEATDateTime(datetimeLocalToISO(newPayment.date)), // Format to EAT with time
         user_id: selectedClient.id,
         mode_of_payment: newPayment.mode_of_payment,
         payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
@@ -444,7 +456,7 @@ export default function ClientsPage() {
       await fetchOpeningBalances();
       
       setNewPayment({
-        date: getCurrentEATDate(),
+        date: getCurrentEATDateTime(),
         amount: "",
         mode_of_payment: "",
         bank_name: "",
@@ -473,7 +485,7 @@ export default function ClientsPage() {
           material: newOrder.material,
           quantity: parseFloat(newOrder.quantity),
           cost: parseFloat(newOrder.cost),
-          created_at: formatToEAT(newOrder.date), // Format to EAT
+          created_at: formatToEATDateTime(datetimeLocalToISO(newOrder.date)), // Format to EAT with time
           total_amount: parseFloat(newOrder.quantity) * parseFloat(newOrder.cost)
         }])
         .select();
@@ -486,8 +498,8 @@ export default function ClientsPage() {
           material_id: material.id,
           name: newOrder.material,
           quantity: -parseFloat(newOrder.quantity),
-          created_at: formatToEAT(newOrder.date), // Format to EAT
-          date: formatToEAT(newOrder.date), // Format to EAT
+          created_at: formatToEATDateTime(datetimeLocalToISO(newOrder.date)), // Format to EAT with time
+          date: formatToEATDateTime(datetimeLocalToISO(newOrder.date)), // Format to EAT with time
           action: 'Sold to Client',
           created_by: 'Admin',
           transaction: `${selectedClient.name}-Order`
@@ -498,7 +510,7 @@ export default function ClientsPage() {
       await fetchOrders(selectedClient.id);
       await fetchTransactions(selectedClient.id);
       setNewOrder({
-        date: getCurrentEATDate(),
+        date: getCurrentEATDateTime(),
         material: "",
         quantity: "",
         cost: ""
@@ -526,7 +538,7 @@ export default function ClientsPage() {
       const { data, error } = await supabase
         .from("expenses")
         .insert([{
-          date: formatToEAT(newExpense.date), // Format to EAT
+          date: formatToEATDateTime(datetimeLocalToISO(newExpense.date)), // Format to EAT with time
           item: newExpense.item,
           amount_spent: parseFloat(newExpense.amount),
           department: clientData.name
@@ -537,7 +549,7 @@ export default function ClientsPage() {
       await fetchExpenses(selectedClient.id);
       await fetchTransactions(selectedClient.id);
       setNewExpense({
-        date: getCurrentEATDate(),
+        date: getCurrentEATDateTime(),
         item: "",
         amount: ""
       });
@@ -558,7 +570,7 @@ export default function ClientsPage() {
           client_id: newOpeningBalance.client_id,
           amount: parseFloat(newOpeningBalance.amount),
           status: newOpeningBalance.status,
-          created_at: formatToEAT(newOpeningBalance.date) // Format to EAT
+          created_at: formatToEATDateTime(datetimeLocalToISO(newOpeningBalance.date)) // Format to EAT with time
         }]);
 
       if (error) throw error;
@@ -566,7 +578,7 @@ export default function ClientsPage() {
       await fetchOpeningBalances();
       await fetchTransactions(newOpeningBalance.client_id);
       setNewOpeningBalance({
-        date: getCurrentEATDate(),
+        date: getCurrentEATDateTime(),
         amount: "",
         client_id: "",
         status: "Unpaid"
@@ -621,7 +633,7 @@ export default function ClientsPage() {
         if (balance) {
           setSelectedClient(clients.find(c => c.id === balance.client_id));
           setNewPayment({
-            date: getCurrentEATDate(),
+            date: getCurrentEATDateTime(),
             amount: balance.amount.toString(),
             mode_of_payment: "",
             bank_name: "",
@@ -642,7 +654,7 @@ export default function ClientsPage() {
     if (transactions.length === 0) return;
 
     const headers = [
-      "Date",
+      "Date & Time",
       "Type",
       "Description",
       "Quantity",
@@ -657,7 +669,7 @@ export default function ClientsPage() {
     const csvRows = [
       headers.join(","),
       ...transactions.map(t => [
-        new Date(t.date || new Date()).toLocaleDateString(),
+        new Date(t.date || new Date()).toLocaleString(),
         t.type,
         t.type === 'order' ? 
           `${t.item} (Order #${t.id})` : 
@@ -868,10 +880,10 @@ export default function ClientsPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date
+                Date & Time
               </label>
               <Input
-                type="date"
+                type="datetime-local"
                 value={newOpeningBalance.date}
                 onChange={(e) => setNewOpeningBalance({
                   ...newOpeningBalance,
@@ -958,7 +970,7 @@ export default function ClientsPage() {
             <Table>
               <TableHeader className="bg-gray-50">
                 <TableRow>
-                  <TableHead className="font-semibold">Date</TableHead>
+                  <TableHead className="font-semibold">Date & Time</TableHead>
                   <TableHead className="font-semibold">Client</TableHead>
                   <TableHead className="font-semibold text-right">Amount</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
@@ -971,7 +983,7 @@ export default function ClientsPage() {
                   return (
                     <TableRow key={balance.id}>
                       <TableCell>
-                        {new Date(balance.created_at).toLocaleDateString()}
+                        {new Date(balance.created_at).toLocaleString()}
                       </TableCell>
                       <TableCell>{client?.name || 'Unknown Client'}</TableCell>
                       <TableCell className="text-right">
@@ -1033,10 +1045,10 @@ export default function ClientsPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date
+                Date & Time
               </label>
               <Input
-                type="date"
+                type="datetime-local"
                 value={newPayment.date}
                 onChange={(e) => setNewPayment({
                   ...newPayment,
@@ -1193,7 +1205,7 @@ export default function ClientsPage() {
             onClick={() => {
               setShowPaymentForm(true);
               setNewPayment({
-                date: getCurrentEATDate(),
+                date: getCurrentEATDateTime(),
                 amount: "",
                 mode_of_payment: "",
                 bank_name: "",
@@ -1217,7 +1229,7 @@ export default function ClientsPage() {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                <TableHead className="font-semibold">Date</TableHead>
+                <TableHead className="font-semibold">Date & Time</TableHead>
                 <TableHead className="font-semibold">Material</TableHead>
                 <TableHead className="font-semibold">Quantity</TableHead>
                 <TableHead className="font-semibold">Unit Price</TableHead>
@@ -1229,7 +1241,7 @@ export default function ClientsPage() {
               {orders.map((order) => (
                 <TableRow key={order.id}>
                   <TableCell>
-                    {new Date(order.created_at).toLocaleDateString()}
+                    {new Date(order.created_at).toLocaleString()}
                   </TableCell>
                   <TableCell>{order.material}</TableCell>
                   <TableCell>{order.quantity}</TableCell>
@@ -1272,10 +1284,10 @@ export default function ClientsPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date
+              Date & Time
             </label>
             <Input
-              type="date"
+              type="datetime-local"
               value={newOrder.date}
               onChange={(e) => setNewOrder({
                 ...newOrder,
@@ -1354,10 +1366,10 @@ export default function ClientsPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date
+              Date & Time
             </label>
             <Input
-              type="date"
+              type="datetime-local"
               value={newExpense.date}
               onChange={(e) => setNewExpense({
                 ...newExpense,
@@ -1423,7 +1435,7 @@ export default function ClientsPage() {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                <TableHead className="font-semibold">Date</TableHead>
+                <TableHead className="font-semibold">Date & Time</TableHead>
                 <TableHead className="font-semibold">Description</TableHead>
                 <TableHead className="font-semibold text-right">Quantity</TableHead>
                 <TableHead className="font-semibold text-right">Unit Price</TableHead>
@@ -1438,7 +1450,7 @@ export default function ClientsPage() {
               {transactions.map((transaction, index) => (
                 <TableRow key={`${transaction.type}-${transaction.id}-${index}`}>
                   <TableCell>
-                    {new Date(transaction.date || new Date()).toLocaleDateString()}
+                    {new Date(transaction.date || new Date()).toLocaleString()}
                   </TableCell>
                   <TableCell>
                     {transaction.type === 'order' ? 
@@ -1446,7 +1458,7 @@ export default function ClientsPage() {
                       transaction.type === 'payment' ?
                       `Payment (${transaction.mode_of_payment})` :
                       transaction.type === 'opening_balance' ?
-                      `Opening Balance (${transaction.status})` :
+                      `Opening Balance (${transaction.status)` :
                       `Expense: ${transaction.item}`}
                     {transaction.bank_name && ` - ${transaction.bank_name}`}
                     {transaction.mobile_money_provider && ` - ${transaction.mobile_money_provider}`}
@@ -1524,7 +1536,7 @@ export default function ClientsPage() {
             <Table>
               <TableHeader className="bg-gray-50">
                 <TableRow>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Date & Time</TableHead>
                   <TableHead>Mode</TableHead>
                   <TableHead>Details</TableHead>
                   <TableHead>Amount</TableHead>
@@ -1534,7 +1546,7 @@ export default function ClientsPage() {
                 {payments.map((payment) => (
                   <TableRow key={payment.id}>
                     <TableCell>
-                      {new Date(payment.created_at).toLocaleDateString()}
+                      {new Date(payment.created_at).toLocaleString()}
                     </TableCell>
                     <TableCell>{payment.mode_of_payment}</TableCell>
                     <TableCell>
