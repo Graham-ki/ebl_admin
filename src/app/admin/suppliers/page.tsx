@@ -560,7 +560,7 @@ export default function Suppliers() {
             material: freshItem.name,
             cost: freshItem.price,
             quantity: deliveryForm.quantity,
-            total_amount: freshItem.price * deliveryForm.quantity
+            total_amount: freshItem.price * deliveryForm.quantity,
             created_at: new Date().toISOString()
           }]);
 
