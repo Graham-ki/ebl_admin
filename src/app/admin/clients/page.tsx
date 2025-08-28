@@ -460,7 +460,7 @@ export default function ClientsPage() {
     try {
       const paymentData: any = {
         amount_paid: parseFloat(newPayment.amount),
-        created_at: formatToEATDateTime(datetimeLocalToISO(newPayment.date)),
+        created_at: newPayment.date,
         user_id: selectedClient.id,
         mode_of_payment: newPayment.mode_of_payment,
         payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
@@ -545,7 +545,7 @@ export default function ClientsPage() {
           material: newOrder.material,
           quantity: parseFloat(newOrder.quantity),
           cost: parseFloat(newOrder.cost),
-          created_at: formatToEATDateTime(datetimeLocalToISO(newOrder.date)),
+          created_at: newOrder.date,
           total_amount: parseFloat(newOrder.quantity) * parseFloat(newOrder.cost)
         }]);
 
@@ -557,8 +557,8 @@ export default function ClientsPage() {
           material_id: material.id,
           name: newOrder.material,
           quantity: -parseFloat(newOrder.quantity),
-          created_at: formatToEATDateTime(datetimeLocalToISO(newOrder.date)),
-          date: formatToEATDateTime(datetimeLocalToISO(newOrder.date)),
+          created_at: newOrder.date,
+          date: newOrder.date,
           action: 'Sold to Client',
           created_by: 'Admin',
           transaction: `${selectedClient.name}-Order`
@@ -597,7 +597,7 @@ export default function ClientsPage() {
       const { error } = await supabase
         .from("expenses")
         .insert([{
-          date: formatToEATDateTime(datetimeLocalToISO(newExpense.date)),
+          date: newExpense.date,
           item: newExpense.item,
           amount_spent: parseFloat(newExpense.amount),
           department: clientData.name
@@ -629,7 +629,7 @@ export default function ClientsPage() {
           client_id: newOpeningBalance.client_id,
           amount: parseFloat(newOpeningBalance.amount),
           status: newOpeningBalance.status,
-          created_at: formatToEATDateTime(datetimeLocalToISO(newOpeningBalance.date))
+          created_at: newOpeningBalance.date
         }]);
 
       if (error) throw error;
