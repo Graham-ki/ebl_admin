@@ -557,6 +557,7 @@ export default function Suppliers() {
             client_id: selectedClient,
             user: selectedClient,
             item: freshItem.name, // Use the fresh item data
+            material: freshItem.name,
             cost: freshItem.price,
             quantity: deliveryForm.quantity,
             created_at: new Date().toISOString()
