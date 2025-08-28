@@ -1,12 +1,12 @@
 // app/dashboard/page.tsx
-import { ArrowRight, PieChart, HeartPulse, Lightbulb, AlertTriangle, TrendingUp, Wallet, BarChart2 } from "lucide-react";
+import { ArrowRight, PieChart, HeartPulse, Lightbulb, AlertTriangle, TrendingUp, Wallet, BarChart2,FileSpreadsheet,Coins } from "lucide-react";
 
 export default function AnalyticsDashboard() {
   const cards = [
     {
       title: "Balance Sheet",
       description: "Maximize efficiency",
-      icon: <Lightbulb className="w-6 h-6" />,
+      icon: <FileSpreadsheet className="w-6 h-6" />,
       link: "analytics/balance-sheet",
       bgColor: "bg-purple-50",
       borderColor: "border-teal-200",
@@ -16,7 +16,7 @@ export default function AnalyticsDashboard() {
     {
       title: "Current Assets",
       description: "Maximize efficiency",
-      icon: <AlertTriangle className="w-6 h-6" />,
+      icon: <Coins className="w-6 h-6" />,
       link: "analytics/current-assets",
       bgColor: "bg-gray-50",
       borderColor: "border-teal-200",
