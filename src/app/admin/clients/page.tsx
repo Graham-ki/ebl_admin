@@ -545,7 +545,7 @@ export default function ClientsPage() {
           material: newOrder.material,
           quantity: parseFloat(newOrder.quantity),
           cost: parseFloat(newOrder.cost),
-          created_at: newOrder.date,
+          created_at: formatToEATDateTime(datetimeLocalToISO(newOrder.date)),
           total_amount: parseFloat(newOrder.quantity) * parseFloat(newOrder.cost)
         }]);
 
@@ -1299,7 +1299,7 @@ export default function ClientsPage() {
                 {orders.map((order) => (
                   <TableRow key={order.id}>
                     <TableCell>
-                      {new Date(order.created_at).toLocaleString()}
+                      {order.created_at}
                     </TableCell>
                     <TableCell>{order.material}</TableCell>
                     <TableCell>{order.quantity}</TableCell>
