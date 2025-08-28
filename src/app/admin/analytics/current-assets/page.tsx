@@ -5,7 +5,6 @@ import { createClient } from "@supabase/supabase-js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,6 +17,12 @@ interface MaterialAsset {
   available: number;
   prepaid: number;
   total: number;
+}
+
+interface ProductAsset {
+  id: string;
+  name: string;
+  available: number;
 }
 
 interface CashAssets {
@@ -35,6 +40,7 @@ interface OrderBalance {
 
 export default function CurrentAssetsPage() {
   const [materialAssets, setMaterialAssets] = useState<MaterialAsset[]>([]);
+  const [productAssets, setProductAssets] = useState<ProductAsset[]>([]);
   const [cashAssets, setCashAssets] = useState<CashAssets>({
     available: 0,
     accountsReceivable: 0,
@@ -124,6 +130,54 @@ export default function CurrentAssetsPage() {
     }
   };
 
+  const fetchProductAssets = async () => {
+    try {
+      // Fetch all products
+      const { data: products, error: productsError } = await supabase
+        .from("products")
+        .select("id, name");
+
+      if (productsError) throw productsError;
+
+      const productAssetsData: ProductAsset[] = [];
+
+      for (const product of products || []) {
+        // Get opening stocks where product_id is not null
+        const { data: openingStocks, error: openingStocksError } = await supabase
+          .from("opening_stocks")
+          .select("quantity")
+          .eq("product_id", product.id)
+          .not("product_id", "is", null);
+
+        if (openingStocksError) throw openingStocksError;
+
+        // Get product entries with specific transaction types
+        const { data: productEntries, error: entriesError } = await supabase
+          .from("product_entries")
+          .select("quantity")
+          .eq("product_id", product.id)
+          .in("transaction", ["Return", "Production", "Stamped"]);
+
+        if (entriesError) throw entriesError;
+
+        // Calculate available quantity
+        const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+        const productEntriesTotal = productEntries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+        const available = openingStocksTotal + productEntriesTotal;
+
+        productAssetsData.push({
+          id: product.id,
+          name: product.name,
+          available
+        });
+      }
+
+      setProductAssets(productAssetsData);
+    } catch (error) {
+      console.error("Error fetching product assets:", error);
+    }
+  };
+
   const fetchCashAssets = async () => {
     try {
       // Calculate available cash (finance.amount_paid - expenses.amount_spent)
@@ -191,7 +245,11 @@ export default function CurrentAssetsPage() {
   const fetchAllAssets = async () => {
     setLoading(true);
     try {
-      await Promise.all([fetchMaterialAssets(), fetchCashAssets()]);
+      await Promise.all([
+        fetchMaterialAssets(),
+        fetchProductAssets(),
+        fetchCashAssets()
+      ]);
     } catch (error) {
       console.error("Error fetching assets:", error);
     } finally {
@@ -218,8 +276,8 @@ export default function CurrentAssetsPage() {
           <p className="text-gray-600">Loading assets data...</p>
         </div>
         <div className="grid gap-6">
-          <Skeleton className="h-48 w-full" />
-          <Skeleton className="h-48 w-full" />
+          <div className="h-48 w-full bg-gray-100 rounded-lg animate-pulse"></div>
+          <div className="h-48 w-full bg-gray-100 rounded-lg animate-pulse"></div>
         </div>
       </div>
     );
@@ -231,7 +289,7 @@ export default function CurrentAssetsPage() {
         <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
           Current Assets
         </h1>
-        <p className="text-gray-600">Overview of company's current assets including materials and cash</p>
+        <p className="text-gray-600">Overview of company's current assets including materials, products, and cash</p>
       </div>
 
       <div className="grid gap-6 mb-8">
@@ -316,7 +374,7 @@ export default function CurrentAssetsPage() {
               <span className="text-blue-600">📦</span>
               Material Assets
             </CardTitle>
-            <CardDescription>Physical inventory and prepaid materials</CardDescription>
+            <CardDescription>Raw materials and prepaid inventory</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -396,6 +454,83 @@ export default function CurrentAssetsPage() {
           </CardContent>
         </Card>
 
+        {/* Product Assets Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span className="text-green-600">🥤</span>
+              Product Assets (Beverages)
+            </CardTitle>
+            <CardDescription>Finished products available for sale</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="border rounded-lg p-4 bg-green-50">
+                <div className="text-sm text-green-600 mb-1">Total Available Products</div>
+                <div className="text-2xl font-bold text-green-700">
+                  {productAssets.reduce((sum, item) => sum + item.available, 0)} units
+                </div>
+                <div className="text-xs text-green-500 mt-1">Ready for sale</div>
+              </div>
+              
+              <div className="border rounded-lg p-4 bg-blue-50">
+                <div className="text-sm text-blue-600 mb-1">Number of Products</div>
+                <div className="text-2xl font-bold text-blue-700">
+                  {productAssets.length} types
+                </div>
+                <div className="text-xs text-blue-500 mt-1">Different beverage varieties</div>
+              </div>
+              
+              <div className="border rounded-lg p-4 bg-purple-50">
+                <div className="text-sm text-purple-600 mb-1">Inventory Status</div>
+                <div className="text-2xl font-bold text-purple-700">
+                  {productAssets.filter(item => item.available > 0).length}/{productAssets.length}
+                </div>
+                <div className="text-xs text-purple-500 mt-1">Products in stock</div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-3">Product Details</h3>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-right">Available Quantity</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {productAssets.map((product) => (
+                      <TableRow key={product.id}>
+                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell className="text-right">
+                          <span className={product.available > 0 ? "text-green-600" : "text-red-600"}>
+                            {product.available} units
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              product.available > 0 
+                                ? "bg-green-100 text-green-800" 
+                                : "bg-red-100 text-red-800"
+                            }
+                          >
+                            {product.available > 0 ? "In Stock" : "Out of Stock"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Total Assets Summary */}
         <Card className="bg-gradient-to-r from-indigo-50 to-purple-50">
           <CardHeader>
@@ -406,7 +541,7 @@ export default function CurrentAssetsPage() {
             <CardDescription>Complete overview of all current assets</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-4">
                 <h4 className="font-semibold text-indigo-700">Cash Assets</h4>
                 <div className="space-y-2">
@@ -448,13 +583,37 @@ export default function CurrentAssetsPage() {
                   </div>
                 </div>
               </div>
+
+              <div className="space-y-4">
+                <h4 className="font-semibold text-indigo-700">Product Assets</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Available Products:</span>
+                    <span className="font-semibold">
+                      {productAssets.reduce((sum, item) => sum + item.available, 0)} units
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Product Varieties:</span>
+                    <span className="font-semibold">
+                      {productAssets.length} types
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="font-semibold">Total Products:</span>
+                    <span className="font-semibold text-indigo-600">
+                      {productAssets.reduce((sum, item) => sum + item.available, 0)} units
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
             
             <div className="mt-6 p-4 bg-indigo-100 rounded-lg">
               <div className="flex justify-between items-center">
                 <span className="text-lg font-semibold text-indigo-800">Grand Total Current Assets:</span>
                 <span className="text-2xl font-bold text-indigo-900">
-                  {formatCurrency(cashAssets.total)} + {materialAssets.reduce((sum, item) => sum + item.total, 0)} units
+                  {formatCurrency(cashAssets.total)} + {materialAssets.reduce((sum, item) => sum + item.total, 0) + productAssets.reduce((sum, item) => sum + item.available, 0)} units
                 </span>
               </div>
               <p className="text-sm text-indigo-600 mt-2">
