@@ -1508,7 +1508,7 @@ export default function ClientsPage() {
                 {transactions.map((transaction, index) => (
                   <TableRow key={`${transaction.type}-${transaction.id}-${index}`}>
                     <TableCell>
-                      {transaction.date}
+                     {new Date(transaction.date || new Date()).toLocaleString()}
                     </TableCell>
                     <TableCell>
                       {transaction.type === 'order' ? 
@@ -1604,7 +1604,7 @@ export default function ClientsPage() {
                   {payments.map((payment) => (
                     <TableRow key={payment.id}>
                       <TableCell>
-                        {payment.created_at}
+                        {new Date(payment.created_at).toLocaleString()}
                       </TableCell>
                       <TableCell>{payment.mode_of_payment}</TableCell>
                       <TableCell>
