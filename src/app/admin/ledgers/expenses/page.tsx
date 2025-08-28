@@ -260,6 +260,7 @@ export default function ExpensesLedgerPage() {
       mode_of_payment: formData.mode_of_payment,
       account: formData.account,
       submittedby: "Admin",
+      date: new Date()
     };
 
     const { error } = editExpense
