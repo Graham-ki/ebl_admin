@@ -1299,7 +1299,7 @@ export default function ClientsPage() {
                 {orders.map((order) => (
                   <TableRow key={order.id}>
                     <TableCell>
-                      {new Date(transaction.date || new Date()).toLocaleString()}
+                      {new Date(order.created_at || new Date()).toLocaleString()}
                     </TableCell>
                     <TableCell>{order.material}</TableCell>
                     <TableCell>{order.quantity}</TableCell>
