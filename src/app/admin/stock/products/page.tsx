@@ -156,6 +156,11 @@ export default function SummaryPage() {
     fetchAllData();
   }, []);
 
+  // Recalculate available quantities when product entries or opening stocks change
+  useEffect(() => {
+    calculateAvailableQuantities(productEntries, openingStocks);
+  }, [productEntries, openingStocks]);
+
   const calculateAvailableQuantities = (entries: ProductEntry[], stocks: OpeningStock[]) => {
     const quantities: Record<number, number> = {};
 
@@ -281,11 +286,20 @@ export default function SummaryPage() {
 
       if (error) throw error;
 
-      // Update local state
-      setAvailableQuantities(prev => ({
-        ...prev,
-        [productId]: (prev[productId] || 0) + Number(inflowForm.quantity)
-      }));
+      // Refresh data after recording inflow
+      const { data: productEntriesData } = await supabase
+        .from('product_entries')
+        .select('*');
+      
+      const { data: stocks } = await supabase
+        .from('opening_stocks')
+        .select('*')
+        .eq('type', 'product')
+        .order('date', { ascending: false });
+      
+      setProductEntries(productEntriesData || []);
+      setOpeningStocks(stocks || []);
+      calculateAvailableQuantities(productEntriesData || [], stocks || []);
 
       alert('Inflow recorded successfully!');
       setInflowForm({
@@ -330,11 +344,20 @@ export default function SummaryPage() {
 
       if (error) throw error;
 
-      // Update local state
-      setAvailableQuantities(prev => ({
-        ...prev,
-        [productId]: (prev[productId] || 0) - Number(outflowForm.quantity)
-      }));
+      // Refresh data after recording outflow
+      const { data: productEntriesData } = await supabase
+        .from('product_entries')
+        .select('*');
+      
+      const { data: stocks } = await supabase
+        .from('opening_stocks')
+        .select('*')
+        .eq('type', 'product')
+        .order('date', { ascending: false });
+      
+      setProductEntries(productEntriesData || []);
+      setOpeningStocks(stocks || []);
+      calculateAvailableQuantities(productEntriesData || [], stocks || []);
 
       alert('Outflow recorded successfully!');
       setOutflowForm({
@@ -386,7 +409,12 @@ export default function SummaryPage() {
 
       if (error) throw error;
 
-      // Refresh data
+      // Refresh ALL data after recording opening stock
+      const { data: productEntriesData, error: entriesError } = await supabase
+        .from('product_entries')
+        .select('*');
+      if (entriesError) throw entriesError;
+
       const { data: stocks } = await supabase
         .from('opening_stocks')
         .select('*')
@@ -394,7 +422,8 @@ export default function SummaryPage() {
         .order('date', { ascending: false });
       
       setOpeningStocks(stocks || []);
-      calculateAvailableQuantities(productEntries, stocks || []);
+      setProductEntries(productEntriesData || []);
+      calculateAvailableQuantities(productEntriesData || [], stocks || []);
 
       alert('Opening stock recorded successfully!');
       setIsOpeningStockDialogOpen(false);
@@ -410,7 +439,16 @@ export default function SummaryPage() {
   };
 
   const calculateOpeningStock = (productId: number, date: string) => {
-    // Find most recent opening stock before this date
+    // Check if there's an opening stock recorded exactly on this date
+    const openingStockOnDate = openingStocks.find(
+      stock => stock.product_id === productId && stock.date === date
+    );
+    
+    if (openingStockOnDate) {
+      return openingStockOnDate.quantity;
+    }
+
+    // If no opening stock on this date, find most recent opening stock before this date
     const previousStocks = openingStocks
       .filter(stock => 
         stock.product_id === productId && 
@@ -762,8 +800,9 @@ export default function SummaryPage() {
                     <TableRow>
                       <TableHead>Beverage</TableHead>
                       <TableHead>Category</TableHead>
-                      <TableHead>Opening Stock</TableHead>
-                      <TableHead>Calculated Stock</TableHead>
+                      <TableHead>Recorded Opening Stock</TableHead>
+                      <TableHead>Calculated Opening Stock</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -772,6 +811,7 @@ export default function SummaryPage() {
                       const recordedStock = openingStocks.find(
                         s => s.product_id === product.id && s.date === dateKey
                       )?.quantity;
+                      
                       const calculatedStock = calculateOpeningStock(product.id, dateKey);
 
                       return (
@@ -780,6 +820,10 @@ export default function SummaryPage() {
                           <TableCell>{getCategoryName(product.category)}</TableCell>
                           <TableCell>{recordedStock ?? 'Not recorded'}</TableCell>
                           <TableCell>{calculatedStock}</TableCell>
+                          <TableCell>
+                            {recordedStock !== undefined && recordedStock !== calculatedStock 
+                              ? 'Mismatch' : 'Match'}
+                          </TableCell>
                         </TableRow>
                       );
                     })}
