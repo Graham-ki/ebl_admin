@@ -5,21 +5,21 @@ export default function AnalyticsDashboard() {
   const cards = [
     {
       title: "Balance Sheet",
-      description: "Maximize efficiency",
+      description: "Compare your transactions over time",
       icon: <FileSpreadsheet className="w-6 h-6" />,
       link: "analytics/balance-sheet",
       bgColor: "bg-purple-50",
-      borderColor: "border-teal-200",
+      borderColor: "border-purple-200",
       textColor: "text-teal-600",
       iconColor: "text-purple-500"
     },
     {
       title: "Current Assets",
-      description: "Maximize efficiency",
+      description: "Keep track of all your assets and investments",
       icon: <Coins className="w-6 h-6" />,
       link: "analytics/current-assets",
       bgColor: "bg-gray-50",
-      borderColor: "border-teal-200",
+      borderColor: "border-gray-200",
       textColor: "text-teal-600",
       iconColor: "text-gray-500"
     },
