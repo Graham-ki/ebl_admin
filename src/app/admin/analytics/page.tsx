@@ -4,6 +4,26 @@ import { ArrowRight, PieChart, HeartPulse, Lightbulb, AlertTriangle, TrendingUp,
 export default function AnalyticsDashboard() {
   const cards = [
     {
+      title: "Balance Sheet",
+      description: "Maximize efficiency",
+      icon: <Lightbulb className="w-6 h-6" />,
+      link: "analytics/balance-sheet",
+      bgColor: "bg-purple-50",
+      borderColor: "border-teal-200",
+      textColor: "text-teal-600",
+      iconColor: "text-purple-500"
+    },
+    {
+      title: "Current Assets",
+      description: "Maximize efficiency",
+      icon: <AlertTriangle className="w-6 h-6" />,
+      link: "analytics/current-assets",
+      bgColor: "bg-gray-50",
+      borderColor: "border-teal-200",
+      textColor: "text-teal-600",
+      iconColor: "text-gray-500"
+    },
+    {
       title: "Cash Flow",
       description: "Track income and expenses over time",
       icon: <TrendingUp className="w-6 h-6" />,
