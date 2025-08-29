@@ -769,8 +769,6 @@ export default function CurrentAssetsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Material</TableHead>
-                      <TableHead className="text-right">Available</TableHead>
-                      <TableHead className="text-right">Unit Cost</TableHead>
                       <TableHead className="text-right">Available Value</TableHead>
                       <TableHead className="text-right">Prepaid Value</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
@@ -780,8 +778,6 @@ export default function CurrentAssetsPage() {
                     {materialAssets.map((material) => (
                       <TableRow key={material.id}>
                         <TableCell className="font-medium">{material.name}</TableCell>
-                        <TableCell className="text-right">{material.available} units</TableCell>
-                        <TableCell className="text-right">{formatCurrency(material.unit_cost || 0)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(material.available * (material.unit_cost || 0))}</TableCell>
                         <TableCell className="text-right">{formatCurrency(material.prepaid * (material.unit_cost || 0))}</TableCell>
                         <TableCell className="text-right font-semibold">
@@ -839,8 +835,6 @@ export default function CurrentAssetsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product</TableHead>
-                      <TableHead className="text-right">Available</TableHead>
-                      <TableHead className="text-right">Unit Cost</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -848,8 +842,6 @@ export default function CurrentAssetsPage() {
                     {productAssets.map((product) => (
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">{product.title}</TableCell>
-                        <TableCell className="text-right">{product.available} units</TableCell>
-                        <TableCell className="text-right">{formatCurrency(product.unit_cost || 0)}</TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(product.total_value)}
                         </TableCell>
