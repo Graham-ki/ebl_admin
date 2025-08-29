@@ -558,7 +558,7 @@ export default function CurrentAssetsPage() {
         <Dialog>
           <DialogTrigger asChild>
             <Button>
-              Manage Costs
+              Manage Inventory Costs
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
