@@ -134,7 +134,7 @@ export default function CurrentAssetsPage() {
     try {
       // Fetch all products
       const { data: products, error: productsError } = await supabase
-        .from("products")
+        .from("product")
         .select("id, name");
 
       if (productsError) throw productsError;
@@ -270,16 +270,20 @@ export default function CurrentAssetsPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Current Assets</h1>
-          <p className="text-gray-600">Loading assets data...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 p-6">
+        <div className="w-full max-w-2xl text-center">
+          <h1 className="text-4xl font-extrabold mb-4 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent animate-pulse">
+              Current Assets
+          </h1>
+          <p className="text-gray-700 mb-8 animate-fadeIn">
+              Loading assets data...
+          </p>
         <div className="grid gap-6">
-          <div className="h-48 w-full bg-gray-100 rounded-lg animate-pulse"></div>
-          <div className="h-48 w-full bg-gray-100 rounded-lg animate-pulse"></div>
+          <div className="h-40 w-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-2xl animate-pulse"></div>
+          <div className="h-40 w-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-2xl animate-pulse"></div>
         </div>
-      </div>
+        </div>
+    </div>
     );
   }
 
