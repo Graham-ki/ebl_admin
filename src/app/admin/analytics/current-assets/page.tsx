@@ -21,7 +21,7 @@ interface MaterialAsset {
 
 interface ProductAsset {
   id: string;
-  name: string;
+  title: string;
   available: number;
 }
 
@@ -36,6 +36,7 @@ interface OrderBalance {
   total_amount: number;
   amount_paid: number;
   balance: number;
+  customer_name: string;
 }
 
 export default function CurrentAssetsPage() {
@@ -48,6 +49,38 @@ export default function CurrentAssetsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [orderBalances, setOrderBalances] = useState<OrderBalance[]>([]);
+
+  // Function to get customer name from either clients or users table
+  const getCustomerName = async (userId: string) => {
+    try {
+      // First check in clients table
+      const { data: clientData, error: clientError } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("id", userId)
+        .single();
+
+      if (!clientError && clientData) {
+        return clientData.name;
+      }
+
+      // If not found in clients, check in users table (marketers)
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("name")
+        .eq("id", userId)
+        .single();
+
+      if (!userError && userData) {
+        return userData.name;
+      }
+
+      return "Unknown Customer";
+    } catch (error) {
+      console.error("Error fetching customer name:", error);
+      return "Unknown Customer";
+    }
+  };
 
   const fetchMaterialAssets = async () => {
     try {
@@ -135,7 +168,7 @@ export default function CurrentAssetsPage() {
       // Fetch all products
       const { data: products, error: productsError } = await supabase
         .from("product")
-        .select("id, name");
+        .select("id, title");
 
       if (productsError) throw productsError;
 
@@ -167,7 +200,7 @@ export default function CurrentAssetsPage() {
 
         productAssetsData.push({
           id: product.id,
-          name: product.name,
+          title: product.title,
           available
         });
       }
@@ -197,10 +230,10 @@ export default function CurrentAssetsPage() {
       const totalExpenses = expensesData?.reduce((sum, item) => sum + (item.amount_spent || 0), 0) || 0;
       const availableCash = totalPayments - totalExpenses;
 
-      // Calculate accounts receivable (money owed by clients)
+      // Calculate accounts receivable (money owed by clients/marketers)
       const { data: orders, error: ordersError } = await supabase
         .from("order")
-        .select("id, total_amount");
+        .select("id, total_amount, user");
 
       if (ordersError) throw ordersError;
 
@@ -220,12 +253,16 @@ export default function CurrentAssetsPage() {
         const balance = (order.total_amount || 0) - totalPaid;
 
         if (balance > 0) {
+          // Get customer name from either clients or users table
+          const customerName = await getCustomerName(order.user);
+          
           totalAccountsReceivable += balance;
           balances.push({
             order_id: order.id,
             total_amount: order.total_amount || 0,
             amount_paid: totalPaid,
-            balance
+            balance,
+            customer_name: customerName
           });
         }
       }
@@ -321,7 +358,7 @@ export default function CurrentAssetsPage() {
                 <div className="text-2xl font-bold text-blue-700">
                   {formatCurrency(cashAssets.accountsReceivable)}
                 </div>
-                <div className="text-xs text-blue-500 mt-1">Money owed by clients</div>
+                <div className="text-xs text-blue-500 mt-1">Money owed by clients/marketers</div>
               </div>
               
               <div className="border rounded-lg p-4 bg-purple-50">
@@ -340,7 +377,7 @@ export default function CurrentAssetsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Order ID</TableHead>
+                        <TableHead>Customer/Marketer</TableHead>
                         <TableHead className="text-right">Total Amount</TableHead>
                         <TableHead className="text-right">Amount Paid</TableHead>
                         <TableHead className="text-right">Balance Due</TableHead>
@@ -350,7 +387,7 @@ export default function CurrentAssetsPage() {
                     <TableBody>
                       {orderBalances.map((order) => (
                         <TableRow key={order.order_id}>
-                          <TableCell className="font-medium">#{order.order_id}</TableCell>
+                          <TableCell className="font-medium">{order.customer_name}</TableCell>
                           <TableCell className="text-right">{formatCurrency(order.total_amount)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(order.amount_paid)}</TableCell>
                           <TableCell className="text-right font-semibold text-red-600">
@@ -508,7 +545,7 @@ export default function CurrentAssetsPage() {
                   <TableBody>
                     {productAssets.map((product) => (
                       <TableRow key={product.id}>
-                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell className="font-medium">{product.title}</TableCell>
                         <TableCell className="text-right">
                           <span className={product.available > 0 ? "text-green-600" : "text-red-600"}>
                             {product.available} units
@@ -610,7 +647,7 @@ export default function CurrentAssetsPage() {
                     </span>
                   </div>
                 </div>
-              </div>
+                </div>
             </div>
             
             <div className="mt-6 p-4 bg-indigo-100 rounded-lg">
