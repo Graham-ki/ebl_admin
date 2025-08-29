@@ -154,7 +154,7 @@ export default function LedgerPage() {
               </svg>
             </div>
             <div>
-              <CardTitle className="text-lg font-semibold text-gray-800">Expenses Ledger</CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-800">Out Flow Ledger</CardTitle>
               <p className="text-sm text-gray-600 mt-1">Track company costs and expenditures</p>
             </div>
           </CardHeader>
