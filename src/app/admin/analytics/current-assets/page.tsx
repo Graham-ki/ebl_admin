@@ -5,6 +5,24 @@ import { createClient } from "@supabase/supabase-js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,12 +35,16 @@ interface MaterialAsset {
   available: number;
   prepaid: number;
   total: number;
+  unit_cost?: number;
+  total_value: number;
 }
 
 interface ProductAsset {
   id: string;
   title: string;
   available: number;
+  unit_cost?: number;
+  total_value: number;
 }
 
 interface CashAssets {
@@ -39,6 +61,20 @@ interface OrderBalance {
   customer_name: string;
 }
 
+interface InventoryCost {
+  id: string;
+  item_type: 'material' | 'product';
+  item_id: string;
+  item_name: string;
+  unit_cost: number;
+}
+
+interface CostFormData {
+  item_type: 'material' | 'product';
+  item_id: string;
+  unit_cost: string;
+}
+
 export default function CurrentAssetsPage() {
   const [materialAssets, setMaterialAssets] = useState<MaterialAsset[]>([]);
   const [productAssets, setProductAssets] = useState<ProductAsset[]>([]);
@@ -49,6 +85,95 @@ export default function CurrentAssetsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [orderBalances, setOrderBalances] = useState<OrderBalance[]>([]);
+  const [inventoryCosts, setInventoryCosts] = useState<InventoryCost[]>([]);
+  const [showCostForm, setShowCostForm] = useState(false);
+  const [editingCost, setEditingCost] = useState<InventoryCost | null>(null);
+  const [costFormData, setCostFormData] = useState<CostFormData>({
+    item_type: 'material',
+    item_id: '',
+    unit_cost: ''
+  });
+
+  // Fetch inventory costs
+  const fetchInventoryCosts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("inventory_costs")
+        .select("*")
+        .order("item_name");
+
+      if (error) throw error;
+      setInventoryCosts(data || []);
+      return data || [];
+    } catch (error) {
+      console.error("Error fetching inventory costs:", error);
+      return [];
+    }
+  };
+
+  // Add or update inventory cost
+  const saveInventoryCost = async () => {
+    try {
+      if (!costFormData.item_id || !costFormData.unit_cost) return;
+
+      const costData = {
+        item_type: costFormData.item_type,
+        item_id: costFormData.item_id,
+        item_name: costFormData.item_type === 'material' 
+          ? materialAssets.find(m => m.id === costFormData.item_id)?.name || ''
+          : productAssets.find(p => p.id === costFormData.item_id)?.title || '',
+        unit_cost: parseFloat(costFormData.unit_cost)
+      };
+
+      if (editingCost) {
+        const { error } = await supabase
+          .from("inventory_costs")
+          .update(costData)
+          .eq("id", editingCost.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("inventory_costs")
+          .insert([costData]);
+
+        if (error) throw error;
+      }
+
+      await fetchInventoryCosts();
+      setCostFormData({ item_type: 'material', item_id: '', unit_cost: '' });
+      setEditingCost(null);
+      setShowCostForm(false);
+    } catch (error) {
+      console.error("Error saving inventory cost:", error);
+    }
+  };
+
+  // Edit existing cost
+  const editCost = (cost: InventoryCost) => {
+    setEditingCost(cost);
+    setCostFormData({
+      item_type: cost.item_type,
+      item_id: cost.item_id,
+      unit_cost: cost.unit_cost.toString()
+    });
+    setShowCostForm(true);
+  };
+
+  // Delete inventory cost
+  const deleteCost = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("inventory_costs")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      await fetchInventoryCosts();
+    } catch (error) {
+      console.error("Error deleting inventory cost:", error);
+    }
+  };
 
   // Function to get customer name from either clients or users table
   const getCustomerName = async (userId: string) => {
@@ -82,9 +207,8 @@ export default function CurrentAssetsPage() {
     }
   };
 
-  const fetchMaterialAssets = async () => {
+  const fetchMaterialAssets = async (costs: InventoryCost[]) => {
     try {
-      // Fetch all materials first
       const { data: materials, error: materialsError } = await supabase
         .from("materials")
         .select("id, name");
@@ -94,7 +218,6 @@ export default function CurrentAssetsPage() {
       const materialAssetsData: MaterialAsset[] = [];
 
       for (const material of materials || []) {
-        // Calculate inflow from opening_stocks
         const { data: openingStocks, error: openingStocksError } = await supabase
           .from("opening_stocks")
           .select("quantity")
@@ -103,7 +226,6 @@ export default function CurrentAssetsPage() {
 
         if (openingStocksError) throw openingStocksError;
 
-        // Calculate inflow from deliveries with notes = 'Stock'
         const { data: stockDeliveries, error: deliveriesError } = await supabase
           .from("deliveries")
           .select("quantity")
@@ -112,7 +234,6 @@ export default function CurrentAssetsPage() {
 
         if (deliveriesError) throw deliveriesError;
 
-        // Calculate outflow from material_entries (treat all quantities as positive)
         const { data: materialEntries, error: entriesError } = await supabase
           .from("material_entries")
           .select("quantity")
@@ -120,7 +241,6 @@ export default function CurrentAssetsPage() {
 
         if (entriesError) throw entriesError;
 
-        // Calculate prepaid from supply_items minus deliveries
         const { data: supplyItems, error: supplyItemsError } = await supabase
           .from("supply_items")
           .select("quantity")
@@ -136,7 +256,6 @@ export default function CurrentAssetsPage() {
 
         if (allDeliveriesError) throw allDeliveriesError;
 
-        // Calculate totals
         const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
         const stockDeliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
         const inflow = openingStocksTotal + stockDeliveriesTotal;
@@ -148,12 +267,18 @@ export default function CurrentAssetsPage() {
         const deliveriesTotal = allDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
         const prepaid = supplyItemsTotal - deliveriesTotal;
 
+        const materialCost = costs.find(cost => cost.item_type === 'material' && cost.item_id === material.id);
+        const unit_cost = materialCost?.unit_cost || 0;
+        const total_value = (available + Math.max(0, prepaid)) * unit_cost;
+
         materialAssetsData.push({
           id: material.id,
           name: material.name,
           available,
-          prepaid: Math.max(0, prepaid), // Ensure prepaid is not negative
-          total: available + Math.max(0, prepaid)
+          prepaid: Math.max(0, prepaid),
+          total: available + Math.max(0, prepaid),
+          unit_cost,
+          total_value
         });
       }
 
@@ -163,9 +288,8 @@ export default function CurrentAssetsPage() {
     }
   };
 
-  const fetchProductAssets = async () => {
+  const fetchProductAssets = async (costs: InventoryCost[]) => {
     try {
-      // Fetch all products
       const { data: products, error: productsError } = await supabase
         .from("product")
         .select("id, title");
@@ -175,7 +299,6 @@ export default function CurrentAssetsPage() {
       const productAssetsData: ProductAsset[] = [];
 
       for (const product of products || []) {
-        // Get opening stocks where product_id is not null
         const { data: openingStocks, error: openingStocksError } = await supabase
           .from("opening_stocks")
           .select("quantity")
@@ -184,7 +307,6 @@ export default function CurrentAssetsPage() {
 
         if (openingStocksError) throw openingStocksError;
 
-        // Get product entries with specific transaction types
         const { data: productEntries, error: entriesError } = await supabase
           .from("product_entries")
           .select("quantity")
@@ -193,15 +315,20 @@ export default function CurrentAssetsPage() {
 
         if (entriesError) throw entriesError;
 
-        // Calculate available quantity
         const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
         const productEntriesTotal = productEntries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
         const available = openingStocksTotal + productEntriesTotal;
 
+        const productCost = costs.find(cost => cost.item_type === 'product' && cost.item_id === product.id);
+        const unit_cost = productCost?.unit_cost || 0;
+        const total_value = available * unit_cost;
+
         productAssetsData.push({
           id: product.id,
           title: product.title,
-          available
+          available,
+          unit_cost,
+          total_value
         });
       }
 
@@ -213,7 +340,6 @@ export default function CurrentAssetsPage() {
 
   const fetchCashAssets = async () => {
     try {
-      // Calculate available cash (finance.amount_paid - expenses.amount_spent)
       const { data: financeData, error: financeError } = await supabase
         .from("finance")
         .select("amount_paid");
@@ -230,7 +356,6 @@ export default function CurrentAssetsPage() {
       const totalExpenses = expensesData?.reduce((sum, item) => sum + (item.amount_spent || 0), 0) || 0;
       const availableCash = totalPayments - totalExpenses;
 
-      // Calculate accounts receivable (money owed by clients/marketers)
       const { data: orders, error: ordersError } = await supabase
         .from("order")
         .select("id, total_amount, user");
@@ -253,7 +378,6 @@ export default function CurrentAssetsPage() {
         const balance = (order.total_amount || 0) - totalPaid;
 
         if (balance > 0) {
-          // Get customer name from either clients or users table
           const customerName = await getCustomerName(order.user);
           
           totalAccountsReceivable += balance;
@@ -282,11 +406,17 @@ export default function CurrentAssetsPage() {
   const fetchAllAssets = async () => {
     setLoading(true);
     try {
+      const costs = await fetchInventoryCosts();
       await Promise.all([
-        fetchMaterialAssets(),
-        fetchProductAssets(),
+        fetchMaterialAssets(costs),
+        fetchProductAssets(costs),
         fetchCashAssets()
       ]);
+      
+      // Show cost form if no costs are set
+      if (costs.length === 0) {
+        setShowCostForm(true);
+      }
     } catch (error) {
       console.error("Error fetching assets:", error);
     } finally {
@@ -305,33 +435,171 @@ export default function CurrentAssetsPage() {
     }).format(amount);
   };
 
+  // Calculate total inventory value
+  const totalInventoryValue = materialAssets.reduce((sum, item) => sum + item.total_value, 0) +
+                            productAssets.reduce((sum, item) => sum + item.total_value, 0);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 p-6">
         <div className="w-full max-w-2xl text-center">
           <h1 className="text-4xl font-extrabold mb-4 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent animate-pulse">
-              Current Assets
+            Current Assets
           </h1>
-          <p className="text-gray-700 mb-8 animate-fadeIn">
-              Loading assets data...
-          </p>
-        <div className="grid gap-6">
-          <div className="h-40 w-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-2xl animate-pulse"></div>
-          <div className="h-40 w-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-2xl animate-pulse"></div>
+          <p className="text-gray-700 mb-8">Loading assets data...</p>
+          <div className="grid gap-6">
+            <div className="h-40 w-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-2xl animate-pulse"></div>
+            <div className="h-40 w-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-2xl animate-pulse"></div>
+          </div>
         </div>
-        </div>
-    </div>
+      </div>
     );
   }
 
   return (
     <div className="container mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-          Current Assets
-        </h1>
-        <p className="text-gray-600">Overview of company's current assets including materials, products, and cash</p>
+      {/* Cost Management Dialog */}
+      <Dialog open={showCostForm} onOpenChange={setShowCostForm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCost ? "Edit Inventory Cost" : "Set Inventory Costs"}
+            </DialogTitle>
+            <DialogDescription>
+              Set the unit cost for materials and products to calculate inventory values.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label>Item Type</Label>
+              <Select
+                value={costFormData.item_type}
+                onValueChange={(value: 'material' | 'product') => 
+                  setCostFormData({ ...costFormData, item_type: value, item_id: '' })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select item type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="material">Material</SelectItem>
+                  <SelectItem value="product">Product</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Item</Label>
+              <Select
+                value={costFormData.item_id}
+                onValueChange={(value) => 
+                  setCostFormData({ ...costFormData, item_id: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={`Select ${costFormData.item_type}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {costFormData.item_type === 'material' ? (
+                    materialAssets.map(material => (
+                      <SelectItem key={material.id} value={material.id}>
+                        {material.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    productAssets.map(product => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.title}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Unit Cost (UGX)</Label>
+              <Input
+                type="number"
+                placeholder="Enter unit cost"
+                value={costFormData.unit_cost}
+                onChange={(e) => 
+                  setCostFormData({ ...costFormData, unit_cost: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => {
+              setShowCostForm(false);
+              setEditingCost(null);
+              setCostFormData({ item_type: 'material', item_id: '', unit_cost: '' });
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={saveInventoryCost} disabled={!costFormData.item_id || !costFormData.unit_cost}>
+              {editingCost ? "Update Cost" : "Save Cost"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            Current Assets
+          </h1>
+          <p className="text-gray-600">Overview of company's current assets including materials, products, and cash</p>
+        </div>
+        <DialogTrigger asChild>
+          <Button onClick={() => setShowCostForm(true)}>
+            Manage Costs
+          </Button>
+        </DialogTrigger>
       </div>
+
+      {/* Inventory Costs Management */}
+      {inventoryCosts.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Inventory Costs</CardTitle>
+            <CardDescription>Current unit costs for inventory valuation</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item Type</TableHead>
+                  <TableHead>Item Name</TableHead>
+                  <TableHead>Unit Cost</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {inventoryCosts.map((cost) => (
+                  <TableRow key={cost.id}>
+                    <TableCell className="capitalize">{cost.item_type}</TableCell>
+                    <TableCell className="font-medium">{cost.item_name}</TableCell>
+                    <TableCell>{formatCurrency(cost.unit_cost)}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button variant="outline" size="sm" onClick={() => editCost(cost)}>
+                          Edit
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => deleteCost(cost.id)}>
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 mb-8">
         {/* Cash Assets Summary */}
@@ -350,7 +618,6 @@ export default function CurrentAssetsPage() {
                 <div className="text-2xl font-bold text-green-700">
                   {formatCurrency(cashAssets.available)}
                 </div>
-                <div className="text-xs text-green-500 mt-1">Cash on hand & in accounts</div>
               </div>
               
               <div className="border rounded-lg p-4 bg-blue-50">
@@ -358,7 +625,6 @@ export default function CurrentAssetsPage() {
                 <div className="text-2xl font-bold text-blue-700">
                   {formatCurrency(cashAssets.accountsReceivable)}
                 </div>
-                <div className="text-xs text-blue-500 mt-1">Money owed by clients/marketers</div>
               </div>
               
               <div className="border rounded-lg p-4 bg-purple-50">
@@ -366,7 +632,6 @@ export default function CurrentAssetsPage() {
                 <div className="text-2xl font-bold text-purple-700">
                   {formatCurrency(cashAssets.total)}
                 </div>
-                <div className="text-xs text-purple-500 mt-1">Sum of all cash assets</div>
               </div>
             </div>
 
@@ -381,7 +646,6 @@ export default function CurrentAssetsPage() {
                         <TableHead className="text-right">Total Amount</TableHead>
                         <TableHead className="text-right">Amount Paid</TableHead>
                         <TableHead className="text-right">Balance Due</TableHead>
-                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -392,11 +656,6 @@ export default function CurrentAssetsPage() {
                           <TableCell className="text-right">{formatCurrency(order.amount_paid)}</TableCell>
                           <TableCell className="text-right font-semibold text-red-600">
                             {formatCurrency(order.balance)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
-                              Pending
-                            </Badge>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -415,32 +674,29 @@ export default function CurrentAssetsPage() {
               <span className="text-blue-600">📦</span>
               Material Assets
             </CardTitle>
-            <CardDescription>Raw materials and prepaid inventory</CardDescription>
+            <CardDescription>Raw materials inventory value</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div className="border rounded-lg p-4 bg-blue-50">
-                <div className="text-sm text-blue-600 mb-1">Available Inventory</div>
+                <div className="text-sm text-blue-600 mb-1">Available Inventory Value</div>
                 <div className="text-2xl font-bold text-blue-700">
-                  {materialAssets.reduce((sum, item) => sum + item.available, 0)} units
+                  {formatCurrency(materialAssets.reduce((sum, item) => sum + (item.available * (item.unit_cost || 0)), 0))}
                 </div>
-                <div className="text-xs text-blue-500 mt-1">Physically in stock</div>
               </div>
               
               <div className="border rounded-lg p-4 bg-orange-50">
-                <div className="text-sm text-orange-600 mb-1">Prepaid Materials</div>
+                <div className="text-sm text-orange-600 mb-1">Prepaid Materials Value</div>
                 <div className="text-2xl font-bold text-orange-700">
-                  {materialAssets.reduce((sum, item) => sum + item.prepaid, 0)} units
+                  {formatCurrency(materialAssets.reduce((sum, item) => sum + (item.prepaid * (item.unit_cost || 0)), 0))}
                 </div>
-                <div className="text-xs text-orange-500 mt-1">Paid for but not yet delivered</div>
               </div>
               
               <div className="border rounded-lg p-4 bg-purple-50">
                 <div className="text-sm text-purple-600 mb-1">Total Material Assets</div>
                 <div className="text-2xl font-bold text-purple-700">
-                  {materialAssets.reduce((sum, item) => sum + item.total, 0)} units
+                  {formatCurrency(materialAssets.reduce((sum, item) => sum + item.total_value, 0))}
                 </div>
-                <div className="text-xs text-purple-500 mt-1">Sum of all material assets</div>
               </div>
             </div>
 
@@ -451,40 +707,19 @@ export default function CurrentAssetsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Material</TableHead>
-                      <TableHead className="text-right">Available</TableHead>
-                      <TableHead className="text-right">Prepaid</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Available Value</TableHead>
+                      <TableHead className="text-right">Prepaid Value</TableHead>
+                      <TableHead className="text-right">Total Value</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {materialAssets.map((material) => (
                       <TableRow key={material.id}>
                         <TableCell className="font-medium">{material.name}</TableCell>
-                        <TableCell className="text-right">
-                          <span className={material.available > 0 ? "text-green-600" : "text-red-600"}>
-                            {material.available} units
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span className={material.prepaid > 0 ? "text-orange-600" : "text-gray-400"}>
-                            {material.prepaid} units
-                          </span>
-                        </TableCell>
+                        <TableCell className="text-right">{formatCurrency(material.available * (material.unit_cost || 0))}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(material.prepaid * (material.unit_cost || 0))}</TableCell>
                         <TableCell className="text-right font-semibold">
-                          {material.total} units
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant="outline" 
-                            className={
-                              material.available > 0 
-                                ? "bg-green-100 text-green-800" 
-                                : "bg-red-100 text-red-800"
-                            }
-                          >
-                            {material.available > 0 ? "In Stock" : "Out of Stock"}
-                          </Badge>
+                          {formatCurrency(material.total_value)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -500,18 +735,17 @@ export default function CurrentAssetsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <span className="text-green-600">🥤</span>
-              Product Assets (Beverages)
+              Product Assets
             </CardTitle>
-            <CardDescription>Finished products available for sale</CardDescription>
+            <CardDescription>Finished products inventory value</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div className="border rounded-lg p-4 bg-green-50">
-                <div className="text-sm text-green-600 mb-1">Total Available Products</div>
+                <div className="text-sm text-green-600 mb-1">Total Products Value</div>
                 <div className="text-2xl font-bold text-green-700">
-                  {productAssets.reduce((sum, item) => sum + item.available, 0)} units
+                  {formatCurrency(productAssets.reduce((sum, item) => sum + item.total_value, 0))}
                 </div>
-                <div className="text-xs text-green-500 mt-1">Ready for sale</div>
               </div>
               
               <div className="border rounded-lg p-4 bg-blue-50">
@@ -519,15 +753,16 @@ export default function CurrentAssetsPage() {
                 <div className="text-2xl font-bold text-blue-700">
                   {productAssets.length} types
                 </div>
-                <div className="text-xs text-blue-500 mt-1">Different beverage varieties</div>
               </div>
               
               <div className="border rounded-lg p-4 bg-purple-50">
-                <div className="text-sm text-purple-600 mb-1">Inventory Status</div>
+                <div className="text-sm text-purple-600 mb-1">Average Unit Cost</div>
                 <div className="text-2xl font-bold text-purple-700">
-                  {productAssets.filter(item => item.available > 0).length}/{productAssets.length}
+                  {formatCurrency(
+                    productAssets.reduce((sum, item) => sum + (item.unit_cost || 0), 0) / 
+                    (productAssets.length || 1)
+                  )}
                 </div>
-                <div className="text-xs text-purple-500 mt-1">Products in stock</div>
               </div>
             </div>
 
@@ -538,30 +773,15 @@ export default function CurrentAssetsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product</TableHead>
-                      <TableHead className="text-right">Available Quantity</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Total Value</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {productAssets.map((product) => (
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">{product.title}</TableCell>
-                        <TableCell className="text-right">
-                          <span className={product.available > 0 ? "text-green-600" : "text-red-600"}>
-                            {product.available} units
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant="outline" 
-                            className={
-                              product.available > 0 
-                                ? "bg-green-100 text-green-800" 
-                                : "bg-red-100 text-red-800"
-                            }
-                          >
-                            {product.available > 0 ? "In Stock" : "Out of Stock"}
-                          </Badge>
+                        <TableCell className="text-right font-semibold">
+                          {formatCurrency(product.total_value)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -582,7 +802,7 @@ export default function CurrentAssetsPage() {
             <CardDescription>Complete overview of all current assets</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div className="space-y-4">
                 <h4 className="font-semibold text-indigo-700">Cash Assets</h4>
                 <div className="space-y-2">
@@ -605,21 +825,21 @@ export default function CurrentAssetsPage() {
                 <h4 className="font-semibold text-indigo-700">Material Assets</h4>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span>Available Inventory:</span>
+                    <span>Available Value:</span>
                     <span className="font-semibold">
-                      {materialAssets.reduce((sum, item) => sum + item.available, 0)} units
+                      {formatCurrency(materialAssets.reduce((sum, item) => sum + (item.available * (item.unit_cost || 0)), 0))}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Prepaid Materials:</span>
+                    <span>Prepaid Value:</span>
                     <span className="font-semibold">
-                      {materialAssets.reduce((sum, item) => sum + item.prepaid, 0)} units
+                      {formatCurrency(materialAssets.reduce((sum, item) => sum + (item.prepaid * (item.unit_cost || 0)), 0))}
                     </span>
                   </div>
                   <div className="flex justify-between border-t pt-2">
                     <span className="font-semibold">Total Materials:</span>
                     <span className="font-semibold text-indigo-600">
-                      {materialAssets.reduce((sum, item) => sum + item.total, 0)} units
+                      {formatCurrency(materialAssets.reduce((sum, item) => sum + item.total_value, 0))}
                     </span>
                   </div>
                 </div>
@@ -629,9 +849,9 @@ export default function CurrentAssetsPage() {
                 <h4 className="font-semibold text-indigo-700">Product Assets</h4>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span>Available Products:</span>
+                    <span>Available Value:</span>
                     <span className="font-semibold">
-                      {productAssets.reduce((sum, item) => sum + item.available, 0)} units
+                      {formatCurrency(productAssets.reduce((sum, item) => sum + item.total_value, 0))}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -643,18 +863,24 @@ export default function CurrentAssetsPage() {
                   <div className="flex justify-between border-t pt-2">
                     <span className="font-semibold">Total Products:</span>
                     <span className="font-semibold text-indigo-600">
-                      {productAssets.reduce((sum, item) => sum + item.available, 0)} units
+                      {formatCurrency(productAssets.reduce((sum, item) => sum + item.total_value, 0))}
                     </span>
                   </div>
                 </div>
-                </div>
+              </div>
             </div>
             
-            <div className="mt-6 p-4 bg-indigo-100 rounded-lg">
+            <div className="p-4 bg-indigo-100 rounded-lg">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-lg font-semibold text-indigo-800">Total Inventory Value:</span>
+                <span className="text-2xl font-bold text-indigo-900">
+                  {formatCurrency(totalInventoryValue)}
+                </span>
+              </div>
               <div className="flex justify-between items-center">
                 <span className="text-lg font-semibold text-indigo-800">Grand Total Current Assets:</span>
                 <span className="text-2xl font-bold text-indigo-900">
-                  {formatCurrency(cashAssets.total)} + {materialAssets.reduce((sum, item) => sum + item.total, 0) + productAssets.reduce((sum, item) => sum + item.available, 0)} units
+                  {formatCurrency(cashAssets.total + totalInventoryValue)}
                 </span>
               </div>
               <p className="text-sm text-indigo-600 mt-2">
