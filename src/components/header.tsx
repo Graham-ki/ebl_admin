@@ -27,7 +27,7 @@ const NAV_LINKS = [
   { href: '/admin/clients', label: 'Clients', icon: <CircleUser className="h-4 w-4" /> },
   { href: '/admin/suppliers', label: 'Suppliers', icon: <CircleUser className="h-4 w-4" /> },
   { href: '/admin/ledgers', label: 'Finances', icon: <Package2 className="h-4 w-4" /> },
-  { href: '/admin/analytics', label: 'Current Assets', icon: <Package2 className="h-4 w-4" /> },
+  { href: '/admin/analytics', label: 'Assets', icon: <Package2 className="h-4 w-4" /> },
 ];
 
 export const Header = () => {
