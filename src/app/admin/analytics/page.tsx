@@ -623,46 +623,7 @@ export default function CurrentAssetsPage() {
       </div>
 
       {/* Inventory Costs Management */}
-      {inventoryCosts.length > 0 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Inventory Costs</CardTitle>
-            <CardDescription>Current unit costs for inventory valuation</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Item Type</TableHead>
-                  <TableHead>Item Name</TableHead>
-                  <TableHead>Unit Cost</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {inventoryCosts.map((cost) => (
-                  <TableRow key={cost.id}>
-                    <TableCell className="capitalize">{cost.item_type}</TableCell>
-                    <TableCell className="font-medium">{cost.item_name}</TableCell>
-                    <TableCell>{formatCurrency(cost.unit_cost)}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="sm" onClick={() => editCost(cost)}>
-                          Edit
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={() => deleteCost(cost.id)}>
-                          Delete
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-
+      
       <div className="grid gap-6 mb-8">
         {/* Cash Assets Summary */}
         <Card>
