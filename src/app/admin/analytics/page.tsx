@@ -692,16 +692,12 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
                       <TableRow>
                         <TableHead>Customer/Marketer</TableHead>
                         <TableHead className="text-right">Total Amount</TableHead>
-                        <TableHead className="text-right">Amount Paid</TableHead>
-                        <TableHead className="text-right">Balance Due</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {orderBalances.map((order) => (
                         <TableRow key={order.order_id}>
                           <TableCell className="font-medium">{order.customer_name}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(order.total_amount)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(order.amount_paid)}</TableCell>
                           <TableCell className="text-right font-semibold text-red-600">
                             {formatCurrency(order.balance)}
                           </TableCell>
@@ -755,9 +751,7 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Material</TableHead>
-                      <TableHead className="text-right">Available Qty</TableHead>
                       <TableHead className="text-right">Available Value</TableHead>
-                      <TableHead className="text-right">Prepaid Qty</TableHead>
                       <TableHead className="text-right">Prepaid Value</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
                     </TableRow>
@@ -765,10 +759,8 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
                   <TableBody>
                     {materialAssets.map((material) => (
                       <TableRow key={material.id}>
-                        <TableCell className="font-medium">{material.name}</TableCell>
-                        <TableCell className="text-right">{material.available}</TableCell>
+                        <TableCell className="font-medium">{material.name}</TableCell>>
                         <TableCell className="text-right">{formatCurrency(material.available * (material.unit_cost || 0))}</TableCell>
-                        <TableCell className="text-right">{material.prepaid}</TableCell>
                         <TableCell className="text-right">{formatCurrency(material.prepaid_value)}</TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(material.total_value)}
