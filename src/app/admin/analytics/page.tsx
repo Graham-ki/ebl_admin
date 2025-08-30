@@ -218,6 +218,7 @@ export default function CurrentAssetsPage() {
       const materialAssetsData: MaterialAsset[] = [];
 
       for (const material of materials || []) {
+        // Get opening stocks
         const { data: openingStocks, error: openingStocksError } = await supabase
           .from("opening_stocks")
           .select("quantity")
@@ -226,6 +227,24 @@ export default function CurrentAssetsPage() {
 
         if (openingStocksError) throw openingStocksError;
 
+        // Get material entries (outflow)
+        const { data: materialEntries, error: entriesError } = await supabase
+          .from("material_entries")
+          .select("quantity")
+          .eq("material_id", material.id);
+
+        if (entriesError) throw entriesError;
+
+        // Get supply items with status 'prepaid' for this material
+        const { data: supplyItems, error: supplyItemsError } = await supabase
+          .from("supply_items")
+          .select("quantity, price")
+          .eq("name", material.name)
+          .eq("status", "prepaid");
+
+        if (supplyItemsError) throw supplyItemsError;
+
+        // Get deliveries with notes 'Stock' for this material
         const { data: stockDeliveries, error: deliveriesError } = await supabase
           .from("deliveries")
           .select("quantity")
@@ -234,28 +253,7 @@ export default function CurrentAssetsPage() {
 
         if (deliveriesError) throw deliveriesError;
 
-        const { data: materialEntries, error: entriesError } = await supabase
-          .from("material_entries")
-          .select("quantity")
-          .eq("material_id", material.id);
-
-        if (entriesError) throw entriesError;
-
-        const { data: supplyItems, error: supplyItemsError } = await supabase
-          .from("supply_items")
-          .select("quantity")
-          .eq("name", material.name);
-
-        if (supplyItemsError) throw supplyItemsError;
-
-        const { data: allDeliveries, error: allDeliveriesError } = await supabase
-          .from("deliveries")
-          .select("quantity")
-          .eq("notes", "Stock")
-          .eq("supply_item_id", material.id);
-
-        if (allDeliveriesError) throw allDeliveriesError;
-
+        // Calculate available quantity
         const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
         const stockDeliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
         const inflow = openingStocksTotal + stockDeliveriesTotal;
@@ -263,20 +261,37 @@ export default function CurrentAssetsPage() {
         const outflow = materialEntries?.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0) || 0;
         const available = inflow - outflow;
 
+        // Calculate prepaid quantity and value
         const supplyItemsTotal = supplyItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-        const deliveriesTotal = allDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-        const prepaid = supplyItemsTotal - deliveriesTotal;
+        const deliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+        
+        // Prepaid quantity is the difference between supply items and deliveries
+        const prepaidQuantity = Math.max(0, supplyItemsTotal - deliveriesTotal);
+        
+        // Calculate prepaid value using the price from supply_items
+        const prepaidValue = supplyItems?.reduce((sum, item) => {
+          // Use the item's price for the calculation
+          return sum + (prepaidQuantity > 0 ? prepaidQuantity * item.price : 0);
+        }, 0) || 0;
 
+        // For unit cost, use the inventory cost if available, otherwise use average price from supply items
         const materialCost = costs.find(cost => cost.item_type === 'material' && cost.item_id === material.id);
-        const unit_cost = materialCost?.unit_cost || 0;
-        const total_value = (available + Math.max(0, prepaid)) * unit_cost;
+        
+        let unit_cost = materialCost?.unit_cost || 0;
+        if (unit_cost === 0 && supplyItems && supplyItems.length > 0) {
+          // Calculate average price from prepaid supply items
+          const totalPrice = supplyItems.reduce((sum, item) => sum + item.price, 0);
+          unit_cost = totalPrice / supplyItems.length;
+        }
+
+        const total_value = (available * unit_cost) + prepaidValue;
 
         materialAssetsData.push({
           id: material.id,
           name: material.name,
           available,
-          prepaid: Math.max(0, prepaid),
-          total: available + Math.max(0, prepaid),
+          prepaid: prepaidQuantity,
+          total: available + prepaidQuantity,
           unit_cost,
           total_value
         });
@@ -711,7 +726,12 @@ export default function CurrentAssetsPage() {
               <div className="border rounded-lg p-4 bg-orange-50">
                 <div className="text-sm text-orange-600 mb-1">Prepaid Materials Value</div>
                 <div className="text-2xl font-bold text-orange-700">
-                  {formatCurrency(materialAssets.reduce((sum, item) => sum + (item.prepaid * (item.unit_cost || 0)), 0))}
+                  {formatCurrency(materialAssets.reduce((sum, item) => {
+                    // Calculate prepaid value using supply item prices, not inventory costs
+                    const prepaidValue = materialAssets.find(m => m.id === item.id)?.prepaid || 0;
+                    const supplyItemsPrice = materialAssets.find(m => m.id === item.id)?.unit_cost || 0;
+                    return sum + (prepaidValue * supplyItemsPrice);
+                  }, 0))}
                 </div>
               </div>
               
@@ -730,22 +750,31 @@ export default function CurrentAssetsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Material</TableHead>
+                      <TableHead className="text-right">Available Qty</TableHead>
+                      <TableHead className="text-right">Prepaid Qty</TableHead>
                       <TableHead className="text-right">Available Value</TableHead>
                       <TableHead className="text-right">Prepaid Value</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {materialAssets.map((material) => (
-                      <TableRow key={material.id}>
-                        <TableCell className="font-medium">{material.name}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(material.available * (material.unit_cost || 0))}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(material.prepaid * (material.unit_cost || 0))}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {formatCurrency(material.total_value)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {materialAssets.map((material) => {
+                      const availableValue = material.available * (material.unit_cost || 0);
+                      const prepaidValue = material.prepaid * (material.unit_cost || 0);
+                      
+                      return (
+                        <TableRow key={material.id}>
+                          <TableCell className="font-medium">{material.name}</TableCell>
+                          <TableCell className="text-right">{material.available}</TableCell>
+                          <TableCell className="text-right">{material.prepaid}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(availableValue)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(prepaidValue)}</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(material.total_value)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -796,6 +825,8 @@ export default function CurrentAssetsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product</TableHead>
+                      <TableHead className="text-right">Available Qty</TableHead>
+                      <TableHead className="text-right">Unit Cost</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -803,6 +834,8 @@ export default function CurrentAssetsPage() {
                     {productAssets.map((product) => (
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">{product.title}</TableCell>
+                        <TableCell className="text-right">{product.available}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(product.unit_cost || 0)}</TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(product.total_value)}
                         </TableCell>
