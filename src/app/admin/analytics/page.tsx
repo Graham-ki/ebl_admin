@@ -280,11 +280,12 @@ export default function CurrentAssetsPage() {
           }
         }
 
-        // Calculate available quantity
+        // Calculate available quantity - FIXED LOGIC
         const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
         const stockDeliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
         const materialEntriesTotal = materialEntries?.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0) || 0;
         
+        // Available quantity = (Opening stock + All stock deliveries) - Material entries
         const availableQuantity = (openingStocksTotal + stockDeliveriesTotal) - materialEntriesTotal;
 
         // Get unit cost from inventory costs
