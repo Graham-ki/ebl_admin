@@ -759,7 +759,7 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
                   <TableBody>
                     {materialAssets.map((material) => (
                       <TableRow key={material.id}>
-                        <TableCell className="font-medium">{material.name}</TableCell>>
+                        <TableCell className="font-medium">{material.name}</TableCell>
                         <TableCell className="text-right">{formatCurrency(material.available * (material.unit_cost || 0))}</TableCell>
                         <TableCell className="text-right">{formatCurrency(material.prepaid_value)}</TableCell>
                         <TableCell className="text-right font-semibold">
