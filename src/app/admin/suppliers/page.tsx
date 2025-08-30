@@ -131,6 +131,7 @@ export default function Suppliers() {
   const [showOtherInput, setShowOtherInput] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [deliveryNoteType, setDeliveryNoteType] = useState('');
+  const [deliveryUnitPrice, setDeliveryUnitPrice] = useState(0); // New state for adjustable unit price
   
   const getEastAfricanDateTime = () => {
     const now = new Date();
@@ -540,7 +541,10 @@ export default function Suppliers() {
       if (itemError) throw itemError;
       if (!freshItem) throw new Error('Item not found');
 
-      const deliveryValue = deliveryForm.quantity * freshItem.price;
+      // Use adjustable unit price for client deliveries, otherwise use the item's fixed price
+      const unitPrice = deliveryNoteType === 'client' ? deliveryUnitPrice : freshItem.price;
+      const deliveryValue = deliveryForm.quantity * unitPrice;
+      
       let notes = deliveryForm.notes;
       let clientId = null;
       
@@ -558,9 +562,9 @@ export default function Suppliers() {
             user: selectedClient,
             item: freshItem.name, // Use the fresh item data
             material: freshItem.name,
-            cost: freshItem.price,
+            cost: unitPrice, // Use the adjusted price for client orders
             quantity: deliveryForm.quantity,
-            total_amount: freshItem.price * deliveryForm.quantity,
+            total_amount: unitPrice * deliveryForm.quantity,
             created_at: new Date().toISOString()
           }]);
 
@@ -569,7 +573,7 @@ export default function Suppliers() {
             error: orderError,
             itemData: {
               name: freshItem.name,
-              price: freshItem.price,
+              price: unitPrice,
               quantity: deliveryForm.quantity
             }
           });
@@ -631,6 +635,7 @@ export default function Suppliers() {
         setShowDeliveryForm(false);
         setDeliveryNoteType('');
         setSelectedClient('');
+        setDeliveryUnitPrice(0); // Reset the adjustable price
       }
     } catch (err) {
       console.error('Error saving delivery:', err);
@@ -842,6 +847,7 @@ export default function Suppliers() {
     setShowDeliveryForm(false);
     setDeliveryNoteType('');
     setSelectedClient('');
+    setDeliveryUnitPrice(0); // Reset the adjustable price
   };
 
   const resetPaymentForm = () => {
@@ -890,11 +896,25 @@ export default function Suppliers() {
   };
 
   const handleDeliveryNoteTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setDeliveryNoteType(e.target.value);
-    if (e.target.value !== 'client') {
+    const noteType = e.target.value;
+    setDeliveryNoteType(noteType);
+    
+    if (noteType !== 'client') {
       setSelectedClient('');
     }
+    
+    // Reset unit price when note type changes
+    if (selectedItem) {
+      setDeliveryUnitPrice(noteType === 'client' ? selectedItem.price : 0);
+    }
   };
+
+  // Set the delivery unit price when an item is selected
+  useEffect(() => {
+    if (selectedItem && showDeliveryForm) {
+      setDeliveryUnitPrice(selectedItem.price);
+    }
+  }, [selectedItem, showDeliveryForm]);
 
   if (loading) {
     return (
@@ -1294,6 +1314,7 @@ export default function Suppliers() {
                                 <button
                                   onClick={() => {
                                     setSelectedItem(item);
+                                    setDeliveryUnitPrice(item.price); // Set initial unit price
                                     setShowDeliveryForm(true);
                                   }}
                                   className="text-green-600 hover:text-green-900"
@@ -1533,7 +1554,7 @@ export default function Suppliers() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:blue-700"
                   >
                     Save Item
                   </button>
@@ -1584,10 +1605,27 @@ export default function Suppliers() {
                   <input
                     type="number"
                     name="price"
-                    value={selectedItem.price}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-100 focus:outline-none"
+                    value={deliveryNoteType === 'client' ? deliveryUnitPrice : selectedItem.price}
+                    onChange={(e) => {
+                      if (deliveryNoteType === 'client') {
+                        setDeliveryUnitPrice(Number(e.target.value));
+                      }
+                    }}
+                    readOnly={deliveryNoteType !== 'client'}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                      deliveryNoteType !== 'client' ? 'bg-gray-100' : ''
+                    }`}
                   />
+                  {deliveryNoteType === 'client' && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Adjustable for client deliveries
+                    </p>
+                  )}
+                  {deliveryNoteType !== 'client' && deliveryNoteType !== '' && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Fixed price for stock deliveries
+                    </p>
+                  )}
                 </div>
                 
                 <div>
@@ -1661,13 +1699,13 @@ export default function Suppliers() {
                     <div>
                       <span className="text-sm font-medium">Unit Price:</span>
                       <div className="font-medium">
-                        {formatCurrency(selectedItem.price)}
+                        {formatCurrency(deliveryNoteType === 'client' ? deliveryUnitPrice : selectedItem.price)}
                       </div>
                     </div>
                     <div>
                       <span className="text-sm font-medium">Delivery Value:</span>
                       <div className="font-medium">
-                        {formatCurrency(deliveryForm.quantity * selectedItem.price)}
+                        {formatCurrency(deliveryForm.quantity * (deliveryNoteType === 'client' ? deliveryUnitPrice : selectedItem.price))}
                       </div>
                     </div>
                   </div>
@@ -1686,8 +1724,8 @@ export default function Suppliers() {
                           balanceOverride={{
                             ...getSupplierBalance(selectedItem.supplier_id)!,
                             current_balance: getSupplierBalance(selectedItem.supplier_id)!.balance_type === 'credit'
-                              ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * selectedItem.price)
-                              : getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * selectedItem.price)
+                              ? getSupplierBalance(selectedItem.supplier_id)!.current_balance - (deliveryForm.quantity * (deliveryNoteType === 'client' ? deliveryUnitPrice : selectedItem.price))
+                              : getSupplierBalance(selectedItem.supplier_id)!.current_balance + (deliveryForm.quantity * (deliveryNoteType === 'client' ? deliveryUnitPrice : selectedItem.price))
                           }}
                         />
                       </div>
