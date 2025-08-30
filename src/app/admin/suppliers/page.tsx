@@ -23,6 +23,7 @@ interface SupplyItem {
   name: string;
   quantity: number;
   price: number;
+  status: 'prepaid' | 'postpaid'; // Added status field
   created_at: string;
 }
 
@@ -159,6 +160,7 @@ export default function Suppliers() {
     name: "",
     quantity: 0,
     price: 0,
+    status: 'postpaid', // Default to postpaid
   });
   
   const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at" | "value">>({
@@ -348,6 +350,14 @@ export default function Suppliers() {
     }
   };
 
+  const formatPaymentStatus = (status: 'prepaid' | 'postpaid') => {
+    switch (status) {
+      case 'prepaid': return 'Prepaid';
+      case 'postpaid': return 'Postpaid';
+      default: return status;
+    }
+  };
+
   const SupplierBalanceDisplay = ({ 
     supplierId,
     balanceOverride 
@@ -417,7 +427,7 @@ export default function Suppliers() {
 
         if (suppliersError) throw suppliersError;
         if (itemsError) throw itemsError;
-        if (deliveriesError) throw deliveriesError;
+        if (deliversError) throw deliveriesError;
         if (paymentsError) throw paymentsError;
         if (materialsError) throw materialsError;
         if (balancesError) throw balancesError;
@@ -831,6 +841,7 @@ export default function Suppliers() {
       name: "",
       quantity: 0,
       price: 0,
+      status: 'postpaid', // Reset to postpaid
     });
     setShowItemForm(false);
     setShowOtherInput(false);
@@ -1261,6 +1272,9 @@ export default function Suppliers() {
                           Unit Price
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Payment Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total Delivered
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1287,6 +1301,15 @@ export default function Suppliers() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {formatCurrency(item.price)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                item.status === 'prepaid' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {formatPaymentStatus(item.status)}
+                              </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {formatCurrency(totalDelivered)}
@@ -1529,12 +1552,30 @@ export default function Suppliers() {
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payment Status
+                  </label>
+                  <select
+                    value={itemForm.status}
+                    onChange={(e) => setItemForm({...itemForm, status: e.target.value as 'prepaid' | 'postpaid'})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="postpaid">Postpaid (Pay later)</option>
+                    <option value="prepaid">Prepaid (Already paid)</option>
+                  </select>
+                </div>
+
                 <div className="bg-blue-50 p-3 rounded-lg">
                   <div className="flex justify-between">
                     <span className="text-sm font-medium">Total Cost:</span>
                     <span className="font-medium">
                       {formatCurrency((itemForm.quantity || 0) * (itemForm.price || 0))}
                     </span>
+                  </div>
+                  <div className="mt-2 text-sm text-gray-600">
+                    Status: {formatPaymentStatus(itemForm.status)}
+                    {itemForm.status === 'prepaid' && ' - This item has already been paid for'}
                   </div>
                 </div>
 
@@ -1554,7 +1595,7 @@ export default function Suppliers() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:blue-700"
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Save Item
                   </button>
