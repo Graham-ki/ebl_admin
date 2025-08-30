@@ -510,6 +510,7 @@ export default function Suppliers() {
     }
   };
 
+
   const handleItemSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -517,9 +518,22 @@ export default function Suppliers() {
     try {
       if (!selectedSupplier) return;
       
+      // Find the material ID based on the selected material name
+      let materialId = null;
+      if (itemForm.name && !showOtherInput) {
+        const material = materials.find(m => m.name === itemForm.name);
+        if (material) {
+          materialId = material.id;
+        }
+      }
+      
       const { data, error } = await supabase
         .from('supply_items')
-        .insert([{ ...itemForm, supplier_id: selectedSupplier.id }])
+        .insert([{ 
+          ...itemForm, 
+          supplier_id: selectedSupplier.id,
+          material_id: materialId // Add the material_id to the insert
+        }])
         .select();
 
       if (error) throw error;
