@@ -207,112 +207,111 @@ export default function CurrentAssetsPage() {
       return "Unknown Customer";
     }
   };
+const fetchMaterialAssets = async (costs: InventoryCost[]) => {
+  try {
+    const { data: materials, error: materialsError } = await supabase
+      .from("materials")
+      .select("id, name");
 
-  const fetchMaterialAssets = async (costs: InventoryCost[]) => {
-    try {
-      const { data: materials, error: materialsError } = await supabase
-        .from("materials")
-        .select("id, name");
+    if (materialsError) throw materialsError;
 
-      if (materialsError) throw materialsError;
+    const materialAssetsData: MaterialAsset[] = [];
 
-      const materialAssetsData: MaterialAsset[] = [];
+    for (const material of materials || []) {
+      // Get opening stocks for this material
+      const { data: openingStocks, error: openingStocksError } = await supabase
+        .from("opening_stocks")
+        .select("quantity")
+        .eq("material_id", material.id);
 
-      for (const material of materials || []) {
-        // Get opening stocks for this material
-        const { data: openingStocks, error: openingStocksError } = await supabase
-          .from("opening_stocks")
-          .select("quantity")
-          .eq("material_id", material.id);
+      if (openingStocksError) throw openingStocksError;
 
-        if (openingStocksError) throw openingStocksError;
+      // Get all stock deliveries for this material (both from supply_items and direct deliveries)
+      const { data: stockDeliveries, error: deliveriesError } = await supabase
+        .from("deliveries")
+        .select("quantity")
+        .eq("notes", "Stock")
+        .eq("material_id", material.id);
 
-        // Get all stock deliveries for this material
-        const { data: stockDeliveries, error: deliveriesError } = await supabase
-          .from("deliveries")
-          .select("quantity")
-          .eq("notes", "Stock")
-          .eq("material_id", material.id);
+      if (deliveriesError) throw deliveriesError;
 
-        if (deliveriesError) throw deliveriesError;
+      // Get material entries (outflow) for this material
+      const { data: materialEntries, error: entriesError } = await supabase
+        .from("material_entries")
+        .select("quantity")
+        .eq("material_id", material.id);
 
-        // Get material entries (outflow) for this material
-        const { data: materialEntries, error: entriesError } = await supabase
-          .from("material_entries")
-          .select("quantity")
-          .eq("material_id", material.id);
+      if (entriesError) throw entriesError;
 
-        if (entriesError) throw entriesError;
+      // NEW LOGIC: Get prepaid supply items for this material
+      const { data: prepaidSupplyItems, error: supplyItemsError } = await supabase
+        .from("supply_items")
+        .select("id, quantity, price")
+        .eq("material_id", material.id)
+        .eq("status", "prepaid");
 
-        // NEW LOGIC: Get prepaid supply items for this material
-        const { data: prepaidSupplyItems, error: supplyItemsError } = await supabase
-          .from("supply_items")
-          .select("id, quantity, price")
-          .eq("material_id", material.id)
-          .eq("status", "prepaid");
+      if (supplyItemsError) throw supplyItemsError;
 
-        if (supplyItemsError) throw supplyItemsError;
+      // Calculate total prepaid quantity and value
+      let totalPrepaidQuantity = 0;
+      let totalPrepaidValue = 0;
 
-        // Calculate total prepaid quantity and value
-        let totalPrepaidQuantity = 0;
-        let totalPrepaidValue = 0;
+      if (prepaidSupplyItems && prepaidSupplyItems.length > 0) {
+        for (const supplyItem of prepaidSupplyItems) {
+          // Get deliveries for this specific supply item
+          const { data: itemDeliveries, error: itemDeliveriesError } = await supabase
+            .from("deliveries")
+            .select("quantity")
+            .eq("supply_item_id", supplyItem.id)
+            .eq("notes", "Stock");
 
-        if (prepaidSupplyItems && prepaidSupplyItems.length > 0) {
-          for (const supplyItem of prepaidSupplyItems) {
-            // Get deliveries for this specific supply item
-            const { data: itemDeliveries, error: itemDeliveriesError } = await supabase
-              .from("deliveries")
-              .select("quantity")
-              .eq("supply_item_id", supplyItem.id)
-              .eq("notes", "Stock");
+          if (itemDeliveriesError) throw itemDeliveriesError;
 
-            if (itemDeliveriesError) throw itemDeliveriesError;
-
-            // Calculate delivered quantity for this supply item
-            const deliveredQuantity = itemDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-            
-            // Calculate remaining prepaid quantity
-            const prepaidQuantity = Math.max(0, (supplyItem.quantity || 0) - deliveredQuantity);
-            totalPrepaidQuantity += prepaidQuantity;
-            
-            // Calculate prepaid value for this supply item
-            totalPrepaidValue += prepaidQuantity * (supplyItem.price || 0);
-          }
+          // Calculate delivered quantity for this supply item
+          const deliveredQuantity = itemDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+          
+          // Calculate remaining prepaid quantity
+          const prepaidQuantity = Math.max(0, (supplyItem.quantity || 0) - deliveredQuantity);
+          totalPrepaidQuantity += prepaidQuantity;
+          
+          // Calculate prepaid value for this supply item
+          totalPrepaidValue += prepaidQuantity * (supplyItem.price || 0);
         }
-
-        // Calculate available quantity - FIXED LOGIC
-        const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-        const stockDeliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-        const materialEntriesTotal = materialEntries?.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0) || 0;
-        
-        // Available quantity = (Opening stock + All stock deliveries) - Material entries
-        const availableQuantity = (openingStocksTotal + stockDeliveriesTotal) - materialEntriesTotal;
-
-        // Get unit cost from inventory costs
-        const materialCost = costs.find(cost => cost.item_type === 'material' && cost.item_id === material.id);
-        const unit_cost = materialCost?.unit_cost || 0;
-
-        // Calculate total value
-        const availableValue = availableQuantity * unit_cost;
-        const total_value = availableValue + totalPrepaidValue;
-
-        materialAssetsData.push({
-          id: material.id,
-          name: material.name,
-          available: availableQuantity,
-          prepaid: totalPrepaidQuantity,
-          total: availableQuantity + totalPrepaidQuantity,
-          unit_cost,
-          total_value,
-          prepaid_value: totalPrepaidValue
-        });
       }
 
-      setMaterialAssets(materialAssetsData);
-    } catch (error) {
-      console.error("Error fetching material assets:", error);
+      // Calculate available quantity - FIXED LOGIC
+      const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+      const stockDeliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+      const materialEntriesTotal = materialEntries?.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0) || 0;
+      
+      // Available quantity = (Opening stock + All stock deliveries) - Material entries
+      const availableQuantity = (openingStocksTotal + stockDeliveriesTotal) - materialEntriesTotal;
+
+      // Get unit cost from inventory costs
+      const materialCost = costs.find(cost => cost.item_type === 'material' && cost.item_id === material.id);
+      const unit_cost = materialCost?.unit_cost || 0;
+
+      // Calculate total value
+      const availableValue = availableQuantity * unit_cost;
+      const total_value = availableValue + totalPrepaidValue;
+
+      materialAssetsData.push({
+        id: material.id,
+        name: material.name,
+        available: availableQuantity,
+        prepaid: totalPrepaidQuantity,
+        total: availableQuantity + totalPrepaidQuantity,
+        unit_cost,
+        total_value,
+        prepaid_value: totalPrepaidValue
+      });
     }
-  };
+
+    setMaterialAssets(materialAssetsData);
+  } catch (error) {
+    console.error("Error fetching material assets:", error);
+  }
+};
 
   const fetchProductAssets = async (costs: InventoryCost[]) => {
     try {
