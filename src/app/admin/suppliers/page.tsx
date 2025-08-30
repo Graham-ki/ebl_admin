@@ -36,6 +36,7 @@ interface Delivery {
   notes?: string;
   client_id?: string;
   created_at: string;
+  material_id: string | null;
 }
 
 interface Payment {
@@ -549,123 +550,132 @@ export default function Suppliers() {
   };
 
   const handleDeliverySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  e.preventDefault();
+  setError(null);
+  
+  try {
+    if (!selectedItem) return;
     
-    try {
-      if (!selectedItem) return;
+    // Get the fresh item data to ensure we have the latest name
+    const { data: freshItem, error: itemError } = await supabase
+      .from('supply_items')
+      .select('*')
+      .eq('id', selectedItem.id)
+      .single();
+
+    if (itemError) throw itemError;
+    if (!freshItem) throw new Error('Item not found');
+
+    // Use adjustable unit price for client deliveries, otherwise use the item's fixed price
+    const unitPrice = deliveryNoteType === 'client' ? deliveryUnitPrice : freshItem.price;
+    const deliveryValue = deliveryForm.quantity * unitPrice;
+    
+    let notes = deliveryForm.notes;
+    let clientId = null;
+    
+    if (deliveryNoteType === 'client' && selectedClient) {
+      const clientName = clients.find(c => c.id === selectedClient)?.name || '';
+      notes = `Client: ${clientName}`;
+      clientId = selectedClient;
       
-      // Get the fresh item data to ensure we have the latest name
-      const { data: freshItem, error: itemError } = await supabase
-        .from('supply_items')
-        .select('*')
-        .eq('id', selectedItem.id)
-        .single();
-
-      if (itemError) throw itemError;
-      if (!freshItem) throw new Error('Item not found');
-
-      // Use adjustable unit price for client deliveries, otherwise use the item's fixed price
-      const unitPrice = deliveryNoteType === 'client' ? deliveryUnitPrice : freshItem.price;
-      const deliveryValue = deliveryForm.quantity * unitPrice;
+      console.log('Creating order with item:', freshItem.name);
       
-      let notes = deliveryForm.notes;
-      let clientId = null;
-      
-      if (deliveryNoteType === 'client' && selectedClient) {
-        const clientName = clients.find(c => c.id === selectedClient)?.name || '';
-        notes = `Client: ${clientName}`;
-        clientId = selectedClient;
-        
-        console.log('Creating order with item:', freshItem.name);
-        
-        const { error: orderError } = await supabase
-          .from('order')
-          .insert([{
-            client_id: selectedClient,
-            user: selectedClient,
-            item: freshItem.name, // Use the fresh item data
-            material: freshItem.name,
-            cost: unitPrice, // Use the adjusted price for client orders
-            quantity: deliveryForm.quantity,
-            total_amount: unitPrice * deliveryForm.quantity,
-            created_at: new Date().toISOString()
-          }]);
+      const { error: orderError } = await supabase
+        .from('order')
+        .insert([{
+          client_id: selectedClient,
+          user: selectedClient,
+          item: freshItem.name, // Use the fresh item data
+          material: freshItem.name,
+          cost: unitPrice, // Use the adjusted price for client orders
+          quantity: deliveryForm.quantity,
+          total_amount: unitPrice * deliveryForm.quantity,
+          created_at: new Date().toISOString()
+        }]);
 
-        if (orderError) {
-          console.error('Order creation error details:', {
-            error: orderError,
-            itemData: {
-              name: freshItem.name,
-              price: unitPrice,
-              quantity: deliveryForm.quantity
-            }
-          });
-          throw orderError;
-        }
-      } else if (deliveryNoteType === 'stock') {
-        notes = 'Stock';
-      } else if (deliveryNoteType === 'client' && !selectedClient) {
-        throw new Error('Please select a client');
-      }
-      
-      const deliveryData = {
-        ...deliveryForm,
-        supply_item_id: selectedItem.id,
-        value: deliveryValue,
-        notes,
-        client_id: clientId
-      };
-
-      const { data, error } = await supabase
-        .from('deliveries')
-        .insert([deliveryData])
-        .select();
-
-      if (error) {
-        console.error('Delivery creation error:', error);
-        throw error;
-      }
-
-      if (data?.[0]) {
-        setDeliveries(prev => [...prev, data[0]]);
-        
-        setLocalSupplierBalances(prev => {
-            return prev.map(balance => {
-              if (balance.supplier_id === selectedItem.supplier_id) {
-              let newBalance = balance.current_balance;
-              
-              if (balance.balance_type === 'credit') {
-                newBalance = balance.current_balance - deliveryValue;
-              } else {
-                newBalance = balance.current_balance + deliveryValue;
-              }
-              
-              supabase
-                .from('supplier_balances')
-                .update({ current_balance: newBalance })
-                .eq('supplier_id', selectedItem.supplier_id)
-                .then(({ error }) => {
-                  if (error) console.error('Balance update error:', error);
-                });
-
-              return { ...balance, current_balance: newBalance };
-            }
-            return balance;
-          });
+      if (orderError) {
+        console.error('Order creation error details:', {
+          error: orderError,
+          itemData: {
+            name: freshItem.name,
+            price: unitPrice,
+            quantity: deliveryForm.quantity
+          }
         });
-
-        resetDeliveryForm();
-        setShowDeliveryForm(false);
-        setDeliveryNoteType('');
-        setSelectedClient('');
-        setDeliveryUnitPrice(0); // Reset the adjustable price
+        throw orderError;
       }
-    } catch (err) {
-      console.error('Error saving delivery:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save delivery. Please try again.');
+    } else if (deliveryNoteType === 'stock') {
+      notes = 'Stock';
+    } else if (deliveryNoteType === 'client' && !selectedClient) {
+      throw new Error('Please select a client');
     }
-  };
+    
+    // Find the material ID based on the supply item name
+    let materialId = null;
+    const material = materials.find(m => m.name === freshItem.name);
+    if (material) {
+      materialId = material.id;
+    }
+    
+    const deliveryData = {
+      ...deliveryForm,
+      supply_item_id: selectedItem.id,
+      material_id: materialId, // Add material_id to the delivery
+      value: deliveryValue,
+      notes,
+      client_id: clientId
+    };
+
+    const { data, error } = await supabase
+      .from('deliveries')
+      .insert([deliveryData])
+      .select();
+
+    if (error) {
+      console.error('Delivery creation error:', error);
+      throw error;
+    }
+
+    if (data?.[0]) {
+      setDeliveries(prev => [...prev, data[0]]);
+      
+      setLocalSupplierBalances(prev => {
+          return prev.map(balance => {
+            if (balance.supplier_id === selectedItem.supplier_id) {
+            let newBalance = balance.current_balance;
+            
+            if (balance.balance_type === 'credit') {
+              newBalance = balance.current_balance - deliveryValue;
+            } else {
+              newBalance = balance.current_balance + deliveryValue;
+            }
+            
+            supabase
+              .from('supplier_balances')
+              .update({ current_balance: newBalance })
+              .eq('supplier_id', selectedItem.supplier_id)
+              .then(({ error }) => {
+                if (error) console.error('Balance update error:', error);
+              });
+
+            return { ...balance, current_balance: newBalance };
+          }
+          return balance;
+        });
+      });
+
+      resetDeliveryForm();
+      setShowDeliveryForm(false);
+      setDeliveryNoteType('');
+      setSelectedClient('');
+      setDeliveryUnitPrice(0); // Reset the adjustable price
+    }
+  } catch (err) {
+    console.error('Error saving delivery:', err);
+    setError(err instanceof Error ? err.message : 'Failed to save delivery. Please try again.');
+  }
+};
+
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
