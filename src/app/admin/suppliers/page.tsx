@@ -879,6 +879,7 @@ export default function Suppliers() {
       delivery_date: getEastAfricanDateTime(),
       notes: "",
       client_id: "",
+      material_id:"",
     });
     setShowDeliveryForm(false);
     setDeliveryNoteType('');
