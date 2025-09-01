@@ -347,11 +347,12 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
         .from("product_entries")
         .select("quantity")
         .eq("product_id", product.id)
-        .not("transaction", "in", "(\"Return\", \"Production\", \"Stamped\")");
+        .not("transaction", "in", ["Return", "Production", "Stamped"]);
 
       if (outflowsError) throw outflowsError;
 
       // Calculate opening stocks total
+      
       const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
       
       // Calculate inflow total (positive entries)
