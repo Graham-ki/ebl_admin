@@ -353,7 +353,7 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
         .from("product_entries")
         .select("quantity")
         .eq("product_id", product.id)
-        .not("transaction", "in.('Return','Production','Stamped')"); // fixed
+        .not("transaction", 'in',"('Return','Production','Stamped')"); // fixed
 
       if (outflowsError) throw outflowsError;
 
