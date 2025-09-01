@@ -313,8 +313,9 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
   }
 };
 
- const fetchProductAssets = async (costs: InventoryCost[]) => {
+const fetchProductAssets = async (costs: InventoryCost[]) => {
   try {
+    // Fetch all products
     const { data: products, error: productsError } = await supabase
       .from("product")
       .select("id, title");
@@ -324,16 +325,18 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
     const productAssetsData: ProductAsset[] = [];
 
     for (const product of products || []) {
-      // Get opening stocks for this product
+      // --- Opening stock ---
       const { data: openingStocks, error: openingStocksError } = await supabase
         .from("opening_stocks")
         .select("quantity")
-        .eq("product_id", product.id)
-        .not("product_id", "is", null);
+        .eq("product_id", product.id);
 
       if (openingStocksError) throw openingStocksError;
 
-      // Get product entries (inflow) - Return, Production, Stamped
+      const openingStocksTotal =
+        openingStocks?.reduce((sum, item) => sum + Number(item.quantity) || 0, 0) || 0;
+
+      // --- Inflows: Return, Production, Stamped ---
       const { data: productInflows, error: inflowsError } = await supabase
         .from("product_entries")
         .select("quantity")
@@ -342,7 +345,10 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
 
       if (inflowsError) throw inflowsError;
 
-      // Get product entries (outflow) - entries that are NOT Return, Production, or Stamped
+      const productInflowsTotal =
+        productInflows?.reduce((sum, item) => sum + Number(item.quantity) || 0, 0) || 0;
+
+      // --- Outflows: anything not in [Return, Production, Stamped] ---
       const { data: productOutflows, error: outflowsError } = await supabase
         .from("product_entries")
         .select("quantity")
@@ -351,24 +357,22 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
 
       if (outflowsError) throw outflowsError;
 
-      // Calculate opening stocks total
-      
-      const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-      
-      // Calculate inflow total (positive entries)
-      const inflowTotal = productInflows?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-      
-      // Calculate outflow total (negative entries)
-      const outflowTotal = productOutflows?.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0) || 0;
-      
-      // Available quantity = Opening stock + Inflows - Outflows
-      const available = openingStocksTotal + inflowTotal - outflowTotal;
+      const productOutflowsTotal =
+        productOutflows?.reduce((sum, item) => sum + Number(item.quantity) || 0, 0) || 0;
+
+      // --- Final calculations ---
+      const inflowTotal = openingStocksTotal + productInflowsTotal;
+      const outflowTotal = productOutflowsTotal;
+
+      const available = inflowTotal - outflowTotal;
 
       // Get unit cost from inventory costs
-      const productCost = costs.find(cost => cost.item_type === 'product' && cost.item_id === product.id);
-      const unit_cost = productCost?.unit_cost || 0;
-      
-      // Calculate total value
+      const productCost = costs.find(
+        (cost) => cost.item_type === "product" && cost.item_id === product.id
+      );
+      const unit_cost = Number(productCost?.unit_cost) || 0;
+
+      // Total value = available * unit cost
       const total_value = available * unit_cost;
 
       productAssetsData.push({
@@ -376,7 +380,7 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
         title: product.title,
         available,
         unit_cost,
-        total_value
+        total_value,
       });
     }
 
@@ -385,6 +389,7 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
     console.error("Error fetching product assets:", error);
   }
 };
+
 
   const fetchCashAssets = async () => {
     try {
