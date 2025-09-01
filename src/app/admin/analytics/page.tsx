@@ -334,7 +334,7 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
       if (openingStocksError) throw openingStocksError;
 
       const openingStocksTotal =
-        openingStocks?.reduce((sum, item) => sum + Number(item.quantity) || 0, 0) || 0;
+        openingStocks?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
 
       // --- Inflows: Return, Production, Stamped ---
       const { data: productInflows, error: inflowsError } = await supabase
@@ -346,19 +346,19 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
       if (inflowsError) throw inflowsError;
 
       const productInflowsTotal =
-        productInflows?.reduce((sum, item) => sum + Number(item.quantity) || 0, 0) || 0;
+        productInflows?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
 
       // --- Outflows: anything not in [Return, Production, Stamped] ---
       const { data: productOutflows, error: outflowsError } = await supabase
         .from("product_entries")
         .select("quantity")
         .eq("product_id", product.id)
-        .not("transaction", "in", ["Return", "Production", "Stamped"]);
+        .not("transaction", "in.('Return','Production','Stamped')"); // fixed
 
       if (outflowsError) throw outflowsError;
 
       const productOutflowsTotal =
-        productOutflows?.reduce((sum, item) => sum + Number(item.quantity) || 0, 0) || 0;
+        productOutflows?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
 
       // --- Final calculations ---
       const inflowTotal = openingStocksTotal + productInflowsTotal;
@@ -389,6 +389,7 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
     console.error("Error fetching product assets:", error);
   }
 };
+
 
 
   const fetchCashAssets = async () => {
