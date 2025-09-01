@@ -313,55 +313,77 @@ const fetchMaterialAssets = async (costs: InventoryCost[]) => {
   }
 };
 
-  const fetchProductAssets = async (costs: InventoryCost[]) => {
-    try {
-      const { data: products, error: productsError } = await supabase
-        .from("product")
-        .select("id, title");
+ const fetchProductAssets = async (costs: InventoryCost[]) => {
+  try {
+    const { data: products, error: productsError } = await supabase
+      .from("product")
+      .select("id, title");
 
-      if (productsError) throw productsError;
+    if (productsError) throw productsError;
 
-      const productAssetsData: ProductAsset[] = [];
+    const productAssetsData: ProductAsset[] = [];
 
-      for (const product of products || []) {
-        const { data: openingStocks, error: openingStocksError } = await supabase
-          .from("opening_stocks")
-          .select("quantity")
-          .eq("product_id", product.id)
-          .not("product_id", "is", null);
+    for (const product of products || []) {
+      // Get opening stocks for this product
+      const { data: openingStocks, error: openingStocksError } = await supabase
+        .from("opening_stocks")
+        .select("quantity")
+        .eq("product_id", product.id)
+        .not("product_id", "is", null);
 
-        if (openingStocksError) throw openingStocksError;
+      if (openingStocksError) throw openingStocksError;
 
-        const { data: productEntries, error: entriesError } = await supabase
-          .from("product_entries")
-          .select("quantity")
-          .eq("product_id", product.id)
-          .in("transaction", ["Return", "Production", "Stamped"]);
+      // Get product entries (inflow) - Return, Production, Stamped
+      const { data: productInflows, error: inflowsError } = await supabase
+        .from("product_entries")
+        .select("quantity")
+        .eq("product_id", product.id)
+        .in("transaction", ["Return", "Production", "Stamped"]);
 
-        if (entriesError) throw entriesError;
+      if (inflowsError) throw inflowsError;
 
-        const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-        const productEntriesTotal = productEntries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-        const available = openingStocksTotal + productEntriesTotal;
+      // Get product entries (outflow) - entries that are NOT Return, Production, or Stamped
+      const { data: productOutflows, error: outflowsError } = await supabase
+        .from("product_entries")
+        .select("quantity")
+        .eq("product_id", product.id)
+        .not("transaction", "in", "(\"Return\", \"Production\", \"Stamped\")");
 
-        const productCost = costs.find(cost => cost.item_type === 'product' && cost.item_id === product.id);
-        const unit_cost = productCost?.unit_cost || 0;
-        const total_value = available * unit_cost;
+      if (outflowsError) throw outflowsError;
 
-        productAssetsData.push({
-          id: product.id,
-          title: product.title,
-          available,
-          unit_cost,
-          total_value
-        });
-      }
+      // Calculate opening stocks total
+      const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+      
+      // Calculate inflow total (positive entries)
+      const inflowTotal = productInflows?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+      
+      // Calculate outflow total (negative entries)
+      const outflowTotal = productOutflows?.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0) || 0;
+      
+      // Available quantity = Opening stock + Inflows - Outflows
+      const available = openingStocksTotal + inflowTotal - outflowTotal;
 
-      setProductAssets(productAssetsData);
-    } catch (error) {
-      console.error("Error fetching product assets:", error);
+      // Get unit cost from inventory costs
+      const productCost = costs.find(cost => cost.item_type === 'product' && cost.item_id === product.id);
+      const unit_cost = productCost?.unit_cost || 0;
+      
+      // Calculate total value
+      const total_value = available * unit_cost;
+
+      productAssetsData.push({
+        id: product.id,
+        title: product.title,
+        available,
+        unit_cost,
+        total_value
+      });
     }
-  };
+
+    setProductAssets(productAssetsData);
+  } catch (error) {
+    console.error("Error fetching product assets:", error);
+  }
+};
 
   const fetchCashAssets = async () => {
     try {
