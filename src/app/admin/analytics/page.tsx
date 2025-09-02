@@ -840,9 +840,7 @@ export default function CurrentAssetsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Customer/Marketer</TableHead>
-                        <TableHead className="text-right">Total Amount</TableHead>
-                        <TableHead className="text-right">Amount Paid</TableHead>
+                        <TableHead>Client/Marketer</TableHead>
                         <TableHead className="text-right">Balance</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -850,8 +848,6 @@ export default function CurrentAssetsPage() {
                       {orderBalances.map((order) => (
                         <TableRow key={order.order_id}>
                           <TableCell className="font-medium">{order.customer_name}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(order.total_amount)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(order.amount_paid)}</TableCell>
                           <TableCell className="text-right font-semibold text-red-600">
                             {formatCurrency(order.balance)}
                           </TableCell>
