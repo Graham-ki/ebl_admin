@@ -76,6 +76,13 @@ interface CostFormData {
   unit_cost: string;
 }
 
+interface OpeningBalanceOwner {
+  id: string;
+  type: 'marketer' | 'client' | 'supplier';
+  name: string;
+  amount: number;
+}
+
 export default function CurrentAssetsPage() {
   const [materialAssets, setMaterialAssets] = useState<MaterialAsset[]>([]);
   const [productAssets, setProductAssets] = useState<ProductAsset[]>([]);
@@ -94,6 +101,7 @@ export default function CurrentAssetsPage() {
     item_id: '',
     unit_cost: ''
   });
+  const [openingBalanceOwners, setOpeningBalanceOwners] = useState<OpeningBalanceOwner[]>([]);
 
   // Fetch inventory costs
   const fetchInventoryCosts = async () => {
@@ -207,190 +215,189 @@ export default function CurrentAssetsPage() {
       return "Unknown Customer";
     }
   };
-const fetchMaterialAssets = async (costs: InventoryCost[]) => {
-  try {
-    const { data: materials, error: materialsError } = await supabase
-      .from("materials")
-      .select("id, name");
 
-    if (materialsError) throw materialsError;
+  const fetchMaterialAssets = async (costs: InventoryCost[]) => {
+    try {
+      const { data: materials, error: materialsError } = await supabase
+        .from("materials")
+        .select("id, name");
 
-    const materialAssetsData: MaterialAsset[] = [];
+      if (materialsError) throw materialsError;
 
-    for (const material of materials || []) {
-      // Get opening stocks for this material
-      const { data: openingStocks, error: openingStocksError } = await supabase
-        .from("opening_stocks")
-        .select("quantity")
-        .eq("material_id", material.id);
+      const materialAssetsData: MaterialAsset[] = [];
 
-      if (openingStocksError) throw openingStocksError;
+      for (const material of materials || []) {
+        // Get opening stocks for this material
+        const { data: openingStocks, error: openingStocksError } = await supabase
+          .from("opening_stocks")
+          .select("quantity")
+          .eq("material_id", material.id);
 
-      // Get all stock deliveries for this material (both from supply_items and direct deliveries)
-      const { data: stockDeliveries, error: deliveriesError } = await supabase
-        .from("deliveries")
-        .select("quantity")
-        .eq("notes", "Stock")
-        .eq("material_id", material.id);
+        if (openingStocksError) throw openingStocksError;
 
-      if (deliveriesError) throw deliveriesError;
+        // Get all stock deliveries for this material (both from supply_items and direct deliveries)
+        const { data: stockDeliveries, error: deliveriesError } = await supabase
+          .from("deliveries")
+          .select("quantity")
+          .eq("notes", "Stock")
+          .eq("material_id", material.id);
 
-      // Get material entries (outflow) for this material
-      const { data: materialEntries, error: entriesError } = await supabase
-        .from("material_entries")
-        .select("quantity")
-        .eq("material_id", material.id);
+        if (deliveriesError) throw deliveriesError;
 
-      if (entriesError) throw entriesError;
+        // Get material entries (outflow) for this material
+        const { data: materialEntries, error: entriesError } = await supabase
+          .from("material_entries")
+          .select("quantity")
+          .eq("material_id", material.id);
 
-      // NEW LOGIC: Get prepaid supply items for this material
-      const { data: prepaidSupplyItems, error: supplyItemsError } = await supabase
-        .from("supply_items")
-        .select("id, quantity, price")
-        .eq("material_id", material.id)
-        .eq("status", "prepaid");
+        if (entriesError) throw entriesError;
 
-      if (supplyItemsError) throw supplyItemsError;
+        // NEW LOGIC: Get prepaid supply items for this material
+        const { data: prepaidSupplyItems, error: supplyItemsError } = await supabase
+          .from("supply_items")
+          .select("id, quantity, price")
+          .eq("material_id", material.id)
+          .eq("status", "prepaid");
 
-      // Calculate total prepaid quantity and value
-      let totalPrepaidQuantity = 0;
-      let totalPrepaidValue = 0;
+        if (supplyItemsError) throw supplyItemsError;
 
-      if (prepaidSupplyItems && prepaidSupplyItems.length > 0) {
-        for (const supplyItem of prepaidSupplyItems) {
-          // Get deliveries for this specific supply item
-          const { data: itemDeliveries, error: itemDeliveriesError } = await supabase
-            .from("deliveries")
-            .select("quantity")
-            .eq("supply_item_id", supplyItem.id)
-            .eq("notes", "Stock");
+        // Calculate total prepaid quantity and value
+        let totalPrepaidQuantity = 0;
+        let totalPrepaidValue = 0;
 
-          if (itemDeliveriesError) throw itemDeliveriesError;
+        if (prepaidSupplyItems && prepaidSupplyItems.length > 0) {
+          for (const supplyItem of prepaidSupplyItems) {
+            // Get deliveries for this specific supply item
+            const { data: itemDeliveries, error: itemDeliveriesError } = await supabase
+              .from("deliveries")
+              .select("quantity")
+              .eq("supply_item_id", supplyItem.id)
+              .eq("notes", "Stock");
 
-          // Calculate delivered quantity for this supply item
-          const deliveredQuantity = itemDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-          
-          // Calculate remaining prepaid quantity
-          const prepaidQuantity = Math.max(0, (supplyItem.quantity || 0) - deliveredQuantity);
-          totalPrepaidQuantity += prepaidQuantity;
-          
-          // Calculate prepaid value for this supply item
-          totalPrepaidValue += prepaidQuantity * (supplyItem.price || 0);
+            if (itemDeliveriesError) throw itemDeliveriesError;
+
+            // Calculate delivered quantity for this supply item
+            const deliveredQuantity = itemDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+            
+            // Calculate remaining prepaid quantity
+            const prepaidQuantity = Math.max(0, (supplyItem.quantity || 0) - deliveredQuantity);
+            totalPrepaidQuantity += prepaidQuantity;
+            
+            // Calculate prepaid value for this supply item
+            totalPrepaidValue += prepaidQuantity * (supplyItem.price || 0);
+          }
         }
+
+        // Calculate available quantity - FIXED LOGIC
+        const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+        const stockDeliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+        const materialEntriesTotal = materialEntries?.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0) || 0;
+        
+        // Available quantity = (Opening stock + All stock deliveries) - Material entries
+        const availableQuantity = (openingStocksTotal + stockDeliveriesTotal) - materialEntriesTotal;
+
+        // Get unit cost from inventory costs
+        const materialCost = costs.find(cost => cost.item_type === 'material' && cost.item_id === material.id);
+        const unit_cost = materialCost?.unit_cost || 0;
+
+        // Calculate total value
+        const availableValue = availableQuantity * unit_cost;
+        const total_value = availableValue + totalPrepaidValue;
+
+        materialAssetsData.push({
+          id: material.id,
+          name: material.name,
+          available: availableQuantity,
+          prepaid: totalPrepaidQuantity,
+          total: availableQuantity + totalPrepaidQuantity,
+          unit_cost,
+          total_value,
+          prepaid_value: totalPrepaidValue
+        });
       }
 
-      // Calculate available quantity - FIXED LOGIC
-      const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-      const stockDeliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-      const materialEntriesTotal = materialEntries?.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0) || 0;
-      
-      // Available quantity = (Opening stock + All stock deliveries) - Material entries
-      const availableQuantity = (openingStocksTotal + stockDeliveriesTotal) - materialEntriesTotal;
-
-      // Get unit cost from inventory costs
-      const materialCost = costs.find(cost => cost.item_type === 'material' && cost.item_id === material.id);
-      const unit_cost = materialCost?.unit_cost || 0;
-
-      // Calculate total value
-      const availableValue = availableQuantity * unit_cost;
-      const total_value = availableValue + totalPrepaidValue;
-
-      materialAssetsData.push({
-        id: material.id,
-        name: material.name,
-        available: availableQuantity,
-        prepaid: totalPrepaidQuantity,
-        total: availableQuantity + totalPrepaidQuantity,
-        unit_cost,
-        total_value,
-        prepaid_value: totalPrepaidValue
-      });
+      setMaterialAssets(materialAssetsData);
+    } catch (error) {
+      console.error("Error fetching material assets:", error);
     }
+  };
 
-    setMaterialAssets(materialAssetsData);
-  } catch (error) {
-    console.error("Error fetching material assets:", error);
-  }
-};
+  const fetchProductAssets = async (costs: InventoryCost[]) => {
+    try {
+      // Fetch all products
+      const { data: products, error: productsError } = await supabase
+        .from("product")
+        .select("id, title");
 
-const fetchProductAssets = async (costs: InventoryCost[]) => {
-  try {
-    // Fetch all products
-    const { data: products, error: productsError } = await supabase
-      .from("product")
-      .select("id, title");
+      if (productsError) throw productsError;
 
-    if (productsError) throw productsError;
+      const productAssetsData: ProductAsset[] = [];
 
-    const productAssetsData: ProductAsset[] = [];
+      for (const product of products || []) {
+        // --- Opening stock ---
+        const { data: openingStocks, error: openingStocksError } = await supabase
+          .from("opening_stocks")
+          .select("quantity")
+          .eq("product_id", product.id);
 
-    for (const product of products || []) {
-      // --- Opening stock ---
-      const { data: openingStocks, error: openingStocksError } = await supabase
-        .from("opening_stocks")
-        .select("quantity")
-        .eq("product_id", product.id);
+        if (openingStocksError) throw openingStocksError;
 
-      if (openingStocksError) throw openingStocksError;
+        const openingStocksTotal =
+          openingStocks?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
 
-      const openingStocksTotal =
-        openingStocks?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
+        // --- Inflows: Return, Production, Stamped ---
+        const { data: productInflows, error: inflowsError } = await supabase
+          .from("product_entries")
+          .select("quantity")
+          .eq("product_id", product.id)
+          .in("transaction", ["Return", "Production", "Stamped"]);
 
-      // --- Inflows: Return, Production, Stamped ---
-      const { data: productInflows, error: inflowsError } = await supabase
-        .from("product_entries")
-        .select("quantity")
-        .eq("product_id", product.id)
-        .in("transaction", ["Return", "Production", "Stamped"]);
+        if (inflowsError) throw inflowsError;
 
-      if (inflowsError) throw inflowsError;
+        const productInflowsTotal =
+          productInflows?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
 
-      const productInflowsTotal =
-        productInflows?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
+        // --- Outflows: anything not in [Return, Production, Stamped] ---
+        const { data: productOutflows, error: outflowsError } = await supabase
+          .from("product_entries")
+          .select("quantity")
+          .eq("product_id", product.id)
+          .not("transaction", 'in',"('Return','Production','Stamped')"); // fixed
 
-      // --- Outflows: anything not in [Return, Production, Stamped] ---
-      const { data: productOutflows, error: outflowsError } = await supabase
-        .from("product_entries")
-        .select("quantity")
-        .eq("product_id", product.id)
-        .not("transaction", 'in',"('Return','Production','Stamped')"); // fixed
+        if (outflowsError) throw outflowsError;
 
-      if (outflowsError) throw outflowsError;
+        const productOutflowsTotal =
+          productOutflows?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
 
-      const productOutflowsTotal =
-        productOutflows?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
+        // --- Final calculations ---
+        const inflowTotal = openingStocksTotal + productInflowsTotal;
+        const outflowTotal = productOutflowsTotal;
 
-      // --- Final calculations ---
-      const inflowTotal = openingStocksTotal + productInflowsTotal;
-      const outflowTotal = productOutflowsTotal;
+        const available = inflowTotal - outflowTotal;
 
-      const available = inflowTotal - outflowTotal;
+        // Get unit cost from inventory costs
+         const productCost = costs.find(
+          (cost) => cost.item_type === "product" && cost.item_id === product.id
+        );
+        const unit_cost = Number(productCost?.unit_cost) || 0;
 
-      // Get unit cost from inventory costs
-      const productCost = costs.find(
-        (cost) => cost.item_type === "product" && cost.item_id === product.id
-      );
-      const unit_cost = Number(productCost?.unit_cost) || 0;
+        // Total value = available * unit cost
+        const total_value = available * unit_cost;
 
-      // Total value = available * unit cost
-      const total_value = available * unit_cost;
+        productAssetsData.push({
+          id: product.id,
+          title: product.title,
+          available,
+          unit_cost,
+          total_value,
+        });
+      }
 
-      productAssetsData.push({
-        id: product.id,
-        title: product.title,
-        available,
-        unit_cost,
-        total_value,
-      });
+      setProductAssets(productAssetsData);
+    } catch (error) {
+      console.error("Error fetching product assets:", error);
     }
-
-    setProductAssets(productAssetsData);
-  } catch (error) {
-    console.error("Error fetching product assets:", error);
-  }
-};
-
-
+  };
 
   const fetchCashAssets = async () => {
     try {
@@ -410,14 +417,128 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
       const totalExpenses = expensesData?.reduce((sum, item) => sum + (item.amount_spent || 0), 0) || 0;
       const availableCash = totalPayments - totalExpenses;
 
+      // Fetch opening balances with status 'Unpaid' and owner information
+      const { data: openingBalancesData, error: openingBalancesError } = await supabase
+        .from("opening_balances")
+        .select("id, amount, marketer_id, client_id, supplier_id")
+        .eq("status", "Unpaid");
+
+      if (openingBalancesError) throw openingBalancesError;
+
+      let totalOpeningBalances = 0;
+      const ownersMap = new Map<string, OpeningBalanceOwner>();
+
+      if (openingBalancesData && openingBalancesData.length > 0) {
+        for (const balance of openingBalancesData) {
+          const amount = balance.amount || 0;
+          totalOpeningBalances += amount;
+
+          // Determine the owner type and ID
+          let ownerId: string | null = null;
+          let ownerType: 'marketer' | 'client' | 'supplier' | null = null;
+
+          if (balance.marketer_id) {
+            ownerId = balance.marketer_id;
+            ownerType = 'marketer';
+          } else if (balance.client_id) {
+            ownerId = balance.client_id;
+            ownerType = 'client';
+          } else if (balance.supplier_id) {
+            ownerId = balance.supplier_id;
+            ownerType = 'supplier';
+          }
+
+          if (ownerId && ownerType) {
+            const key = `${ownerType}_${ownerId}`;
+            
+            if (ownersMap.has(key)) {
+              // Update existing owner entry
+              const existingOwner = ownersMap.get(key)!;
+              existingOwner.amount += amount;
+              ownersMap.set(key, existingOwner);
+            } else {
+              // Create new owner entry (name will be fetched later)
+              ownersMap.set(key, {
+                id: ownerId,
+                type: ownerType,
+                name: 'Loading...', // Temporary placeholder
+                amount: amount
+              });
+            }
+          } else {
+            // Handle cases where no owner is specified
+            const key = `unknown_${balance.id}`;
+            ownersMap.set(key, {
+              id: balance.id,
+              type: 'client', // Default type
+              name: 'Unknown Owner',
+              amount: amount
+            });
+          }
+        }
+
+        // Fetch names for all owners
+        const ownersArray = Array.from(ownersMap.values());
+        
+        for (const owner of ownersArray) {
+          try {
+            let tableName = '';
+            switch (owner.type) {
+              case 'marketer':
+                tableName = 'users';
+                break;
+              case 'client':
+                tableName = 'clients';
+                break;
+              case 'supplier':
+                tableName = 'suppliers';
+                break;
+            }
+
+            if (tableName) {
+              const { data, error } = await supabase
+                .from(tableName)
+                .select("name")
+                .eq("id", owner.id)
+                .single();
+
+              if (!error && data) {
+                owner.name = data.name;
+              } else {
+                owner.name = `Unknown ${owner.type}`;
+              }
+            }
+          } catch (error) {
+            console.error(`Error fetching name for ${owner.type} ${owner.id}:`, error);
+            owner.name = `Error loading ${owner.type}`;
+          }
+        }
+
+        setOpeningBalanceOwners(ownersArray);
+      }
+
       const { data: orders, error: ordersError } = await supabase
         .from("order")
         .select("id, total_amount, user");
 
       if (ordersError) throw ordersError;
 
-      let totalAccountsReceivable = 0;
+      let totalAccountsReceivable = totalOpeningBalances;
       const balances: OrderBalance[] = [];
+
+      // Add opening balances to the accounts receivable list (grouped by owner)
+      if (openingBalancesData && openingBalancesData.length > 0) {
+        const ownersArray = Array.from(ownersMap.values());
+        for (const owner of ownersArray) {
+          balances.push({
+            order_id: `${owner.type}_${owner.id}`,
+            total_amount: owner.amount,
+            amount_paid: 0,
+            balance: owner.amount,
+            customer_name: `${owner.name} (${owner.type} - Opening Balance)`
+          });
+        }
+      }
 
       for (const order of orders || []) {
         const { data: orderPayments, error: paymentsError } = await supabase
@@ -721,12 +842,16 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
                       <TableRow>
                         <TableHead>Customer/Marketer</TableHead>
                         <TableHead className="text-right">Total Amount</TableHead>
+                        <TableHead className="text-right">Amount Paid</TableHead>
+                        <TableHead className="text-right">Balance</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {orderBalances.map((order) => (
                         <TableRow key={order.order_id}>
                           <TableCell className="font-medium">{order.customer_name}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(order.total_amount)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(order.amount_paid)}</TableCell>
                           <TableCell className="text-right font-semibold text-red-600">
                             {formatCurrency(order.balance)}
                           </TableCell>
@@ -780,6 +905,8 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Material</TableHead>
+                      <TableHead className="text-right">Available Qty</TableHead>
+                      <TableHead className="text-right">Prepaid Qty</TableHead>
                       <TableHead className="text-right">Available Value</TableHead>
                       <TableHead className="text-right">Prepaid Value</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
@@ -789,6 +916,8 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
                     {materialAssets.map((material) => (
                       <TableRow key={material.id}>
                         <TableCell className="font-medium">{material.name}</TableCell>
+                        <TableCell className="text-right">{material.available}</TableCell>
+                        <TableCell className="text-right">{material.prepaid}</TableCell>
                         <TableCell className="text-right">{formatCurrency(material.available * (material.unit_cost || 0))}</TableCell>
                         <TableCell className="text-right">{formatCurrency(material.prepaid_value)}</TableCell>
                         <TableCell className="text-right font-semibold">
@@ -847,6 +976,7 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
                     <TableRow>
                       <TableHead>Product</TableHead>
                       <TableHead className="text-right">Available Qty</TableHead>
+                      <TableHead className="text-right">Unit Cost</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -855,6 +985,7 @@ const fetchProductAssets = async (costs: InventoryCost[]) => {
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">{product.title}</TableCell>
                         <TableCell className="text-right">{product.available}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(product.unit_cost || 0)}</TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(product.total_value)}
                         </TableCell>
