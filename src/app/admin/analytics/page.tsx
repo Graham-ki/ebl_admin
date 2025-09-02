@@ -399,184 +399,220 @@ export default function CurrentAssetsPage() {
     }
   };
 
-  const fetchCashAssets = async () => {
-    try {
-      const { data: financeData, error: financeError } = await supabase
-        .from("finance")
-        .select("amount_paid");
+const fetchCashAssets = async () => {
+  try {
+    const { data: financeData, error: financeError } = await supabase
+      .from("finance")
+      .select("amount_paid");
 
-      if (financeError) throw financeError;
+    if (financeError) throw financeError;
 
-      const { data: expensesData, error: expensesError } = await supabase
-        .from("expenses")
-        .select("amount_spent");
+    const { data: expensesData, error: expensesError } = await supabase
+      .from("expenses")
+      .select("amount_spent");
 
-      if (expensesError) throw expensesError;
+    if (expensesError) throw expensesError;
 
-      const totalPayments = financeData?.reduce((sum, item) => sum + (item.amount_paid || 0), 0) || 0;
-      const totalExpenses = expensesData?.reduce((sum, item) => sum + (item.amount_spent || 0), 0) || 0;
-      const availableCash = totalPayments - totalExpenses;
+    const totalPayments = financeData?.reduce((sum, item) => sum + (item.amount_paid || 0), 0) || 0;
+    const totalExpenses = expensesData?.reduce((sum, item) => sum + (item.amount_spent || 0), 0) || 0;
+    const availableCash = totalPayments - totalExpenses;
 
-      // Fetch opening balances with status 'Unpaid' and owner information
-      const { data: openingBalancesData, error: openingBalancesError } = await supabase
-        .from("opening_balances")
-        .select("id, amount, marketer_id, client_id, supplier_id")
-        .eq("status", "Unpaid");
+    // Fetch opening balances with status 'Unpaid' and owner information
+    const { data: openingBalancesData, error: openingBalancesError } = await supabase
+      .from("opening_balances")
+      .select("id, amount, marketer_id, client_id, supplier_id")
+      .eq("status", "Unpaid");
 
-      if (openingBalancesError) throw openingBalancesError;
+    if (openingBalancesError) throw openingBalancesError;
 
-      let totalOpeningBalances = 0;
-      const ownersMap = new Map<string, OpeningBalanceOwner>();
+    let totalOpeningBalances = 0;
+    const ownersMap = new Map<string, OpeningBalanceOwner>();
 
-      if (openingBalancesData && openingBalancesData.length > 0) {
-        for (const balance of openingBalancesData) {
-          const amount = balance.amount || 0;
-          totalOpeningBalances += amount;
+    if (openingBalancesData && openingBalancesData.length > 0) {
+      // First, collect all unique owner IDs that we need to fetch names for
+      const marketerIds = new Set<string>();
+      const clientIds = new Set<string>();
+      const supplierIds = new Set<string>();
 
-          // Determine the owner type and ID
-          let ownerId: string | null = null;
-          let ownerType: 'marketer' | 'client' | 'supplier' | null = null;
+      for (const balance of openingBalancesData) {
+        const amount = balance.amount || 0;
+        totalOpeningBalances += amount;
 
-          if (balance.marketer_id) {
-            ownerId = balance.marketer_id;
-            ownerType = 'marketer';
-          } else if (balance.client_id) {
-            ownerId = balance.client_id;
-            ownerType = 'client';
-          } else if (balance.supplier_id) {
-            ownerId = balance.supplier_id;
-            ownerType = 'supplier';
-          }
+        // Determine the owner type and ID
+        let ownerId: string | null = null;
+        let ownerType: 'marketer' | 'client' | 'supplier' | null = null;
 
-          if (ownerId && ownerType) {
-            const key = `${ownerType}_${ownerId}`;
-            
-            if (ownersMap.has(key)) {
-              // Update existing owner entry
-              const existingOwner = ownersMap.get(key)!;
-              existingOwner.amount += amount;
-              ownersMap.set(key, existingOwner);
-            } else {
-              // Create new owner entry (name will be fetched later)
-              ownersMap.set(key, {
-                id: ownerId,
-                type: ownerType,
-                name: 'Loading...', // Temporary placeholder
-                amount: amount
-              });
-            }
+        if (balance.marketer_id) {
+          ownerId = balance.marketer_id;
+          ownerType = 'marketer';
+          marketerIds.add(ownerId);
+        } else if (balance.client_id) {
+          ownerId = balance.client_id;
+          ownerType = 'client';
+          clientIds.add(ownerId);
+        } else if (balance.supplier_id) {
+          ownerId = balance.supplier_id;
+          ownerType = 'supplier';
+          supplierIds.add(ownerId);
+        }
+
+        if (ownerId && ownerType) {
+          const key = `${ownerType}_${ownerId}`;
+          
+          if (ownersMap.has(key)) {
+            // Update existing owner entry
+            const existingOwner = ownersMap.get(key)!;
+            existingOwner.amount += amount;
+            ownersMap.set(key, existingOwner);
           } else {
-            // Handle cases where no owner is specified
-            const key = `unknown_${balance.id}`;
+            // Create new owner entry (name will be fetched later)
             ownersMap.set(key, {
-              id: balance.id,
-              type: 'client', // Default type
-              name: 'Unknown Owner',
+              id: ownerId,
+              type: ownerType,
+              name: 'Loading...', // Temporary placeholder
               amount: amount
             });
           }
-        }
-
-        // Fetch names for all owners
-        const ownersArray = Array.from(ownersMap.values());
-        
-        for (const owner of ownersArray) {
-          try {
-            let tableName = '';
-            switch (owner.type) {
-              case 'marketer':
-                tableName = 'users';
-                break;
-              case 'client':
-                tableName = 'clients';
-                break;
-              case 'supplier':
-                tableName = 'suppliers';
-                break;
-            }
-
-            if (tableName) {
-              const { data, error } = await supabase
-                .from(tableName)
-                .select("name")
-                .eq("id", owner.id)
-                .single();
-
-              if (!error && data) {
-                owner.name = data.name;
-              } else {
-                owner.name = `Unknown ${owner.type}`;
-              }
-            }
-          } catch (error) {
-            console.error(`Error fetching name for ${owner.type} ${owner.id}:`, error);
-            owner.name = `Error loading ${owner.type}`;
-          }
-        }
-
-        setOpeningBalanceOwners(ownersArray);
-      }
-
-      const { data: orders, error: ordersError } = await supabase
-        .from("order")
-        .select("id, total_amount, user");
-
-      if (ordersError) throw ordersError;
-
-      let totalAccountsReceivable = totalOpeningBalances;
-      const balances: OrderBalance[] = [];
-
-      // Add opening balances to the accounts receivable list (grouped by owner)
-      if (openingBalancesData && openingBalancesData.length > 0) {
-        const ownersArray = Array.from(ownersMap.values());
-        for (const owner of ownersArray) {
-          balances.push({
-            order_id: `${owner.type}_${owner.id}`,
-            total_amount: owner.amount,
-            amount_paid: 0,
-            balance: owner.amount,
-            customer_name: `${owner.name} (${owner.type} - Opening Balance)`
+        } else {
+          // Handle cases where no owner is specified
+          const key = `unknown_${balance.id}`;
+          ownersMap.set(key, {
+            id: balance.id,
+            type: 'client', // Default type
+            name: 'Unknown Owner',
+            amount: amount
           });
         }
       }
 
-      for (const order of orders || []) {
-        const { data: orderPayments, error: paymentsError } = await supabase
-          .from("finance")
-          .select("amount_paid")
-          .eq("order_id", order.id)
-          .not("order_id", "is", null);
+      // Fetch names for marketers
+      if (marketerIds.size > 0) {
+        const { data: marketersData, error: marketersError } = await supabase
+          .from("users")
+          .select("id, name")
+          .in("id", Array.from(marketerIds));
 
-        if (paymentsError) throw paymentsError;
-
-        const totalPaid = orderPayments?.reduce((sum, payment) => sum + (payment.amount_paid || 0), 0) || 0;
-        const balance = (order.total_amount || 0) - totalPaid;
-
-        if (balance > 0) {
-          const customerName = await getCustomerName(order.user);
-          
-          totalAccountsReceivable += balance;
-          balances.push({
-            order_id: order.id,
-            total_amount: order.total_amount || 0,
-            amount_paid: totalPaid,
-            balance,
-            customer_name: customerName
+        if (!marketersError && marketersData) {
+          marketersData.forEach(marketer => {
+            const key = `marketer_${marketer.id}`;
+            if (ownersMap.has(key)) {
+              const owner = ownersMap.get(key)!;
+              owner.name = marketer.name;
+              ownersMap.set(key, owner);
+            }
           });
         }
       }
 
-      setCashAssets({
-        available: availableCash,
-        accountsReceivable: totalAccountsReceivable,
-        total: availableCash + totalAccountsReceivable
+      // Fetch names for clients
+      if (clientIds.size > 0) {
+        const { data: clientsData, error: clientsError } = await supabase
+          .from("clients")
+          .select("id, name")
+          .in("id", Array.from(clientIds));
+
+        if (!clientsError && clientsData) {
+          clientsData.forEach(client => {
+            const key = `client_${client.id}`;
+            if (ownersMap.has(key)) {
+              const owner = ownersMap.get(key)!;
+              owner.name = client.name;
+              ownersMap.set(key, owner);
+            }
+          });
+        }
+      }
+
+      // Fetch names for suppliers
+      if (supplierIds.size > 0) {
+        const { data: suppliersData, error: suppliersError } = await supabase
+          .from("suppliers")
+          .select("id, name")
+          .in("id", Array.from(supplierIds));
+
+        if (!suppliersError && suppliersData) {
+          suppliersData.forEach(supplier => {
+            const key = `supplier_${supplier.id}`;
+            if (ownersMap.has(key)) {
+              const owner = ownersMap.get(key)!;
+              owner.name = supplier.name;
+              ownersMap.set(key, owner);
+            }
+          });
+        }
+      }
+
+      // Update any remaining owners that we couldn't find names for
+      ownersMap.forEach((owner, key) => {
+        if (owner.name === 'Loading...') {
+          owner.name = `Unknown ${owner.type}`;
+          ownersMap.set(key, owner);
+        }
       });
 
-      setOrderBalances(balances);
-    } catch (error) {
-      console.error("Error fetching cash assets:", error);
+      setOpeningBalanceOwners(Array.from(ownersMap.values()));
     }
-  };
+
+    const { data: orders, error: ordersError } = await supabase
+      .from("order")
+      .select("id, total_amount, user");
+
+    if (ordersError) throw ordersError;
+
+    let totalAccountsReceivable = totalOpeningBalances;
+    const balances: OrderBalance[] = [];
+
+    // Add opening balances to the accounts receivable list (grouped by owner)
+    if (openingBalancesData && openingBalancesData.length > 0) {
+      const ownersArray = Array.from(ownersMap.values());
+      for (const owner of ownersArray) {
+        balances.push({
+          order_id: `${owner.type}_${owner.id}`,
+          total_amount: owner.amount,
+          amount_paid: 0,
+          balance: owner.amount,
+          customer_name: `${owner.name} (${owner.type} - Opening Balance)`
+        });
+      }
+    }
+
+    for (const order of orders || []) {
+      const { data: orderPayments, error: paymentsError } = await supabase
+        .from("finance")
+        .select("amount_paid")
+        .eq("order_id", order.id)
+        .not("order_id", "is", null);
+
+      if (paymentsError) throw paymentsError;
+
+      const totalPaid = orderPayments?.reduce((sum, payment) => sum + (payment.amount_paid || 0), 0) || 0;
+      const balance = (order.total_amount || 0) - totalPaid;
+
+      if (balance > 0) {
+        const customerName = await getCustomerName(order.user);
+        
+        totalAccountsReceivable += balance;
+        balances.push({
+          order_id: order.id,
+          total_amount: order.total_amount || 0,
+          amount_paid: totalPaid,
+          balance,
+          customer_name: customerName
+        });
+      }
+    }
+
+    setCashAssets({
+      available: availableCash,
+      accountsReceivable: totalAccountsReceivable,
+      total: availableCash + totalAccountsReceivable
+    });
+
+    setOrderBalances(balances);
+  } catch (error) {
+    console.error("Error fetching cash assets:", error);
+  }
+};
 
   const fetchAllAssets = async () => {
     setLoading(true);
