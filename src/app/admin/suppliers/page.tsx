@@ -250,7 +250,149 @@ export default function Suppliers() {
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
   const [showBalanceForm, setShowBalanceForm] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
+  const [showBalancesModal, setShowBalancesModal] = useState(false);
+  const [selectedBalance, setSelectedBalance] = useState<SupplierBalance | MaterialBalance | null>(null);
+  const [isBalanceDeliveryForm, setIsBalanceDeliveryForm] = useState(false);
+  const [balanceDeliveryForm, setBalanceDeliveryForm] = useState({
+    quantity: 0,
+    unit_price: 0,
+    delivery_date: getEastAfricanDateTime(),
+    notes: ""
+  });
+  
+  // Helper function to calculate new balance after delivery
+  const calculateNewBalance = () => {
+    if (!selectedBalance) return 0;
+    
+    if ('supplier_id' in selectedBalance) {
+      // For money balance
+      const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
+      const newBalance = selectedBalance.current_balance - deliveryValue;
+      return Math.max(0, newBalance); // Ensure balance doesn't go negative
+    } else {
+      // For material balance
+      const newBalance = selectedBalance.current_balance - balanceDeliveryForm.quantity;
+      return Math.max(0, newBalance); // Ensure balance doesn't go negative
+    }
+  };
 
+  // Handle delivery against balance
+  const handleBalanceDeliverySubmit = async () => {
+    if (!selectedBalance || !selectedSupplier) return;
+    
+    setError(null);
+    
+    try {
+      // Create a record of the delivery
+      const deliveryData = {
+        supplier_id: selectedSupplier.id,
+        quantity: balanceDeliveryForm.quantity,
+        unit_price: 'supplier_id' in selectedBalance ? balanceDeliveryForm.unit_price : 0,
+        delivery_date: balanceDeliveryForm.delivery_date,
+        notes: balanceDeliveryForm.notes,
+        balance_id: selectedBalance.id,
+        balance_type: 'supplier_id' in selectedBalance ? 'money' : 'material',
+        material_id: 'material_id' in selectedBalance ? selectedBalance.material_id : null
+      };
+      
+      const { data: deliveryRecord, error: deliveryError } = await supabase
+        .from('balance_deliveries')
+        .insert([deliveryData])
+        .select();
+      
+      if (deliveryError) throw deliveryError;
+      
+      // Update the balance
+      if ('supplier_id' in selectedBalance) {
+        // Money balance
+        const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
+        const newBalance = Math.max(0, selectedBalance.current_balance - deliveryValue);
+        
+        // Determine new status
+        let newStatus = selectedBalance.status;
+        if (newBalance === 0) {
+          newStatus = 'paid';
+        } else if (newBalance < selectedBalance.opening_balance) {
+          newStatus = 'partially';
+        }
+        
+        const { error: updateError } = await supabase
+          .from('supplier_balances')
+          .update({
+            current_balance: newBalance,
+            status: newStatus,
+            partial_amount: newStatus === 'partially' ? selectedBalance.opening_balance - newBalance : 0
+          })
+          .eq('id', selectedBalance.id);
+        
+        if (updateError) throw updateError;
+        
+        // Update local state
+        setLocalSupplierBalances(prev => 
+          prev.map(b => 
+            b.id === selectedBalance.id 
+              ? {
+                  ...b,
+                  current_balance: newBalance,
+                  status: newStatus,
+                  partial_amount: newStatus === 'partially' ? selectedBalance.opening_balance - newBalance : 0
+                }
+              : b
+          )
+        );
+      } else {
+        // Material balance
+        const newBalance = Math.max(0, selectedBalance.current_balance - balanceDeliveryForm.quantity);
+        
+        // Determine new status
+        let newStatus = selectedBalance.status;
+        if (newBalance === 0) {
+          newStatus = 'delivered';
+        } else if (newBalance < selectedBalance.opening_balance) {
+          newStatus = 'partially';
+        }
+        
+        const { error: updateError } = await supabase
+          .from('material_balances')
+          .update({
+            current_balance: newBalance,
+            status: newStatus,
+            partial_amount: newStatus === 'partially' ? selectedBalance.opening_balance - newBalance : 0
+          })
+          .eq('id', selectedBalance.id);
+        
+        if (updateError) throw updateError;
+        
+        // Update local state
+        setLocalMaterialBalances(prev => 
+          prev.map(b => 
+            b.id === selectedBalance.id 
+              ? {
+                  ...b,
+                  current_balance: newBalance,
+                  status: newStatus,
+                  partial_amount: newStatus === 'partially' ? selectedBalance.opening_balance - newBalance : 0
+                }
+              : b
+          )
+        );
+      }
+      
+      // Reset form and close modal
+      setIsBalanceDeliveryForm(false);
+      setSelectedBalance(null);
+      setBalanceDeliveryForm({
+        quantity: 0,
+        unit_price: 0,
+        delivery_date: getEastAfricanDateTime(),
+        notes: ""
+      });
+    } catch (err) {
+      console.error('Error recording delivery against balance:', err);
+      setError('Failed to record delivery. Please try again.');
+    }
+  };
+  
   // Get unique payment methods from finance records
   const getUniquePaymentMethods = () => {
       const methods = new Set<string>();
@@ -1412,6 +1554,15 @@ export default function Suppliers() {
                         <button
                           onClick={() => {
                             setSelectedSupplier(supplier);
+                            setShowBalancesModal(true);
+                          }}
+                          className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 flex items-center gap-1"
+                        >
+                          <span>💼</span> View Balances
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedSupplier(supplier);
                             const balance = getSupplierBalance(supplier.id);
                             setBalanceForm({
                               supplier_id: supplier.id,
@@ -1681,6 +1832,485 @@ export default function Suppliers() {
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Save Balance
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Balances Modal */}
+      {showBalancesModal && selectedSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="p-6 flex-shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Balances for {selectedSupplier.name}
+                </h3>
+                <button 
+                  onClick={() => {
+                    setShowBalancesModal(false);
+                    setSelectedBalance(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="mb-4">
+                <h4 className="text-md font-medium text-gray-800 mb-2">Money Balance</h4>
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opening Balance</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Balance</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {localSupplierBalances.filter(b => b.supplier_id === selectedSupplier.id).length > 0 ? (
+                        localSupplierBalances
+                          .filter(b => b.supplier_id === selectedSupplier.id)
+                          .map(balance => (
+                            <tr key={balance.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${balance.balance_type === 'credit' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+                                  {balance.balance_type === 'credit' ? 'Supplier owes company' : 'Company owes supplier'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {formatCurrency(balance.opening_balance)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {formatCurrency(balance.current_balance)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${balance.status === 'paid' ? 'bg-green-100 text-green-800' : balance.status === 'partially' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
+                                  {formatBalanceStatus(balance.status, 'money')}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div className="flex justify-end space-x-2">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedBalance(balance);
+                                      setBalanceDeliveryForm({
+                                        ...balanceDeliveryForm,
+                                        quantity: 0,
+                                        unit_price: 0,
+                                        delivery_date: getEastAfricanDateTime(),
+                                        notes: ""
+                                      });
+                                      setIsBalanceDeliveryForm(true);
+                                    }}
+                                    className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                                    disabled={balance.current_balance <= 0}
+                                  >
+                                    <span>📥</span> Record Delivery
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedSupplier(selectedSupplier);
+                                      setBalanceForm({
+                                        supplier_id: selectedSupplier.id,
+                                        opening_balance: balance.current_balance,
+                                        balance_type: balance.balance_type,
+                                        status: balance.status,
+                                        partial_amount: balance.partial_amount,
+                                        material_id: ""
+                                      });
+                                      setBalanceType('money');
+                                      setBalanceStatus(balance.status);
+                                      setPartialAmount(balance.partial_amount);
+                                      setShowBalanceForm(true);
+                                      setShowBalancesModal(false);
+                                    }}
+                                    className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 flex items-center gap-1"
+                                  >
+                                    <span>✏️</span> Edit
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const { error } = await supabase
+                                          .from('supplier_balances')
+                                          .delete()
+                                          .eq('id', balance.id);
+                                        
+                                        if (error) throw error;
+                                        
+                                        setLocalSupplierBalances(prev => 
+                                          prev.filter(b => b.id !== balance.id)
+                                        );
+                                      } catch (err) {
+                                        console.error('Error deleting balance:', err);
+                                        setError('Failed to delete balance. Please try again.');
+                                      }
+                                    }}
+                                    className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
+                                  >
+                                    <span>🗑️</span> Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                            No money balance set for this supplier
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="text-md font-medium text-gray-800 mb-2">Material Balances</h4>
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Material</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opening Quantity</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Quantity</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {localMaterialBalances.filter(b => b.supplier_id === selectedSupplier.id).length > 0 ? (
+                        localMaterialBalances
+                          .filter(b => b.supplier_id === selectedSupplier.id)
+                          .map(balance => {
+                            const material = materials.find(m => m.id === balance.material_id);
+                            return (
+                              <tr key={balance.id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  {material?.name || 'Unknown Material'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${balance.balance_type === 'credit' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+                                    {balance.balance_type === 'credit' ? 'Supplier owes company' : 'Company owes supplier'}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  {balance.opening_balance} units
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  {balance.current_balance} units
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${balance.status === 'delivered' ? 'bg-green-100 text-green-800' : balance.status === 'partially' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
+                                    {formatBalanceStatus(balance.status, 'material')}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                  <div className="flex justify-end space-x-2">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedBalance(balance);
+                                        setBalanceDeliveryForm({
+                                          ...balanceDeliveryForm,
+                                          quantity: 0,
+                                          unit_price: 0,
+                                          delivery_date: getEastAfricanDateTime(),
+                                          notes: ""
+                                        });
+                                        setIsBalanceDeliveryForm(true);
+                                      }}
+                                      className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                                      disabled={balance.current_balance <= 0}
+                                    >
+                                      <span>📥</span> Record Delivery
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setSelectedSupplier(selectedSupplier);
+                                        setBalanceForm({
+                                          supplier_id: selectedSupplier.id,
+                                          opening_balance: balance.current_balance,
+                                          balance_type: balance.balance_type,
+                                          status: balance.status,
+                                          partial_amount: balance.partial_amount,
+                                          material_id: balance.material_id
+                                        });
+                                        setBalanceType('material');
+                                        setSelectedMaterial(balance.material_id);
+                                        setBalanceStatus(balance.status);
+                                        setPartialAmount(balance.partial_amount);
+                                        setShowBalanceForm(true);
+                                        setShowBalancesModal(false);
+                                      }}
+                                      className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 flex items-center gap-1"
+                                    >
+                                      <span>✏️</span> Edit
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const { error } = await supabase
+                                            .from('material_balances')
+                                            .delete()
+                                            .eq('id', balance.id);
+                                          
+                                          if (error) throw error;
+                                          
+                                          setLocalMaterialBalances(prev => 
+                                            prev.filter(b => b.id !== balance.id)
+                                          );
+                                        } catch (err) {
+                                          console.error('Error deleting balance:', err);
+                                          setError('Failed to delete balance. Please try again.');
+                                        }
+                                      }}
+                                      className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center gap-1"
+                                    >
+                                      <span>🗑️</span> Delete
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                            No material balances set for this supplier
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => {
+                  setSelectedSupplier(selectedSupplier);
+                  setBalanceForm({
+                    supplier_id: selectedSupplier.id,
+                    opening_balance: 0,
+                    balance_type: 'credit',
+                    status: 'pending',
+                    partial_amount: 0,
+                    material_id: ""
+                  });
+                  setBalanceType('money');
+                  setBalanceStatus('pending');
+                  setPartialAmount(0);
+                  setShowBalanceForm(true);
+                  setShowBalancesModal(false);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
+              >
+                <span>+</span> Add New Balance
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Balance Delivery Form Modal */}
+      {isBalanceDeliveryForm && selectedBalance && selectedSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Record Delivery Against Balance
+                </h3>
+                <button 
+                  onClick={() => {
+                    setIsBalanceDeliveryForm(false);
+                    setSelectedBalance(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  ✕
+                </button>
+              </div>
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                handleBalanceDeliverySubmit();
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Balance Type
+                  </label>
+                  <input
+                    type="text"
+                    value={'supplier_id' in selectedBalance ? 'Money Balance' : 'Material Balance'}
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50"
+                  />
+                </div>
+
+                {'material_id' in selectedBalance && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Material
+                    </label>
+                    <input
+                      type="text"
+                      value={materials.find(m => m.id === selectedBalance.material_id)?.name || 'Unknown Material'}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Current Balance
+                  </label>
+                  <input
+                    type="text"
+                    value={'supplier_id' in selectedBalance 
+                      ? formatCurrency(selectedBalance.current_balance)
+                      : `${selectedBalance.current_balance} units`}
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {'supplier_id' in selectedBalance ? 'Delivery Value (UGX)' : 'Quantity to Deliver'}
+                  </label>
+                  <input
+                    type="number"
+                    value={balanceDeliveryForm.quantity}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setBalanceDeliveryForm({
+                        ...balanceDeliveryForm,
+                        quantity: value
+                      });
+                    }}
+                    min="0"
+                    step="0.01"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {'supplier_id' in selectedBalance && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Unit Price (UGX)
+                    </label>
+                    <input
+                      type="number"
+                      value={balanceDeliveryForm.unit_price}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        setBalanceDeliveryForm({
+                          ...balanceDeliveryForm,
+                          unit_price: value
+                        });
+                      }}
+                      min="0"
+                      step="0.01"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Delivery Date & Time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={balanceDeliveryForm.delivery_date}
+                    onChange={(e) => setBalanceDeliveryForm({
+                      ...balanceDeliveryForm,
+                      delivery_date: e.target.value
+                    })}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    value={balanceDeliveryForm.notes}
+                    onChange={(e) => setBalanceDeliveryForm({
+                      ...balanceDeliveryForm,
+                      notes: e.target.value
+                    })}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {'supplier_id' in selectedBalance && (
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Delivery Value:</span>
+                      <span className="text-sm font-medium text-gray-900">
+                        {formatCurrency(balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Current Balance:</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {'supplier_id' in selectedBalance 
+                        ? formatCurrency(selectedBalance.current_balance)
+                        : `${selectedBalance.current_balance} units`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-sm font-medium text-gray-700">New Balance:</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {'supplier_id' in selectedBalance 
+                        ? formatCurrency(calculateNewBalance())
+                        : `${calculateNewBalance()} units`}
+                    </span>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsBalanceDeliveryForm(false);
+                      setSelectedBalance(null);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    Record Delivery
                   </button>
                 </div>
               </form>
