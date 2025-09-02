@@ -23,7 +23,7 @@ interface SupplyItem {
   name: string;
   quantity: number;
   price: number;
-  status: 'prepaid' | 'postpaid'; // Added status field
+  status: 'prepaid' | 'postpaid';
   created_at: string;
 }
 
@@ -63,6 +63,22 @@ interface SupplierBalance {
   opening_balance: number;
   balance_type: 'debit' | 'credit';
   current_balance: number;
+  status: 'pending' | 'partially' | 'paid';
+  partial_amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface MaterialBalance {
+  id: string;
+  supplier_id: string;
+  material_id: string;
+  material_name?: string;
+  opening_balance: number;
+  current_balance: number;
+  balance_type: 'debit' | 'credit';
+  status: 'pending' | 'partially' | 'delivered';
+  partial_amount: number;
   created_at: string;
   updated_at: string;
 }
@@ -88,11 +104,31 @@ interface FinanceRecord {
   mode_of_mobilemoney?: string;
 }
 
+interface LedgerEntry {
+  id: string;
+  date: string;
+  item: string;
+  price: number;
+  quantity: number;
+  amount: number;
+  amount_paid: number;
+  balance: number;
+  delivered: number;
+  undelivered: number;
+  type: 'supply' | 'payment' | 'delivery';
+  method?: string;
+}
+
 // Define helper functions first
 let supplierBalances: SupplierBalance[] = [];
+let materialBalances: MaterialBalance[] = [];
 
 const getSupplierBalance = (supplierId: string) => {
   return supplierBalances.find(b => b.supplier_id === supplierId);
+};
+
+const getMaterialBalance = (supplierId: string, materialId: string) => {
+  return materialBalances.find(b => b.supplier_id === supplierId && b.material_id === materialId);
 };
 
 const formatCurrency = (amount: number) => {
@@ -123,17 +159,25 @@ export default function Suppliers() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [localSupplierBalances, setLocalSupplierBalances] = useState<SupplierBalance[]>([]);
+  const [localMaterialBalances, setLocalMaterialBalances] = useState<MaterialBalance[]>([]);
+  const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
   
-  // Update the global supplierBalances variable when localSupplierBalances changes
+  // Update the global balance variables when local states change
   useEffect(() => {
     supplierBalances = localSupplierBalances;
-  }, [localSupplierBalances]);
+    materialBalances = localMaterialBalances;
+  }, [localSupplierBalances, localMaterialBalances]);
+
   const [clients, setClients] = useState<Client[]>([]);
   const [financeRecords, setFinanceRecords] = useState<FinanceRecord[]>([]);
   const [showOtherInput, setShowOtherInput] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [deliveryNoteType, setDeliveryNoteType] = useState('');
-  const [deliveryUnitPrice, setDeliveryUnitPrice] = useState(0); // New state for adjustable unit price
+  const [deliveryUnitPrice, setDeliveryUnitPrice] = useState(0);
+  const [balanceType, setBalanceType] = useState<'money' | 'material'>('money');
+  const [selectedMaterial, setSelectedMaterial] = useState('');
+  const [balanceStatus, setBalanceStatus] = useState<'pending' | 'partially' | 'paid' | 'delivered'>('pending');
+  const [partialAmount, setPartialAmount] = useState(0);
   
   const getEastAfricanDateTime = () => {
     const now = new Date();
@@ -161,7 +205,7 @@ export default function Suppliers() {
     name: "",
     quantity: 0,
     price: 0,
-    status: 'postpaid', // Default to postpaid
+    status: 'postpaid',
   });
   
   const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at" | "value">>({
@@ -189,6 +233,9 @@ export default function Suppliers() {
     supplier_id: "",
     opening_balance: 0,
     balance_type: "credit" as 'credit' | 'debit',
+    status: 'pending' as 'pending' | 'partially' | 'paid' | 'delivered',
+    partial_amount: 0,
+    material_id: "",
   });
 
   const [loading, setLoading] = useState(true);
@@ -202,13 +249,13 @@ export default function Suppliers() {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
   const [showBalanceForm, setShowBalanceForm] = useState(false);
+  const [showLedgerModal, setShowLedgerModal] = useState(false);
 
   // Get unique payment methods from finance records
   const getUniquePaymentMethods = () => {
       const methods = new Set<string>();
       financeRecords.forEach(record => {
         if (record.mode_of_payment) {
-          // Normalize the payment method values for consistency
           const normalizedMethod = record.mode_of_payment.toLowerCase()
             .replace(/\s+/g, '_')
             .replace('mobile_money', 'mobile_money')
@@ -220,7 +267,6 @@ export default function Suppliers() {
         }
       });
     
-    // Always include the basic methods
     methods.add('cash');
     methods.add('bank');
     methods.add('mobile_money');
@@ -232,7 +278,6 @@ export default function Suppliers() {
   const getUniqueBankNames = () => {
       const banks = new Set<string>();
       financeRecords.forEach(record => {
-        // Match both 'bank' and 'Bank' etc.
         const isBank = record.mode_of_payment && 
           (record.mode_of_payment.toLowerCase() === 'bank' ||
            record.mode_of_payment.toLowerCase() === 'bank transfer');
@@ -248,7 +293,6 @@ export default function Suppliers() {
   const getUniqueMobileMoneyModes = () => {
       const modes = new Set<string>();
       financeRecords.forEach(record => {
-        // Match both 'mobile money' and 'mobile_money' etc.
         const isMobileMoney = record.mode_of_payment &&
           (record.mode_of_payment.toLowerCase().includes('mobile') ||
            record.mode_of_payment.toLowerCase().includes('mtn') ||
@@ -258,10 +302,6 @@ export default function Suppliers() {
           modes.add(record.mode_of_mobilemoney);
         }
       });
-    
-    // Always include the common mobile money options
-    //modes.add('MTN Mobile Money');
-    //modes.add('Airtel Money');
     
     return Array.from(modes);
   };
@@ -278,10 +318,6 @@ export default function Suppliers() {
   const getItemPayments = (itemId: string) => {
     return payments.filter(p => p.supply_item_id === itemId)
                   .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
-  };
-
-  const getSupplierBalance = (supplierId: string) => {
-    return supplierBalances.find(b => b.supplier_id === supplierId);
   };
 
   const getCombinedTransactions = (itemId: string): Transaction[] => {
@@ -318,12 +354,15 @@ export default function Suppliers() {
     return getItemDeliveries(itemId).reduce((sum, d) => sum + d.value, 0);
   };
 
+  const getTotalDeliveredQuantity = (itemId: string) => {
+    return getItemDeliveries(itemId).reduce((sum, d) => sum + d.quantity, 0);
+  };
+
   const getTotalPaid = (itemId: string) => {
     return getItemPayments(itemId).reduce((sum, p) => sum + p.amount, 0);
   };
 
   const formatDate = (dateString: string) => {
-    // Handle both date-only and datetime strings
     const date = new Date(dateString);
     const options: Intl.DateTimeFormatOptions = {
       timeZone: 'Africa/Nairobi',
@@ -334,13 +373,6 @@ export default function Suppliers() {
       minute: '2-digit'
     };
     return date.toLocaleString('en-US', options);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'UGX'
-    }).format(amount);
   };
 
   const formatPaymentMethod = (method: string) => {
@@ -357,6 +389,24 @@ export default function Suppliers() {
       case 'prepaid': return 'Prepaid';
       case 'postpaid': return 'Postpaid';
       default: return status;
+    }
+  };
+
+  const formatBalanceStatus = (status: string, type: 'money' | 'material') => {
+    if (type === 'money') {
+      switch (status) {
+        case 'pending': return 'Pending Payment';
+        case 'partially': return 'Partially Paid';
+        case 'paid': return 'Paid';
+        default: return status;
+      }
+    } else {
+      switch (status) {
+        case 'pending': return 'Pending Delivery';
+        case 'partially': return 'Partially Delivered';
+        case 'delivered': return 'Delivered';
+        default: return status;
+      }
     }
   };
 
@@ -386,7 +436,7 @@ export default function Suppliers() {
             ? isCredit ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
             : 'bg-green-100 text-green-800'
         }`}>
-          {amount}
+          {isPositive ? '+' : ''}{amount}
         </span>
         <span className="text-sm text-gray-600">
           {isPositive
@@ -397,8 +447,147 @@ export default function Suppliers() {
               ? "(Company overpaid)"
               : "(Supplier overpaid)"}
         </span>
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+          balance.status === 'paid' ? 'bg-green-100 text-green-800' :
+          balance.status === 'partially' ? 'bg-yellow-100 text-yellow-800' :
+          'bg-gray-100 text-gray-800'
+        }`}>
+          {formatBalanceStatus(balance.status, 'money')}
+        </span>
       </div>
     );
+  };
+
+  const MaterialBalanceDisplay = ({ 
+    supplierId,
+    materialId
+  }: { 
+    supplierId: string;
+    materialId: string;
+  }) => {
+    const balance = getMaterialBalance(supplierId, materialId);
+    const material = materials.find(m => m.id === materialId);
+    
+    if (!balance) return <span className="text-gray-500">Not set</span>;
+
+    const amount = Math.abs(balance.current_balance);
+    const isCredit = balance.balance_type === 'credit';
+    const isPositive = balance.current_balance > 0;
+
+    if (balance.current_balance === 0) {
+      return <span className="text-green-600">Settled (0)</span>;
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+          isPositive 
+            ? isCredit ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+            : 'bg-green-100 text-green-800'
+        }`}>
+          {isPositive ? '+' : ''}{amount} {material?.name || 'units'}
+        </span>
+        <span className="text-sm text-gray-600">
+          {isPositive
+            ? isCredit 
+              ? "(Supplier owes company)"
+              : "(Company owes supplier)"
+            : isCredit
+              ? "(Company over-received)"
+              : "(Supplier over-delivered)"}
+        </span>
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+          balance.status === 'delivered' ? 'bg-green-100 text-green-800' :
+          balance.status === 'partially' ? 'bg-yellow-100 text-yellow-800' :
+          'bg-gray-100 text-gray-800'
+        }`}>
+          {formatBalanceStatus(balance.status, 'material')}
+        </span>
+      </div>
+    );
+  };
+
+  const fetchLedgerData = async (supplierId: string) => {
+    try {
+      // Get all supply items for this supplier
+      const supplierItems = supplyItems.filter(item => item.supplier_id === supplierId);
+      
+      const ledgerEntries: LedgerEntry[] = [];
+      
+      // Process each supply item
+      for (const item of supplierItems) {
+        const totalDelivered = getTotalDeliveredQuantity(item.id);
+        const totalPaid = getTotalPaid(item.id);
+        const totalValue = item.quantity * item.price;
+        const balance = totalValue - totalPaid;
+        const undelivered = item.quantity - totalDelivered;
+        
+        // Add supply item entry
+        ledgerEntries.push({
+          id: item.id,
+          date: item.created_at,
+          item: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          amount: totalValue,
+          amount_paid: totalPaid,
+          balance: balance,
+          delivered: totalDelivered,
+          undelivered: undelivered,
+          type: 'supply'
+        });
+        
+        // Add delivery entries
+        const itemDeliveries = getItemDeliveries(item.id);
+        for (const delivery of itemDeliveries) {
+          ledgerEntries.push({
+            id: delivery.id,
+            date: delivery.delivery_date,
+            item: `Delivery - ${item.name}`,
+            price: delivery.value / delivery.quantity,
+            quantity: delivery.quantity,
+            amount: delivery.value,
+            amount_paid: 0,
+            balance: balance,
+            delivered: delivery.quantity,
+            undelivered: undelivered,
+            type: 'delivery'
+          });
+        }
+        
+        // Add payment entries
+        const itemPayments = getItemPayments(item.id);
+        for (const payment of itemPayments) {
+          const paymentMethod = payment.method === 'bank' && payment.bank_name 
+            ? `Bank (${payment.bank_name})` 
+            : payment.method === 'mobile_money' && payment.mode_of_mobilemoney
+            ? `Mobile Money (${payment.mode_of_mobilemoney})`
+            : formatPaymentMethod(payment.method);
+            
+          ledgerEntries.push({
+            id: payment.id,
+            date: payment.payment_date,
+            item: `Payment - ${paymentMethod}`,
+            price: 0,
+            quantity: 0,
+            amount: payment.amount,
+            amount_paid: payment.amount,
+            balance: balance,
+            delivered: totalDelivered,
+            undelivered: undelivered,
+            type: 'payment',
+            method: paymentMethod
+          });
+        }
+      }
+      
+      // Sort by date
+      ledgerEntries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setLedgerData(ledgerEntries);
+    } catch (err) {
+      console.error('Error fetching ledger data:', err);
+      setError('Failed to load ledger data');
+    }
   };
 
   useEffect(() => {
@@ -413,7 +602,8 @@ export default function Suppliers() {
           { data: deliveriesData, error: deliveriesError },
           { data: paymentsData, error: paymentsError },
           { data: materialsData, error: materialsError },
-          { data: balancesData, error: balancesError },
+          { data: supplierBalancesData, error: supplierBalancesError },
+          { data: materialBalancesData, error: materialBalancesError },
           { data: clientsData, error: clientsError },
           { data: financeData, error: financeError }
         ] = await Promise.all([
@@ -423,6 +613,7 @@ export default function Suppliers() {
           supabase.from('payments').select('*'),
           supabase.from('materials').select('*').order('name', { ascending: true }),
           supabase.from('supplier_balances').select('*'),
+          supabase.from('material_balances').select('*'),
           supabase.from('clients').select('id, name, created_at').order('name', { ascending: true }),
           supabase.from('finance').select('mode_of_payment, bank_name, mode_of_mobilemoney')
         ]);
@@ -432,7 +623,8 @@ export default function Suppliers() {
         if (deliveriesError) throw deliveriesError;
         if (paymentsError) throw paymentsError;
         if (materialsError) throw materialsError;
-        if (balancesError) throw balancesError;
+        if (supplierBalancesError) throw supplierBalancesError;
+        if (materialBalancesError) throw materialBalancesError;
         if (clientsError) throw clientsError;
         if (financeError) throw financeError;
 
@@ -441,7 +633,15 @@ export default function Suppliers() {
         setDeliveries(deliveriesData || []);
         setPayments(paymentsData || []);
         setMaterials(materialsData || []);
-        setLocalSupplierBalances(balancesData || []);
+        setLocalSupplierBalances(supplierBalancesData || []);
+        
+        // Enhance material balances with material names
+        const enhancedMaterialBalances = (materialBalancesData || []).map(balance => ({
+          ...balance,
+          material_name: materialsData?.find(m => m.id === balance.material_id)?.name
+        }));
+        setLocalMaterialBalances(enhancedMaterialBalances);
+        
         setClients(clientsData || []);
         setFinanceRecords(financeData || []);
       } catch (err) {
@@ -484,34 +684,81 @@ export default function Suppliers() {
     try {
       if (!selectedSupplier) return;
       
-      const { data, error } = await supabase
-        .from('supplier_balances')
-        .upsert([{ 
-          supplier_id: selectedSupplier.id,
-          opening_balance: balanceForm.opening_balance,
-          balance_type: balanceForm.balance_type,
-          current_balance: balanceForm.opening_balance
-        }])
-        .select();
+      if (balanceType === 'money') {
+        // Handle monetary balance
+        const { data, error } = await supabase
+          .from('supplier_balances')
+          .upsert([{ 
+            supplier_id: selectedSupplier.id,
+            opening_balance: balanceForm.opening_balance,
+            balance_type: balanceForm.balance_type,
+            current_balance: balanceForm.opening_balance,
+            status: balanceForm.status,
+            partial_amount: balanceForm.partial_amount
+          }])
+          .select();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      if (data?.[0]) {
-        setLocalSupplierBalances(prev => {
-          const existing = prev.find(b => b.supplier_id === selectedSupplier.id);
-          if (existing) {
-            return prev.map(b => b.supplier_id === selectedSupplier.id ? data[0] : b);
-          }
-          return [...prev, data[0]];
-        });
-        setShowBalanceForm(false);
+        if (data?.[0]) {
+          setLocalSupplierBalances(prev => {
+            const existing = prev.find(b => b.supplier_id === selectedSupplier.id);
+            if (existing) {
+              return prev.map(b => b.supplier_id === selectedSupplier.id ? data[0] : b);
+            }
+            return [...prev, data[0]];
+          });
+        }
+      } else {
+        // Handle material balance
+        if (!selectedMaterial) {
+          throw new Error('Please select a material');
+        }
+        
+        const { data, error } = await supabase
+          .from('material_balances')
+          .upsert([{ 
+            supplier_id: selectedSupplier.id,
+            material_id: selectedMaterial,
+            opening_balance: balanceForm.opening_balance,
+            balance_type: balanceForm.balance_type,
+            current_balance: balanceForm.opening_balance,
+            status: balanceForm.status,
+            partial_amount: balanceForm.partial_amount
+          }])
+          .select();
+
+        if (error) throw error;
+
+        if (data?.[0]) {
+          // Enhance with material name
+          const enhancedBalance = {
+            ...data[0],
+            material_name: materials.find(m => m.id === selectedMaterial)?.name
+          };
+          
+          setLocalMaterialBalances(prev => {
+            const existing = prev.find(b => 
+              b.supplier_id === selectedSupplier.id && b.material_id === selectedMaterial
+            );
+            if (existing) {
+              return prev.map(b => 
+                b.supplier_id === selectedSupplier.id && b.material_id === selectedMaterial 
+                  ? enhancedBalance 
+                  : b
+              );
+            }
+            return [...prev, enhancedBalance];
+          });
+        }
       }
+      
+      setShowBalanceForm(false);
     } catch (err) {
       console.error('Error saving balance:', err);
       setError('Failed to save balance. Please try again.');
     }
   };
-
 
   const handleItemSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -520,7 +767,6 @@ export default function Suppliers() {
     try {
       if (!selectedSupplier) return;
       
-      // Find the material ID based on the selected material name
       let materialId = null;
       if (itemForm.name && !showOtherInput) {
         const material = materials.find(m => m.name === itemForm.name);
@@ -534,7 +780,7 @@ export default function Suppliers() {
         .insert([{ 
           ...itemForm, 
           supplier_id: selectedSupplier.id,
-          material_id: materialId // Add the material_id to the insert
+          material_id: materialId
         }])
         .select();
 
@@ -557,7 +803,6 @@ export default function Suppliers() {
   try {
     if (!selectedItem) return;
     
-    // Get the fresh item data to ensure we have the latest name
     const { data: freshItem, error: itemError } = await supabase
       .from('supply_items')
       .select('*')
@@ -567,7 +812,6 @@ export default function Suppliers() {
     if (itemError) throw itemError;
     if (!freshItem) throw new Error('Item not found');
 
-    // Use adjustable unit price for client deliveries, otherwise use the item's fixed price
     const unitPrice = deliveryNoteType === 'client' ? deliveryUnitPrice : freshItem.price;
     const deliveryValue = deliveryForm.quantity * unitPrice;
     
@@ -579,16 +823,14 @@ export default function Suppliers() {
       notes = `Client: ${clientName}`;
       clientId = selectedClient;
       
-      console.log('Creating order with item:', freshItem.name);
-      
       const { error: orderError } = await supabase
         .from('order')
         .insert([{
           client_id: selectedClient,
           user: selectedClient,
-          item: freshItem.name, // Use the fresh item data
+          item: freshItem.name,
           material: freshItem.name,
-          cost: unitPrice, // Use the adjusted price for client orders
+          cost: unitPrice,
           quantity: deliveryForm.quantity,
           total_amount: unitPrice * deliveryForm.quantity,
           created_at: new Date().toISOString()
@@ -611,7 +853,6 @@ export default function Suppliers() {
       throw new Error('Please select a client');
     }
     
-    // Find the material ID based on the supply item name
     let materialId = null;
     const material = materials.find(m => m.name === freshItem.name);
     if (material) {
@@ -621,7 +862,7 @@ export default function Suppliers() {
     const deliveryData = {
       ...deliveryForm,
       supply_item_id: selectedItem.id,
-      material_id: materialId, // Add material_id to the delivery
+      material_id: materialId,
       value: deliveryValue,
       notes,
       client_id: clientId
@@ -640,6 +881,47 @@ export default function Suppliers() {
     if (data?.[0]) {
       setDeliveries(prev => [...prev, data[0]]);
       
+      // Update material balance if applicable
+      if (materialId) {
+        const materialBalance = getMaterialBalance(selectedItem.supplier_id, materialId);
+        if (materialBalance) {
+          let newBalance = materialBalance.current_balance;
+          
+          if (materialBalance.balance_type === 'credit') {
+            newBalance = materialBalance.current_balance - deliveryForm.quantity;
+          } else {
+            newBalance = materialBalance.current_balance + deliveryForm.quantity;
+          }
+          
+          // Update status based on new balance
+          let newStatus = materialBalance.status;
+          if (newBalance === 0) {
+            newStatus = 'delivered';
+          } else if (newBalance < materialBalance.opening_balance) {
+            newStatus = 'partially';
+          }
+          
+          const { data: updatedBalance } = await supabase
+            .from('material_balances')
+            .update({ 
+              current_balance: newBalance,
+              status: newStatus
+            })
+            .eq('supplier_id', selectedItem.supplier_id)
+            .eq('material_id', materialId)
+            .select()
+            .single();
+
+          if (updatedBalance) {
+            setLocalMaterialBalances(prev => prev.map(b => 
+              b.supplier_id === selectedItem.supplier_id && b.material_id === materialId
+                ? { ...b, current_balance: newBalance, status: newStatus }
+                : b
+            ));
+          }
+        }
+      }
+      
       setLocalSupplierBalances(prev => {
           return prev.map(balance => {
             if (balance.supplier_id === selectedItem.supplier_id) {
@@ -651,15 +933,26 @@ export default function Suppliers() {
               newBalance = balance.current_balance + deliveryValue;
             }
             
+            // Update status based on new balance
+            let newStatus = balance.status;
+            if (newBalance === 0) {
+              newStatus = 'paid';
+            } else if (newBalance < balance.opening_balance) {
+              newStatus = 'partially';
+            }
+            
             supabase
               .from('supplier_balances')
-              .update({ current_balance: newBalance })
+              .update({ 
+                current_balance: newBalance,
+                status: newStatus
+              })
               .eq('supplier_id', selectedItem.supplier_id)
               .then(({ error }) => {
                 if (error) console.error('Balance update error:', error);
               });
 
-            return { ...balance, current_balance: newBalance };
+            return { ...balance, current_balance: newBalance, status: newStatus };
           }
           return balance;
         });
@@ -669,14 +962,13 @@ export default function Suppliers() {
       setShowDeliveryForm(false);
       setDeliveryNoteType('');
       setSelectedClient('');
-      setDeliveryUnitPrice(0); // Reset the adjustable price
+      setDeliveryUnitPrice(0);
     }
   } catch (err) {
     console.error('Error saving delivery:', err);
     setError(err instanceof Error ? err.message : 'Failed to save delivery. Please try again.');
   }
 };
-
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -720,25 +1012,34 @@ export default function Suppliers() {
                 newBalance = balance.current_balance + paymentForm.amount;
               }
               
+              // Update status based on new balance
+              let newStatus = balance.status;
+              if (newBalance === 0) {
+                newStatus = 'paid';
+              } else if (newBalance < balance.opening_balance) {
+                newStatus = 'partially';
+              }
+              
               supabase
                 .from('supplier_balances')
-                .update({ current_balance: newBalance })
+                .update({ 
+                  current_balance: newBalance,
+                  status: newStatus
+                })
                 .eq('supplier_id', selectedItem.supplier_id)
                 .then(({ error }) => {
                   if (error) console.error('Balance update error:', error);
                 });
 
-              return { ...balance, current_balance: newBalance };
+              return { ...balance, current_balance: newBalance, status: newStatus };
             }
             return balance;
           });
         });
 
-        // Get supplier and item details for the expense record
         const supplier = suppliers.find(s => s.id === selectedItem.supplier_id);
         const item = supplyItems.find(i => i.id === selectedItem.id);
         
-        // Create expense record
         const expenseData = {
           item: 'Payment To Supplier',
           amount_spent: paymentForm.amount,
@@ -753,14 +1054,12 @@ export default function Suppliers() {
           submittedby: 'Admin'
         };
 
-        // Insert into expenses table
         const { error: expenseError } = await supabase
           .from('expenses')
           .insert([expenseData]);
 
         if (expenseError) {
           console.error('Error saving expense record:', expenseError);
-          // Don't throw the error as the payment was successful
         }
 
         resetPaymentForm();
@@ -808,6 +1107,11 @@ export default function Suppliers() {
         .delete()
         .eq('supplier_id', id);
 
+      await supabase
+        .from('material_balances')
+        .delete()
+        .eq('supplier_id', id);
+
       const { error } = await supabase
         .from('suppliers')
         .delete()
@@ -817,6 +1121,7 @@ export default function Suppliers() {
 
       setSuppliers(prev => prev.filter(s => s.id !== id));
       setLocalSupplierBalances(prev => prev.filter(b => b.supplier_id !== id));
+      setLocalMaterialBalances(prev => prev.filter(b => b.supplier_id !== id));
     } catch (err) {
       console.error('Error deleting supplier:', err);
       setError('Failed to delete supplier. Please try again.');
@@ -866,7 +1171,7 @@ export default function Suppliers() {
       name: "",
       quantity: 0,
       price: 0,
-      status: 'postpaid', // Reset to postpaid
+      status: 'postpaid',
     });
     setShowItemForm(false);
     setShowOtherInput(false);
@@ -884,7 +1189,7 @@ export default function Suppliers() {
     setShowDeliveryForm(false);
     setDeliveryNoteType('');
     setSelectedClient('');
-    setDeliveryUnitPrice(0); // Reset the adjustable price
+    setDeliveryUnitPrice(0);
   };
 
   const resetPaymentForm = () => {
@@ -906,7 +1211,14 @@ export default function Suppliers() {
       supplier_id: "",
       opening_balance: 0,
       balance_type: "credit",
+      status: "pending",
+      partial_amount: 0,
+      material_id: ""
     });
+    setBalanceType('money');
+    setSelectedMaterial('');
+    setBalanceStatus('pending');
+    setPartialAmount(0);
     setShowBalanceForm(false);
   };
 
@@ -940,13 +1252,34 @@ export default function Suppliers() {
       setSelectedClient('');
     }
     
-    // Reset unit price when note type changes
     if (selectedItem) {
       setDeliveryUnitPrice(noteType === 'client' ? selectedItem.price : 0);
     }
   };
 
-  // Set the delivery unit price when an item is selected
+  const handleBalanceTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const type = e.target.value as 'money' | 'material';
+    setBalanceType(type);
+    setBalanceForm({
+      ...balanceForm,
+      opening_balance: 0,
+      status: type === 'money' ? 'pending' : 'pending',
+      partial_amount: 0
+    });
+    setBalanceStatus(type === 'money' ? 'pending' : 'pending');
+    setPartialAmount(0);
+  };
+
+  const handleBalanceStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const status = e.target.value as 'pending' | 'partially' | 'paid' | 'delivered';
+    setBalanceStatus(status);
+    setBalanceForm({
+      ...balanceForm,
+      status,
+      partial_amount: status === 'partially' ? partialAmount : 0
+    });
+  };
+
   useEffect(() => {
     if (selectedItem && showDeliveryForm) {
       setDeliveryUnitPrice(selectedItem.price);
@@ -1038,6 +1371,17 @@ export default function Suppliers() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <SupplierBalanceDisplay supplierId={supplier.id} />
+                      {localMaterialBalances
+                        .filter(b => b.supplier_id === supplier.id)
+                        .map(balance => (
+                          <div key={balance.id} className="mt-2">
+                            <MaterialBalanceDisplay 
+                              supplierId={supplier.id} 
+                              materialId={balance.material_id} 
+                            />
+                          </div>
+                        ))
+                      }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
@@ -1058,12 +1402,28 @@ export default function Suppliers() {
                         <button
                           onClick={() => {
                             setSelectedSupplier(supplier);
+                            fetchLedgerData(supplier.id);
+                            setShowLedgerModal(true);
+                          }}
+                          className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 flex items-center gap-1"
+                        >
+                          <span>📊</span> Ledger
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedSupplier(supplier);
                             const balance = getSupplierBalance(supplier.id);
                             setBalanceForm({
                               supplier_id: supplier.id,
                               opening_balance: balance?.current_balance || 0,
-                              balance_type: balance?.balance_type || 'credit'
+                              balance_type: balance?.balance_type || 'credit',
+                              status: balance?.status || 'pending',
+                              partial_amount: balance?.partial_amount || 0,
+                              material_id: ""
                             });
+                            setBalanceType('money');
+                            setBalanceStatus(balance?.status || 'pending');
+                            setPartialAmount(balance?.partial_amount || 0);
                             setShowBalanceForm(true);
                           }}
                           className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 flex items-center gap-1"
@@ -1190,20 +1550,102 @@ export default function Suppliers() {
                     Balance Type
                   </label>
                   <select
+                    value={balanceType}
+                    onChange={handleBalanceTypeChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="money">Money Balance</option>
+                    <option value="material">Material Balance</option>
+                  </select>
+                </div>
+
+                {balanceType === 'material' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Material
+                    </label>
+                    <select
+                      value={selectedMaterial}
+                      onChange={(e) => setSelectedMaterial(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required={balanceType === 'material'}
+                    >
+                      <option value="">Select Material</option>
+                      {materials.map(material => (
+                        <option key={material.id} value={material.id}>
+                          {material.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Balance Type
+                  </label>
+                  <select
                     value={balanceForm.balance_type}
                     onChange={(e) => setBalanceForm({
                       ...balanceForm,
                       balance_type: e.target.value as 'credit' | 'debit'
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
+                  >
                     <option value="credit">Supplier owes company</option>
                     <option value="debit">Company owes supplier</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Amount (UGX)
+                    Status
+                  </label>
+                  <select
+                    value={balanceStatus}
+                    onChange={handleBalanceStatusChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="pending">
+                      {balanceType === 'money' ? 'Pending Payment' : 'Pending Delivery'}
+                    </option>
+                    <option value="partially">
+                      {balanceType === 'money' ? 'Partially Paid' : 'Partially Delivered'}
+                    </option>
+                    <option value={balanceType === 'money' ? 'paid' : 'delivered'}>
+                      {balanceType === 'money' ? 'Paid' : 'Delivered'}
+                    </option>
+                  </select>
+                </div>
+
+                {balanceStatus === 'partially' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {balanceType === 'money' ? 'Amount Paid' : 'Quantity Delivered'}
+                    </label>
+                    <input
+                      type="number"
+                      value={partialAmount}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        setPartialAmount(value);
+                        setBalanceForm({
+                          ...balanceForm,
+                          partial_amount: value,
+                          opening_balance: balanceType === 'money' ? value : balanceForm.opening_balance
+                        });
+                      }}
+                      required={balanceStatus === 'partially'}
+                      min="0"
+                      step="0.01"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {balanceType === 'money' ? 'Amount (UGX)' : 'Quantity'}
                   </label>
                   <input
                     type="number"
@@ -1219,11 +1661,13 @@ export default function Suppliers() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+
                 {error && (
                   <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
                     {error}
                   </div>
                 )}
+
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
@@ -1245,6 +1689,103 @@ export default function Suppliers() {
         </div>
       )}
 
+      {/* Ledger Modal */}
+      {showLedgerModal && selectedSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+            <div className="p-6 flex-shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  General Ledger for {selectedSupplier.name}
+                </h3>
+                <button 
+                  onClick={() => setShowLedgerModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="overflow-y-auto max-h-[70vh]">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Item
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Price
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Quantity
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Amount
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Amount Paid
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Balance
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Delivered
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Undelivered
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {ledgerData.map((entry) => (
+                      <tr key={`${entry.type}-${entry.id}`}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(entry.date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {entry.item}
+                          {entry.method && (
+                            <div className="text-xs text-gray-500">{entry.method}</div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {entry.price > 0 ? formatCurrency(entry.price) : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {entry.quantity > 0 ? entry.quantity : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {entry.amount > 0 ? formatCurrency(entry.amount) : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {entry.amount_paid > 0 ? formatCurrency(entry.amount_paid) : '-'}
+                        </td>
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                          entry.balance > 0 ? 'text-red-600' : 'text-green-600'
+                        }`}>
+                          {formatCurrency(Math.abs(entry.balance))}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {entry.delivered > 0 ? entry.delivered : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {entry.undelivered > 0 ? entry.undelivered : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* The rest of your modals (Supplies, Transactions, Item Form, Delivery Form, Payment Form) */}
+      {/* These remain largely the same as in your original code, with minor adjustments for the new functionality */}
       {/* Supplies Table Modal */}
       {showSuppliesModal && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
