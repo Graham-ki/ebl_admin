@@ -264,16 +264,27 @@ export default function Suppliers() {
   const calculateNewBalance = () => {
     if (!selectedBalance) return 0;
     
-    if ('supplier_id' in selectedBalance) {
-      // For money balance
+    const isSupplierBalance = 'supplier_id' in selectedBalance && 
+                            'current_balance' in selectedBalance &&
+                            'id' in selectedBalance;
+    
+    const isMaterialBalance = 'material_id' in selectedBalance && 
+                            'current_balance' in selectedBalance &&
+                            'id' in selectedBalance;
+    
+    if (isSupplierBalance) {
+      // For money balance (SupplierBalance)
+      const supplierBalance = selectedBalance as SupplierBalance;
       const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
-      const newBalance = selectedBalance.current_balance - deliveryValue;
+      const newBalance = supplierBalance.current_balance - deliveryValue;
       return Math.max(0, newBalance); // Ensure balance doesn't go negative
-    } else {
-      // For material balance
-      const newBalance = selectedBalance.current_balance - balanceDeliveryForm.quantity;
+    } else if (isMaterialBalance) {
+      // For material balance (MaterialBalance)
+      const materialBalance = selectedBalance as MaterialBalance;
+      const newBalance = materialBalance.current_balance - balanceDeliveryForm.quantity;
       return Math.max(0, newBalance); // Ensure balance doesn't go negative
     }
+    return 0; // Default fallback
   };
 
   // Handle delivery against balance
@@ -303,16 +314,23 @@ export default function Suppliers() {
       if (deliveryError) throw deliveryError;
       
       // Update the balance
-      if ('supplier_id' in selectedBalance) {
-        // Money balance
+      const isSupplierBalance = 'supplier_id' in selectedBalance && 
+                              'current_balance' in selectedBalance && 
+                              'opening_balance' in selectedBalance && 
+                              'status' in selectedBalance && 
+                              'id' in selectedBalance;
+      
+      if (isSupplierBalance) {
+        // Money balance (SupplierBalance)
+        const supplierBalance = selectedBalance as SupplierBalance;
         const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
-        const newBalance = Math.max(0, selectedBalance.current_balance - deliveryValue);
+        const newBalance = Math.max(0, supplierBalance.current_balance - deliveryValue);
         
         // Determine new status
-        let newStatus = selectedBalance.status;
+        let newStatus = supplierBalance.status;
         if (newBalance === 0) {
           newStatus = 'paid';
-        } else if (newBalance < selectedBalance.opening_balance) {
+        } else if (newBalance < supplierBalance.opening_balance) {
           newStatus = 'partially';
         }
         
@@ -321,34 +339,35 @@ export default function Suppliers() {
           .update({
             current_balance: newBalance,
             status: newStatus,
-            partial_amount: newStatus === 'partially' ? selectedBalance.opening_balance - newBalance : 0
+            partial_amount: newStatus === 'partially' ? supplierBalance.opening_balance - newBalance : 0
           })
-          .eq('id', selectedBalance.id);
+          .eq('id', supplierBalance.id);
         
         if (updateError) throw updateError;
         
         // Update local state
         setLocalSupplierBalances(prev => 
           prev.map(b => 
-            b.id === selectedBalance.id 
+            b.id === supplierBalance.id 
               ? {
                   ...b,
                   current_balance: newBalance,
                   status: newStatus,
-                  partial_amount: newStatus === 'partially' ? selectedBalance.opening_balance - newBalance : 0
+                  partial_amount: newStatus === 'partially' ? supplierBalance.opening_balance - newBalance : 0
                 }
               : b
           )
         );
-      } else {
-        // Material balance
-        const newBalance = Math.max(0, selectedBalance.current_balance - balanceDeliveryForm.quantity);
+      } else if ('material_id' in selectedBalance && 'current_balance' in selectedBalance && 'opening_balance' in selectedBalance && 'status' in selectedBalance && 'id' in selectedBalance) {
+        // Material balance (MaterialBalance)
+        const materialBalance = selectedBalance as MaterialBalance;
+        const newBalance = Math.max(0, materialBalance.current_balance - balanceDeliveryForm.quantity);
         
         // Determine new status
-        let newStatus = selectedBalance.status;
+        let newStatus = materialBalance.status;
         if (newBalance === 0) {
           newStatus = 'delivered';
-        } else if (newBalance < selectedBalance.opening_balance) {
+        } else if (newBalance < materialBalance.opening_balance) {
           newStatus = 'partially';
         }
         
@@ -357,21 +376,21 @@ export default function Suppliers() {
           .update({
             current_balance: newBalance,
             status: newStatus,
-            partial_amount: newStatus === 'partially' ? selectedBalance.opening_balance - newBalance : 0
+            partial_amount: newStatus === 'partially' ? materialBalance.opening_balance - newBalance : 0
           })
-          .eq('id', selectedBalance.id);
+          .eq('id', materialBalance.id);
         
         if (updateError) throw updateError;
         
         // Update local state
         setLocalMaterialBalances(prev => 
           prev.map(b => 
-            b.id === selectedBalance.id 
+            b.id === materialBalance.id 
               ? {
                   ...b,
                   current_balance: newBalance,
                   status: newStatus,
-                  partial_amount: newStatus === 'partially' ? selectedBalance.opening_balance - newBalance : 0
+                  partial_amount: newStatus === 'partially' ? materialBalance.opening_balance - newBalance : 0
                 }
               : b
           )
@@ -2176,9 +2195,25 @@ export default function Suppliers() {
                   </label>
                   <input
                     type="text"
-                    value={'supplier_id' in selectedBalance 
-                      ? formatCurrency(selectedBalance.current_balance)
-                      : `${selectedBalance.current_balance} units`}
+                    value={(() => {
+                      if (!selectedBalance) return '0';
+                      
+                      const isSupplierBalance = 'supplier_id' in selectedBalance && 
+                                              'current_balance' in selectedBalance &&
+                                              'id' in selectedBalance;
+                      
+                      const isMaterialBalance = 'material_id' in selectedBalance && 
+                                              'current_balance' in selectedBalance &&
+                                              'id' in selectedBalance;
+                      
+                      if (isSupplierBalance) {
+                        return formatCurrency((selectedBalance as SupplierBalance).current_balance);
+                      } else if (isMaterialBalance) {
+                        return `${(selectedBalance as MaterialBalance).current_balance} units`;
+                      }
+                      
+                      return '0';
+                    })()}
                     disabled
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50"
                   />
@@ -2274,17 +2309,47 @@ export default function Suppliers() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-gray-700">Current Balance:</span>
                     <span className="text-sm font-medium text-gray-900">
-                      {'supplier_id' in selectedBalance 
-                        ? formatCurrency(selectedBalance.current_balance)
-                        : `${selectedBalance.current_balance} units`}
+                      {(() => {
+                        if (!selectedBalance) return '0';
+                        
+                        const isSupplierBalance = 'supplier_id' in selectedBalance && 
+                                                'current_balance' in selectedBalance &&
+                                                'id' in selectedBalance;
+                        
+                        const isMaterialBalance = 'material_id' in selectedBalance && 
+                                                'current_balance' in selectedBalance &&
+                                                'id' in selectedBalance;
+                        
+                        if (isSupplierBalance) {
+                          return formatCurrency((selectedBalance as SupplierBalance).current_balance);
+                        } else if (isMaterialBalance) {
+                          return `${(selectedBalance as MaterialBalance).current_balance} units`;
+                        }
+                        
+                        return '0';
+                      })()}
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-2">
                     <span className="text-sm font-medium text-gray-700">New Balance:</span>
                     <span className="text-sm font-medium text-gray-900">
-                      {'supplier_id' in selectedBalance 
-                        ? formatCurrency(calculateNewBalance())
-                        : `${calculateNewBalance()} units`}
+                      {(() => {
+                        if (!selectedBalance) return '0';
+                        
+                        const isSupplierBalance = 'supplier_id' in selectedBalance && 
+                                                'id' in selectedBalance;
+                        
+                        const isMaterialBalance = 'material_id' in selectedBalance && 
+                                                'id' in selectedBalance;
+                        
+                        if (isSupplierBalance) {
+                          return formatCurrency(calculateNewBalance());
+                        } else if (isMaterialBalance) {
+                          return `${calculateNewBalance()} units`;
+                        }
+                        
+                        return '0';
+                      })()}
                     </span>
                   </div>
                 </div>
