@@ -29,14 +29,18 @@ interface SupplyItem {
 
 interface Delivery {
   id: string;
-  supply_item_id: string;
+  supply_item_id: string | null;
   quantity: number;
+  unit_price: number;
   value: number;
   delivery_date: string;
   notes?: string;
   client_id?: string;
   created_at: string;
   material_id: string | null;
+  supplier_id?: string;
+  balance_id?: string;
+  balance_type?: 'money' | 'material';
 }
 
 interface Payment {
@@ -208,14 +212,7 @@ export default function Suppliers() {
     status: 'postpaid',
   });
   
-  const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at" | "value">>({
-    supply_item_id: "",
-    quantity: 0,
-    delivery_date: getEastAfricanDateTime(),
-    notes: "",
-    client_id: "",
-    material_id:"",
-  });
+  const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at">>({    supply_item_id: null,    quantity: 0,    unit_price: 0,    value: 0,    delivery_date: getEastAfricanDateTime(),    notes: "",    client_id: "",    material_id: null,    supplier_id: "",    balance_id: "",    balance_type: undefined  });
 
   const [selectedClient, setSelectedClient] = useState('');
   
@@ -257,7 +254,8 @@ export default function Suppliers() {
     quantity: 0,
     unit_price: 0,
     delivery_date: getEastAfricanDateTime(),
-    notes: ""
+    notes: "",
+    client_id: ""
   });
   
   // Helper function to calculate new balance after delivery
@@ -296,37 +294,87 @@ export default function Suppliers() {
     setError(null);
     
     try {
-      // Create a record of the delivery
-      const deliveryData = {
-        supplier_id: selectedSupplier.id,
-        quantity: balanceDeliveryForm.quantity,
-        unit_price: balanceDeliveryForm.unit_price, // Always record unit price for all balance types
-        delivery_date: balanceDeliveryForm.delivery_date,
-        notes: balanceDeliveryForm.notes,
-        balance_id: selectedBalance.id,
-        balance_type: 'supplier_id' in selectedBalance ? 'money' : 'material',
-        material_id: 'material_id' in selectedBalance ? selectedBalance.material_id : null
-      };
-      
-      const { data: deliveryRecord, error: deliveryError } = await supabase
-        .from('balance_deliveries')
-        .insert([deliveryData])
-        .select();
-      
-      if (deliveryError) throw deliveryError;
-      
-      // Update the balance
+      // Calculate delivery value based on quantity and unit price
       const isSupplierBalance = 'supplier_id' in selectedBalance && 
                               'current_balance' in selectedBalance && 
                               'opening_balance' in selectedBalance && 
                               'status' in selectedBalance && 
                               'id' in selectedBalance;
       
+      const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
+      
+      // Prepare material ID if applicable
+      const materialId = 'material_id' in selectedBalance ? selectedBalance.material_id : null;
+      
+      // Handle client order if applicable
+      let notes = balanceDeliveryForm.notes || '';
+      let clientId = null;
+      
+      if (balanceDeliveryForm.client_id) {
+        const clientName = clients.find(c => c.id === balanceDeliveryForm.client_id)?.name || '';
+        notes = `${notes ? notes + ' | ' : ''}Client: ${clientName}`;
+        clientId = balanceDeliveryForm.client_id;
+        
+        // Create a client order record
+        const { error: orderError } = await supabase
+          .from('order')
+          .insert([{
+            client_id: balanceDeliveryForm.client_id,
+            user: balanceDeliveryForm.client_id,
+            item: materialId ? materials.find(m => m.id === materialId)?.name || 'Material' : 'Money Balance',
+            material: materialId ? materials.find(m => m.id === materialId)?.name || 'Material' : 'Money Balance',
+            cost: balanceDeliveryForm.unit_price,
+            quantity: balanceDeliveryForm.quantity,
+            total_amount: deliveryValue,
+            created_at: new Date().toISOString()
+          }]);
+
+        if (orderError) {
+          console.error('Order creation error details:', {
+            error: orderError,
+            balanceData: {
+              type: isSupplierBalance ? 'money' : 'material',
+              price: balanceDeliveryForm.unit_price,
+              quantity: balanceDeliveryForm.quantity
+            }
+          });
+          throw orderError;
+        }
+      }
+      
+      // Create a record of the delivery in the deliveries table
+      const deliveryData = {
+        supplier_id: selectedSupplier.id,
+        quantity: balanceDeliveryForm.quantity,
+        unit_price: balanceDeliveryForm.unit_price,
+        value: deliveryValue, // Store the calculated value
+        delivery_date: balanceDeliveryForm.delivery_date,
+        notes: notes,
+        material_id: materialId,
+        // Use null for supply_item_id since this is a balance delivery
+        supply_item_id: null,
+        client_id: clientId,
+        // Store balance information in additional fields
+        balance_id: selectedBalance.id,
+        balance_type: isSupplierBalance ? 'money' : 'material'
+      };
+      
+      const { data: deliveryRecord, error: deliveryError } = await supabase
+        .from('deliveries')
+        .insert([deliveryData])
+        .select();
+      
+      if (deliveryError) throw deliveryError;
+      
+      // Add the new delivery to local state
+      if (deliveryRecord?.[0]) {
+        setDeliveries(prev => [...prev, deliveryRecord[0]]);
+      }
+      
+      // Update the balance
       if (isSupplierBalance) {
         // Money balance (SupplierBalance)
         const supplierBalance = selectedBalance as SupplierBalance;
-        // Convert quantity to monetary value by multiplying with unit price
-        const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
         const newBalance = Math.max(0, supplierBalance.current_balance - deliveryValue);
         
         // Determine new status
@@ -408,11 +456,12 @@ export default function Suppliers() {
         quantity: 0,
         unit_price: 0,
         delivery_date: getEastAfricanDateTime(),
-        notes: ""
+        notes: "",
+        client_id: ""
       });
     } catch (err) {
       console.error('Error recording delivery against balance:', err);
-      setError('Failed to record delivery. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to record delivery. Please try again.');
     }
   };
   
@@ -2332,6 +2381,27 @@ export default function Suppliers() {
                     rows={2}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Client (Optional)
+                  </label>
+                  <select
+                    value={balanceDeliveryForm.client_id}
+                    onChange={(e) => setBalanceDeliveryForm({
+                      ...balanceDeliveryForm,
+                      client_id: e.target.value
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  >
+                    <option value="">-- Select Client (Optional) --</option>
+                    {clients.map(client => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="p-3 bg-gray-50 rounded-lg">
