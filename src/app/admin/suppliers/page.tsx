@@ -1998,7 +1998,7 @@ export default function Suppliers() {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div className="flex justify-end space-x-2">
-                                  <buttononClick={() => {
+                                  <buttonon Click={() => {
                                     setSelectedBalance(balance);
                                         setBalanceDeliveryForm({
                                               ...balanceDeliveryForm,
