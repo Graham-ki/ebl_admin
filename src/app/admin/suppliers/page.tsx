@@ -1999,21 +1999,22 @@ export default function Suppliers() {
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div className="flex justify-end space-x-2">
                                   <buttononClick={() => {
-  setSelectedBalance(balance);
-  setBalanceDeliveryForm({
-    ...balanceDeliveryForm,
-    quantity: 0,
-    unit_price: 0,
-    value: 0,
-    delivery_date: getEastAfricanDateTime(),
-    notes: "",
-    supplier_id: selectedSupplier?.id || "",
-    balance_id: balance.id,
-    balance_type: 'material_id' in balance ? 'material' : 'money',
-    material_id: 'material_id' in balance ? (balance as MaterialBalance).material_id : null
-  });
-  setIsBalanceDeliveryForm(true);
-}}                                  className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                                    setSelectedBalance(balance);
+                                        setBalanceDeliveryForm({
+                                              ...balanceDeliveryForm,
+                                              quantity: 0,
+                                                unit_price: 0,
+                                                      value: 0,
+                                                delivery_date: getEastAfricanDateTime(),
+                                                  notes: "",
+                                              supplier_id: selectedSupplier?.id || "",
+                                              balance_id: balance.id,
+                                                      balance_type: 'material_id' in balance ? 'material' : 'money',
+                                        material_id: 'material_id' in balance ? (balance as MaterialBalance).material_id : null
+                                              });
+                                      setIsBalanceDeliveryForm(true);
+                                      }}                                  
+                                  className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
                                     disabled={balance.current_balance <= 0}
                                   >
                                     <span>📥</span> Record Delivery
