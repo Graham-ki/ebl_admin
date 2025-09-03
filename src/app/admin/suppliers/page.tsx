@@ -1999,20 +1999,36 @@ export default function Suppliers() {
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div className="flex justify-end space-x-2">
                                   <button
-                                    onClick={() => {
-                                      setSelectedBalance(balance);
-                                      setBalanceDeliveryForm({
-                                        ...balanceDeliveryForm,
-                                        quantity: 0,
-                                        unit_price: 0,
-                                        value: 0,
-                                        delivery_date: getEastAfricanDateTime(),
-                                        notes: "",
-                                        supplier_id: selectedSupplier?.id || "",
-                                        balance_id: balance.id,
-                                        balance_type: 'supplier_id' in balance ? 'money' : 'material',
-                                        material_id: 'material_id' in balance ? balance.material_id : null
-                                      });
+                                   onClick={() => {
+                                    setSelectedBalance(balance);
+  
+                                const baseForm = {
+                                ...balanceDeliveryForm,
+                                quantity: 0,
+                              unit_price: 0,
+                                value: 0,
+                            delivery_date: getEastAfricanDateTime(),
+                            notes: "",
+                            supplier_id: selectedSupplier?.id || "",
+                            balance_id: balance.id,
+                            };
+
+                            if ('material_id' in balance) {
+                              // It's a MaterialBalance
+                                setBalanceDeliveryForm({
+                                ...baseForm,
+                                balance_type: 'material',
+                                  material_id: balance.material_id
+                                  });
+                                    } else {
+                                  // It's a SupplierBalance
+                                    setBalanceDeliveryForm({
+                                  ...baseForm,
+                                    balance_type: 'money',
+                                    material_id: null
+                                            });
+                                              }
+  
                                       setIsBalanceDeliveryForm(true);
                                     }}
                                     className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
