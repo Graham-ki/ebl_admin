@@ -212,7 +212,19 @@ export default function Suppliers() {
     status: 'postpaid',
   });
   
-  const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at">>({    supply_item_id: null,    quantity: 0,    unit_price: 0,    value: 0,    delivery_date: getEastAfricanDateTime(),    notes: "",    client_id: "",    material_id: null,    supplier_id: "",    balance_id: "",    balance_type: undefined  });
+  const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at">>({    
+    supply_item_id: null,    
+    quantity: 0,    
+    unit_price: 0,    
+    value: 0,    
+    delivery_date: getEastAfricanDateTime(),    
+    notes: "",    
+    client_id: "",    
+    material_id: null,    
+    supplier_id: "",    
+    balance_id: "",    
+    balance_type: undefined  
+  });
 
   const [selectedClient, setSelectedClient] = useState('');
   
@@ -846,7 +858,7 @@ export default function Suppliers() {
 
         if (suppliersError) throw suppliersError;
         if (itemsError) throw itemsError;
-        if (deliveriesError) throw deliveriesError;
+        if (deliversError) throw deliveriesError;
         if (paymentsError) throw paymentsError;
         if (materialsError) throw materialsError;
         if (supplierBalancesError) throw supplierBalancesError;
@@ -899,7 +911,7 @@ export default function Suppliers() {
       }
     } catch (err) {
       console.error('Error saving supplier:', err);
-      setError('Failed to save supplier. Please try again.');
+        setError('Failed to save supplier. Please try again.');
     }
   };
 
@@ -1405,12 +1417,17 @@ export default function Suppliers() {
 
   const resetDeliveryForm = () => {
     setDeliveryForm({
-      supply_item_id: "",
+      supply_item_id: null,
       quantity: 0,
+      unit_price: 0,
+      value: 0,
       delivery_date: getEastAfricanDateTime(),
       notes: "",
       client_id: "",
-      material_id:"",
+      material_id: null,
+      supplier_id: "",
+      balance_id: "",
+      balance_type: undefined
     });
     setShowDeliveryForm(false);
     setDeliveryNoteType('');
@@ -1557,10 +1574,10 @@ export default function Suppliers() {
             <h3 className="text-lg font-medium text-gray-900 mb-1">No data yet</h3>
             <p className="text-gray-500 mb-4">Get started by adding your first service provider</p>
             <button
-              onClick={() => setShowSupplierForm(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+            onClick={() => setShowSupplierForm(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
             >
-              Add new
+            Add new
             </button>
           </div>
         ) : (
@@ -2090,7 +2107,7 @@ export default function Suppliers() {
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${balance.balance_type === 'credit' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
                                     {balance.balance_type === 'credit' ? 'Supplier owes company' : 'Company owes supplier'}
-                                  </span>
+                                </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   {balance.opening_balance} units
@@ -2510,7 +2527,6 @@ export default function Suppliers() {
           </div>
         </div>
       )}
-
       {/* Ledger Modal */}
       {showLedgerModal && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
