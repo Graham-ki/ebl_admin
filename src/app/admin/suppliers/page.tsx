@@ -250,12 +250,18 @@ export default function Suppliers() {
   const [showBalancesModal, setShowBalancesModal] = useState(false);
   const [selectedBalance, setSelectedBalance] = useState<SupplierBalance | MaterialBalance | null>(null);
   const [isBalanceDeliveryForm, setIsBalanceDeliveryForm] = useState(false);
-  const [balanceDeliveryForm, setBalanceDeliveryForm] = useState({
+  const [balanceDeliveryForm, setBalanceDeliveryForm] = useState<Omit<Delivery, "id" | "created_at">>({
+    supply_item_id: null,
     quantity: 0,
     unit_price: 0,
+    value: 0,
     delivery_date: getEastAfricanDateTime(),
     notes: "",
-    client_id: ""
+    client_id: "",
+    material_id: null,
+    supplier_id: "",
+    balance_id: "",
+    balance_type: undefined
   });
   
   // Helper function to calculate new balance after delivery
@@ -453,11 +459,17 @@ export default function Suppliers() {
       setIsBalanceDeliveryForm(false);
       setSelectedBalance(null);
       setBalanceDeliveryForm({
+        supply_item_id: null,
         quantity: 0,
         unit_price: 0,
+        value: 0,
         delivery_date: getEastAfricanDateTime(),
         notes: "",
-        client_id: ""
+        client_id: "",
+        material_id: null,
+        supplier_id: "",
+        balance_id: "",
+        balance_type: undefined
       });
     } catch (err) {
       console.error('Error recording delivery against balance:', err);
@@ -1976,8 +1988,13 @@ export default function Suppliers() {
                                         ...balanceDeliveryForm,
                                         quantity: 0,
                                         unit_price: 0,
+                                        value: 0,
                                         delivery_date: getEastAfricanDateTime(),
-                                        notes: ""
+                                        notes: "",
+                                        supplier_id: selectedSupplier?.id || "",
+                                        balance_id: balance.id,
+                                        balance_type: 'supplier_id' in balance ? 'money' : 'material',
+                                        material_id: 'material_id' in balance ? balance.material_id : null
                                       });
                                       setIsBalanceDeliveryForm(true);
                                     }}
@@ -2095,8 +2112,13 @@ export default function Suppliers() {
                                           ...balanceDeliveryForm,
                                           quantity: 0,
                                           unit_price: 0,
+                                          value: 0,
                                           delivery_date: getEastAfricanDateTime(),
-                                          notes: ""
+                                          notes: "",
+                                          supplier_id: selectedSupplier?.id || "",
+                                          balance_id: balance.id,
+                                          balance_type: 'material',
+                                          material_id: balance.material_id
                                         });
                                         setIsBalanceDeliveryForm(true);
                                       }}
@@ -2304,9 +2326,11 @@ export default function Suppliers() {
                       value={balanceDeliveryForm.quantity}
                       onChange={(e) => {
                         const value = Number(e.target.value);
+                        const newValue = value * balanceDeliveryForm.unit_price;
                         setBalanceDeliveryForm({
                           ...balanceDeliveryForm,
-                          quantity: value
+                          quantity: value,
+                          value: newValue
                         });
                       }}
                       min="0"
@@ -2325,9 +2349,11 @@ export default function Suppliers() {
                       value={balanceDeliveryForm.unit_price}
                       onChange={(e) => {
                         const value = Number(e.target.value);
+                        const newValue = balanceDeliveryForm.quantity * value;
                         setBalanceDeliveryForm({
                           ...balanceDeliveryForm,
-                          unit_price: value
+                          unit_price: value,
+                          value: newValue
                         });
                       }}
                       min="0"
