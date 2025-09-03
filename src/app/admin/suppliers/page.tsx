@@ -29,18 +29,18 @@ interface SupplyItem {
 
 interface Delivery {
   id: string;
-  supply_item_id: string | null;
+  supply_item_id: string | null; // This can be null
   quantity: number;
-  unit_price: number;
-  value: number;
+  unit_price: number; // Missing in your reset
+  value: number; // Missing in your reset
   delivery_date: string;
   notes?: string;
   client_id?: string;
   created_at: string;
-  material_id: string | null;
-  supplier_id?: string;
-  balance_id?: string;
-  balance_type?: 'money' | 'material';
+  material_id: string | null; // This can be null
+  supplier_id?: string; // Missing in your reset
+  balance_id?: string; // Missing in your reset
+  balance_type?: 'money' | 'material'; // Missing in your reset
 }
 
 interface Payment {
@@ -213,18 +213,18 @@ export default function Suppliers() {
   });
   
   const [deliveryForm, setDeliveryForm] = useState<Omit<Delivery, "id" | "created_at">>({    
-    supply_item_id: null,    
-    quantity: 0,    
-    unit_price: 0,    
-    value: 0,    
-    delivery_date: getEastAfricanDateTime(),    
-    notes: "",    
-    client_id: "",    
-    material_id: null,    
-    supplier_id: "",    
-    balance_id: "",    
-    balance_type: undefined  
-  });
+  supply_item_id: null,    
+  quantity: 0,
+  unit_price: 0,
+  value: 0,
+  delivery_date: getEastAfricanDateTime(),
+  notes: "",
+  client_id: "",
+  material_id: null,
+  supplier_id: "",
+  balance_id: "",
+  balance_type: undefined
+});
 
   const [selectedClient, setSelectedClient] = useState('');
   
@@ -1415,25 +1415,25 @@ export default function Suppliers() {
     setShowOtherInput(false);
   };
 
-  const resetDeliveryForm = () => {
-    setDeliveryForm({
-      supply_item_id: null,
-      quantity: 0,
-      unit_price: 0,
-      value: 0,
-      delivery_date: getEastAfricanDateTime(),
-      notes: "",
-      client_id: "",
-      material_id: null,
-      supplier_id: "",
-      balance_id: "",
-      balance_type: undefined
-    });
-    setShowDeliveryForm(false);
-    setDeliveryNoteType('');
-    setSelectedClient('');
-    setDeliveryUnitPrice(0);
-  };
+ const resetDeliveryForm = () => {
+  setDeliveryForm({
+    supply_item_id: null, // Changed from "" to null
+    quantity: 0,
+    unit_price: 0, // Added missing field
+    value: 0, // Added missing field
+    delivery_date: getEastAfricanDateTime(),
+    notes: "",
+    client_id: "", // Keep as string but ensure it matches the interface
+    material_id: null, // Changed from "" to null
+    supplier_id: "", // Added missing field
+    balance_id: "", // Added missing field
+    balance_type: undefined // Added missing field
+  });
+  setShowDeliveryForm(false);
+  setDeliveryNoteType('');
+  setSelectedClient('');
+  setDeliveryUnitPrice(0);
+};
 
   const resetPaymentForm = () => {
     setPaymentForm({
