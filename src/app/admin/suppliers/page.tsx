@@ -275,12 +275,14 @@ export default function Suppliers() {
     if (isSupplierBalance) {
       // For money balance (SupplierBalance)
       const supplierBalance = selectedBalance as SupplierBalance;
+      // Convert quantity to monetary value by multiplying with unit price
       const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
       const newBalance = supplierBalance.current_balance - deliveryValue;
       return Math.max(0, newBalance); // Ensure balance doesn't go negative
     } else if (isMaterialBalance) {
       // For material balance (MaterialBalance)
       const materialBalance = selectedBalance as MaterialBalance;
+      // Reduce material balance directly by quantity
       const newBalance = materialBalance.current_balance - balanceDeliveryForm.quantity;
       return Math.max(0, newBalance); // Ensure balance doesn't go negative
     }
@@ -298,7 +300,7 @@ export default function Suppliers() {
       const deliveryData = {
         supplier_id: selectedSupplier.id,
         quantity: balanceDeliveryForm.quantity,
-        unit_price: 'supplier_id' in selectedBalance ? balanceDeliveryForm.unit_price : 0,
+        unit_price: balanceDeliveryForm.unit_price, // Always record unit price for all balance types
         delivery_date: balanceDeliveryForm.delivery_date,
         notes: balanceDeliveryForm.notes,
         balance_id: selectedBalance.id,
@@ -323,6 +325,7 @@ export default function Suppliers() {
       if (isSupplierBalance) {
         // Money balance (SupplierBalance)
         const supplierBalance = selectedBalance as SupplierBalance;
+        // Convert quantity to monetary value by multiplying with unit price
         const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
         const newBalance = Math.max(0, supplierBalance.current_balance - deliveryValue);
         
@@ -361,6 +364,7 @@ export default function Suppliers() {
       } else if ('material_id' in selectedBalance && 'current_balance' in selectedBalance && 'opening_balance' in selectedBalance && 'status' in selectedBalance && 'id' in selectedBalance) {
         // Material balance (MaterialBalance)
         const materialBalance = selectedBalance as MaterialBalance;
+        // Reduce material balance directly by quantity delivered
         const newBalance = Math.max(0, materialBalance.current_balance - balanceDeliveryForm.quantity);
         
         // Determine new status
@@ -2144,8 +2148,8 @@ export default function Suppliers() {
       {isBalanceDeliveryForm && selectedBalance && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-medium text-gray-900">
                   Record Delivery Against Balance
                 </h3>
@@ -2162,85 +2166,107 @@ export default function Suppliers() {
               <form onSubmit={(e) => {
                 e.preventDefault();
                 handleBalanceDeliverySubmit();
-              }} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Balance Type
-                  </label>
-                  <input
-                    type="text"
-                    value={'supplier_id' in selectedBalance ? 'Money Balance' : 'Material Balance'}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50"
-                  />
+              }} className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Balance Type
+                    </label>
+                    <input
+                      type="text"
+                      value={'supplier_id' in selectedBalance ? 'Money Balance' : 'Material Balance'}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-sm"
+                    />
+                  </div>
+
+                  {'material_id' in selectedBalance ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Material
+                      </label>
+                      <input
+                        type="text"
+                        value={materials.find(m => m.id === selectedBalance.material_id)?.name || 'Unknown Material'}
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-sm"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Current Balance
+                      </label>
+                      <input
+                        type="text"
+                        value={(() => {
+                          if (!selectedBalance) return '0';
+                          
+                          const isSupplierBalance = 'supplier_id' in selectedBalance && 
+                                                  'current_balance' in selectedBalance &&
+                                                  'id' in selectedBalance;
+                          
+                          if (isSupplierBalance) {
+                            return formatCurrency((selectedBalance as SupplierBalance).current_balance);
+                          }
+                          
+                          return '0';
+                        })()}
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-sm"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {'material_id' in selectedBalance && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Material
+                      Current Balance
                     </label>
                     <input
                       type="text"
-                      value={materials.find(m => m.id === selectedBalance.material_id)?.name || 'Unknown Material'}
+                      value={(() => {
+                        if (!selectedBalance) return '0';
+                        
+                        const isMaterialBalance = 'material_id' in selectedBalance && 
+                                                'current_balance' in selectedBalance &&
+                                                'id' in selectedBalance;
+                        
+                        if (isMaterialBalance) {
+                          return `${(selectedBalance as MaterialBalance).current_balance} units`;
+                        }
+                        
+                        return '0';
+                      })()}
                       disabled
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-sm"
                     />
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Current Balance
-                  </label>
-                  <input
-                    type="text"
-                    value={(() => {
-                      if (!selectedBalance) return '0';
-                      
-                      const isSupplierBalance = 'supplier_id' in selectedBalance && 
-                                              'current_balance' in selectedBalance &&
-                                              'id' in selectedBalance;
-                      
-                      const isMaterialBalance = 'material_id' in selectedBalance && 
-                                              'current_balance' in selectedBalance &&
-                                              'id' in selectedBalance;
-                      
-                      if (isSupplierBalance) {
-                        return formatCurrency((selectedBalance as SupplierBalance).current_balance);
-                      } else if (isMaterialBalance) {
-                        return `${(selectedBalance as MaterialBalance).current_balance} units`;
-                      }
-                      
-                      return '0';
-                    })()}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50"
-                  />
-                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantity to Deliver {('material_id' in selectedBalance) ? '(Units)' : ''}
+                    </label>
+                    <input
+                      type="number"
+                      value={balanceDeliveryForm.quantity}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        setBalanceDeliveryForm({
+                          ...balanceDeliveryForm,
+                          quantity: value
+                        });
+                      }}
+                      min="0"
+                      step="0.01"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {'supplier_id' in selectedBalance ? 'Delivery Value (UGX)' : 'Quantity to Deliver'}
-                  </label>
-                  <input
-                    type="number"
-                    value={balanceDeliveryForm.quantity}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      setBalanceDeliveryForm({
-                        ...balanceDeliveryForm,
-                        quantity: value
-                      });
-                    }}
-                    min="0"
-                    step="0.01"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                {'supplier_id' in selectedBalance && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Unit Price (UGX)
@@ -2258,25 +2284,39 @@ export default function Suppliers() {
                       min="0"
                       step="0.01"
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
                     />
                   </div>
-                )}
+                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Delivery Date & Time
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={balanceDeliveryForm.delivery_date}
-                    onChange={(e) => setBalanceDeliveryForm({
-                      ...balanceDeliveryForm,
-                      delivery_date: e.target.value
-                    })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Delivery Date & Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={balanceDeliveryForm.delivery_date}
+                      onChange={(e) => setBalanceDeliveryForm({
+                        ...balanceDeliveryForm,
+                        delivery_date: e.target.value
+                      })}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Delivery Value {('supplier_id' in selectedBalance) ? '(UGX)' : '(Info only)'}
+                    </label>
+                    <input
+                      type="text"
+                      value={formatCurrency(balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price)}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-sm"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -2289,68 +2329,59 @@ export default function Suppliers() {
                       ...balanceDeliveryForm,
                       notes: e.target.value
                     })}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
                 </div>
 
-                {'supplier_id' in selectedBalance && (
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700">Delivery Value:</span>
-                      <span className="text-sm font-medium text-gray-900">
-                        {formatCurrency(balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price)}
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Current Balance:</span>
+                      <span className="text-sm font-medium text-gray-900 ml-2">
+                        {(() => {
+                          if (!selectedBalance) return '0';
+                          
+                          const isSupplierBalance = 'supplier_id' in selectedBalance && 
+                                                  'current_balance' in selectedBalance &&
+                                                  'id' in selectedBalance;
+                          
+                          const isMaterialBalance = 'material_id' in selectedBalance && 
+                                                  'current_balance' in selectedBalance &&
+                                                  'id' in selectedBalance;
+                          
+                          if (isSupplierBalance) {
+                            return formatCurrency((selectedBalance as SupplierBalance).current_balance);
+                          } else if (isMaterialBalance) {
+                            return `${(selectedBalance as MaterialBalance).current_balance} units`;
+                          }
+                          
+                          return '0';
+                        })()}
                       </span>
                     </div>
-                  </div>
-                )}
-
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">Current Balance:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {(() => {
-                        if (!selectedBalance) return '0';
-                        
-                        const isSupplierBalance = 'supplier_id' in selectedBalance && 
-                                                'current_balance' in selectedBalance &&
-                                                'id' in selectedBalance;
-                        
-                        const isMaterialBalance = 'material_id' in selectedBalance && 
-                                                'current_balance' in selectedBalance &&
-                                                'id' in selectedBalance;
-                        
-                        if (isSupplierBalance) {
-                          return formatCurrency((selectedBalance as SupplierBalance).current_balance);
-                        } else if (isMaterialBalance) {
-                          return `${(selectedBalance as MaterialBalance).current_balance} units`;
-                        }
-                        
-                        return '0';
-                      })()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-sm font-medium text-gray-700">New Balance:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {(() => {
-                        if (!selectedBalance) return '0';
-                        
-                        const isSupplierBalance = 'supplier_id' in selectedBalance && 
-                                                'id' in selectedBalance;
-                        
-                        const isMaterialBalance = 'material_id' in selectedBalance && 
-                                                'id' in selectedBalance;
-                        
-                        if (isSupplierBalance) {
-                          return formatCurrency(calculateNewBalance());
-                        } else if (isMaterialBalance) {
-                          return `${calculateNewBalance()} units`;
-                        }
-                        
-                        return '0';
-                      })()}
-                    </span>
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">New Balance:</span>
+                      <span className="text-sm font-medium text-gray-900 ml-2">
+                        {(() => {
+                          if (!selectedBalance) return '0';
+                          
+                          const isSupplierBalance = 'supplier_id' in selectedBalance && 
+                                                  'id' in selectedBalance;
+                          
+                          const isMaterialBalance = 'material_id' in selectedBalance && 
+                                                  'id' in selectedBalance;
+                          
+                          if (isSupplierBalance) {
+                            return formatCurrency(calculateNewBalance());
+                          } else if (isMaterialBalance) {
+                            return `${calculateNewBalance()} units`;
+                          }
+                          
+                          return '0';
+                        })()}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -2360,20 +2391,20 @@ export default function Suppliers() {
                   </div>
                 )}
 
-                <div className="flex justify-end space-x-3 pt-4">
+                <div className="flex justify-end space-x-3 pt-2">
                   <button
                     type="button"
                     onClick={() => {
                       setIsBalanceDeliveryForm(false);
                       setSelectedBalance(null);
                     }}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    className="px-3 py-1.5 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
                     Record Delivery
                   </button>
