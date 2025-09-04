@@ -177,9 +177,9 @@ const MaterialsPage = () => {
 
       // Calculate current quantities
       const quantities: Record<string, number> = {};
-      const latestOpeningStocks: Record<string, number> = {};
-
+      
       // Get the most recent opening stock for each material
+      const latestOpeningStocks: Record<string, number> = {};
       openingStocksData.forEach(record => {
         const recordDate = new Date(record.date);
         if (!latestOpeningStocks[record.material_id] || 
@@ -189,20 +189,22 @@ const MaterialsPage = () => {
       });
 
       materialsData.forEach(material => {
-        const materialTransactions = combinedTransactions.filter(t => t.material_id === material.id);
-        
-        // Find the most recent opening stock
+        // Calculate total inflow (opening stock + deliveries with 'Stock' notes)
         const openingStock = latestOpeningStocks[material.id] || 0;
         
-        const totalInflow = materialTransactions
-          .filter(t => t.type === "inflow" || t.type === "opening_stock")
-          .reduce((sum, t) => sum + (t.quantity || 0), 0);
+        // Get all deliveries for this material
+        const materialDeliveries = inflowTransactions.filter(t => t.material_id === material.id);
+        const totalDeliveries = materialDeliveries.reduce((sum, t) => sum + (t.quantity || 0), 0);
         
-        const totalOutflow = materialTransactions
-          .filter(t => t.type === "outflow")
-          .reduce((sum, t) => sum + (t.quantity || 0), 0);
+        // Total inflow = opening stock + deliveries
+        const totalInflow = openingStock + totalDeliveries;
         
-        quantities[material.id] = openingStock + totalInflow - totalOutflow;
+        // Calculate total outflow (from material_entries)
+        const materialOutflows = outflowTransactions.filter(t => t.material_id === material.id);
+        const totalOutflow = materialOutflows.reduce((sum, t) => sum + (t.quantity || 0), 0);
+        
+        // Current quantity = inflow - outflow
+        quantities[material.id] = totalInflow - totalOutflow;
       });
 
       setMaterialQuantities(quantities);
