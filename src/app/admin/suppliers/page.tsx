@@ -329,191 +329,208 @@ export default function Suppliers() {
   };
 
   // Handle delivery against balance
-   const handleBalanceDeliverySubmit = async () => {
-    if (!selectedBalance || !selectedSupplier) return;
+ const handleBalanceDeliverySubmit = async () => {
+  // Add this validation at the beginning of handleBalanceDeliverySubmit
+if (!('material_id' in selectedBalance) && !balanceDeliveryForm.material_id) {
+  setError('Please select a material for money balance delivery');
+  return;
+}
+  if (!selectedBalance || !selectedSupplier) return;
+  
+  setError(null);
+  
+  try {
+    // Calculate delivery value based on quantity and unit price
+    const isSupplierBalance = 'supplier_id' in selectedBalance && 
+                            'current_balance' in selectedBalance && 
+                            'opening_balance' in selectedBalance && 
+                            'status' in selectedBalance && 
+                            'id' in selectedBalance;
     
-    setError(null);
+    const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
     
-    try {
-      // Calculate delivery value based on quantity and unit price
-      const isSupplierBalance = 'supplier_id' in selectedBalance && 
-                              'current_balance' in selectedBalance && 
-                              'opening_balance' in selectedBalance && 
-                              'status' in selectedBalance && 
-                              'id' in selectedBalance;
-      
-      const deliveryValue = balanceDeliveryForm.quantity * balanceDeliveryForm.unit_price;
-      
-      // Prepare material ID if applicable
-      const materialId = 'material_id' in selectedBalance ? selectedBalance.material_id : null;
-      
-      // Handle client order if applicable
-      let notes = balanceDeliveryForm.notes || '';
-      let clientId = null;
-      
-      if (balanceDeliveryForm.notes_type === 'client' && balanceDeliveryForm.client_id) {
-        const clientName = clients.find(c => c.id === balanceDeliveryForm.client_id)?.name || '';
-        notes = `${notes ? notes + ' | ' : ''}Client: ${clientName}`;
-        clientId = balanceDeliveryForm.client_id;
-        
-        // Create a client order record
-        const { error: orderError } = await supabase
-          .from('order')
-          .insert([{
-            client_id: balanceDeliveryForm.client_id,
-            user: balanceDeliveryForm.client_id,
-            item: materialId ? materials.find(m => m.id === materialId)?.name || 'Material' : 'Money Balance',
-            material: materialId ? materials.find(m => m.id === materialId)?.name || 'Material' : 'Money Balance',
-            cost: balanceDeliveryForm.unit_price,
-            quantity: balanceDeliveryForm.quantity,
-            total_amount: deliveryValue,
-            created_at: new Date().toISOString()
-          }]);
-
-        if (orderError) {
-          console.error('Order creation error details:', {
-            error: orderError,
-            balanceData: {
-              type: isSupplierBalance ? 'money' : 'material',
-              price: balanceDeliveryForm.unit_price,
-              quantity: balanceDeliveryForm.quantity
-            }
-          });
-          throw orderError;
-        }
-      } else if (balanceDeliveryForm.notes_type === 'stock') {
-        notes = 'Stock' + (notes ? ` | ${notes}` : '');
-      }
-      
-      // Create a record of the delivery in the deliveries table
-      const deliveryData = {
-        supplier_id: selectedSupplier.id,
-        quantity: balanceDeliveryForm.quantity,
-        unit_price: balanceDeliveryForm.unit_price,
-        value: deliveryValue, // Store the calculated value
-        delivery_date: balanceDeliveryForm.delivery_date,
-        notes: notes,
-        material_id: materialId,
-        // Use null for supply_item_id since this is a balance delivery
-        supply_item_id: null,
-        client_id: clientId,
-        // Store balance information in additional fields
-        balance_id: selectedBalance.id,
-        balance_type: isSupplierBalance ? 'money' : 'material'
-      };
-      
-      const { data: deliveryRecord, error: deliveryError } = await supabase
-        .from('deliveries')
-        .insert([deliveryData])
-        .select();
-      
-      if (deliveryError) throw deliveryError;
-      
-      // Add the new delivery to local state
-      if (deliveryRecord?.[0]) {
-        setDeliveries(prev => [...prev, deliveryRecord[0]]);
-      }
-      
-      // Update the balance
-      if (isSupplierBalance) {
-        // Money balance (SupplierBalance)
-        const supplierBalance = selectedBalance as SupplierBalance;
-        const newBalance = Math.max(0, supplierBalance.current_balance - deliveryValue);
-        
-        // Determine new status
-        let newStatus = supplierBalance.status;
-        if (newBalance === 0) {
-          newStatus = 'paid';
-        } else if (newBalance < supplierBalance.opening_balance) {
-          newStatus = 'partially';
-        }
-        
-        const { error: updateError } = await supabase
-          .from('supplier_balances')
-          .update({
-            current_balance: newBalance,
-            status: newStatus,
-            partial_amount: newStatus === 'partially' ? supplierBalance.opening_balance - newBalance : 0
-          })
-          .eq('id', supplierBalance.id);
-        
-        if (updateError) throw updateError;
-        
-        // Update local state
-        setLocalSupplierBalances(prev => 
-          prev.map(b => 
-            b.id === supplierBalance.id 
-              ? {
-                  ...b,
-                  current_balance: newBalance,
-                  status: newStatus,
-                  partial_amount: newStatus === 'partially' ? supplierBalance.opening_balance - newBalance : 0
-                }
-              : b
-          )
-        );
-      } else if ('material_id' in selectedBalance && 'current_balance' in selectedBalance && 'opening_balance' in selectedBalance && 'status' in selectedBalance && 'id' in selectedBalance) {
-        // Material balance (MaterialBalance)
-        const materialBalance = selectedBalance as MaterialBalance;
-        // Reduce material balance directly by quantity delivered
-        const newBalance = Math.max(0, materialBalance.current_balance - balanceDeliveryForm.quantity);
-        
-        // Determine new status
-        let newStatus = materialBalance.status;
-        if (newBalance === 0) {
-          newStatus = 'delivered';
-        } else if (newBalance < materialBalance.opening_balance) {
-          newStatus = 'partially';
-        }
-        
-        const { error: updateError } = await supabase
-          .from('material_balances')
-          .update({
-            current_balance: newBalance,
-            status: newStatus,
-            partial_amount: newStatus === 'partially' ? materialBalance.opening_balance - newBalance : 0
-          })
-          .eq('id', materialBalance.id);
-        
-        if (updateError) throw updateError;
-        
-        // Update local state
-        setLocalMaterialBalances(prev => 
-          prev.map(b => 
-            b.id === materialBalance.id 
-              ? {
-                  ...b,
-                  current_balance: newBalance,
-                  status: newStatus,
-                  partial_amount: newStatus === 'partially' ? materialBalance.opening_balance - newBalance : 0
-                }
-              : b
-          )
-        );
-      }
-      
-      // Reset form and close modal
-      setIsBalanceDeliveryForm(false);
-      setSelectedBalance(null);
-      setBalanceDeliveryForm({
-        supply_item_id: null,
-        quantity: 0,
-        unit_price: 0,
-        value: 0,
-        delivery_date: getEastAfricanDateTime(),
-        notes: "",
-        notes_type: "",
-        client_id: "",
-        material_id: null,
-        supplier_id: "",
-        balance_id: "",
-        balance_type: undefined
-      });
-    } catch (err) {
-      console.error('Error recording delivery against balance:', err);
-      setError(err instanceof Error ? err.message : 'Failed to record delivery. Please try again.');
+    // Get material ID - prioritize from selectedBalance if it's a material balance
+    // Otherwise use the material_id from the form
+    let materialId = null;
+    if ('material_id' in selectedBalance && selectedBalance.material_id) {
+      materialId = selectedBalance.material_id;
+    } else if (balanceDeliveryForm.material_id) {
+      materialId = balanceDeliveryForm.material_id;
     }
-  };
+    
+    // Handle client order if applicable
+    let notes = balanceDeliveryForm.notes || '';
+    let clientId = null;
+    
+    // Format notes type with proper capitalization
+    let notesType = balanceDeliveryForm.notes_type;
+    if (notesType) {
+      notesType = notesType.charAt(0).toUpperCase() + notesType.slice(1).toLowerCase();
+    }
+    
+    if (notesType === 'Client' && balanceDeliveryForm.client_id) {
+      const clientName = clients.find(c => c.id === balanceDeliveryForm.client_id)?.name || '';
+      notes = `${notes ? notes + ' | ' : ''}Client: ${clientName}`;
+      clientId = balanceDeliveryForm.client_id;
+      
+      // Create a client order record
+      const { error: orderError } = await supabase
+        .from('order')
+        .insert([{
+          client_id: balanceDeliveryForm.client_id,
+          user: balanceDeliveryForm.client_id,
+          item: materialId ? materials.find(m => m.id === materialId)?.name || 'Material' : 'Money Balance',
+          material: materialId ? materials.find(m => m.id === materialId)?.name || 'Material' : 'Money Balance',
+          cost: balanceDeliveryForm.unit_price,
+          quantity: balanceDeliveryForm.quantity,
+          total_amount: deliveryValue,
+          created_at: new Date().toISOString()
+        }]);
+
+      if (orderError) {
+        console.error('Order creation error details:', {
+          error: orderError,
+          balanceData: {
+            type: isSupplierBalance ? 'money' : 'material',
+            price: balanceDeliveryForm.unit_price,
+            quantity: balanceDeliveryForm.quantity
+          }
+        });
+        throw orderError;
+      }
+    } else if (notesType === 'Stock') {
+      notes = 'Stock' + (notes ? ` | ${notes}` : '');
+    }
+    
+    // Create a record of the delivery in the deliveries table
+    const deliveryData = {
+      supplier_id: selectedSupplier.id,
+      quantity: balanceDeliveryForm.quantity,
+      unit_price: balanceDeliveryForm.unit_price,
+      value: deliveryValue,
+      delivery_date: balanceDeliveryForm.delivery_date,
+      notes: notes,
+      material_id: materialId, // Ensure material_id is included for both money and material balances
+      supply_item_id: null, // Use null for supply_item_id since this is a balance delivery
+      client_id: clientId,
+      notes_type: notesType,
+      // Store balance information in additional fields
+      balance_id: selectedBalance.id,
+      balance_type: isSupplierBalance ? 'money' : 'material'
+    };
+    
+    const { data: deliveryRecord, error: deliveryError } = await supabase
+      .from('deliveries')
+      .insert([deliveryData])
+      .select();
+    
+    if (deliveryError) throw deliveryError;
+    
+    // Add the new delivery to local state
+    if (deliveryRecord?.[0]) {
+      setDeliveries(prev => [...prev, deliveryRecord[0]]);
+    }
+    
+    // Update the balance
+    if (isSupplierBalance) {
+      // Money balance (SupplierBalance)
+      const supplierBalance = selectedBalance as SupplierBalance;
+      const newBalance = Math.max(0, supplierBalance.current_balance - deliveryValue);
+      
+      // Determine new status
+      let newStatus = supplierBalance.status;
+      if (newBalance === 0) {
+        newStatus = 'paid';
+      } else if (newBalance < supplierBalance.opening_balance) {
+        newStatus = 'partially';
+      }
+      
+      const { error: updateError } = await supabase
+        .from('supplier_balances')
+        .update({
+          current_balance: newBalance,
+          status: newStatus,
+          partial_amount: newStatus === 'partially' ? supplierBalance.opening_balance - newBalance : 0
+        })
+        .eq('id', supplierBalance.id);
+      
+      if (updateError) throw updateError;
+      
+      // Update local state
+      setLocalSupplierBalances(prev => 
+        prev.map(b => 
+          b.id === supplierBalance.id 
+            ? {
+                ...b,
+                current_balance: newBalance,
+                status: newStatus,
+                partial_amount: newStatus === 'partially' ? supplierBalance.opening_balance - newBalance : 0
+              }
+            : b
+        )
+      );
+    } else if ('material_id' in selectedBalance && 'current_balance' in selectedBalance && 'opening_balance' in selectedBalance && 'status' in selectedBalance && 'id' in selectedBalance) {
+      // Material balance (MaterialBalance)
+      const materialBalance = selectedBalance as MaterialBalance;
+      // Reduce material balance directly by quantity delivered
+      const newBalance = Math.max(0, materialBalance.current_balance - balanceDeliveryForm.quantity);
+      
+      // Determine new status
+      let newStatus = materialBalance.status;
+      if (newBalance === 0) {
+        newStatus = 'delivered';
+      } else if (newBalance < materialBalance.opening_balance) {
+        newStatus = 'partially';
+      }
+      
+      const { error: updateError } = await supabase
+        .from('material_balances')
+        .update({
+          current_balance: newBalance,
+          status: newStatus,
+          partial_amount: newStatus === 'partially' ? materialBalance.opening_balance - newBalance : 0
+        })
+        .eq('id', materialBalance.id);
+      
+      if (updateError) throw updateError;
+      
+      // Update local state
+      setLocalMaterialBalances(prev => 
+        prev.map(b => 
+          b.id === materialBalance.id 
+            ? {
+                ...b,
+                current_balance: newBalance,
+                status: newStatus,
+                partial_amount: newStatus === 'partially' ? materialBalance.opening_balance - newBalance : 0
+              }
+            : b
+        )
+      );
+    }
+    
+    // Reset form and close modal
+    setIsBalanceDeliveryForm(false);
+    setSelectedBalance(null);
+    setBalanceDeliveryForm({
+      supply_item_id: null,
+      quantity: 0,
+      unit_price: 0,
+      value: 0,
+      delivery_date: getEastAfricanDateTime(),
+      notes: "",
+      notes_type: "",
+      client_id: "",
+      material_id: null,
+      supplier_id: "",
+      balance_id: "",
+      balance_type: undefined
+    });
+  } catch (err) {
+    console.error('Error recording delivery against balance:', err);
+    setError(err instanceof Error ? err.message : 'Failed to record delivery. Please try again.');
+  }
+};
   
   // Get unique payment methods from finance records
   const getUniquePaymentMethods = () => {
@@ -2514,7 +2531,7 @@ export default function Suppliers() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Additional Notes
+                    Additional Notes (Type 'Stock' if Stock is selected above)
                   </label>
                   <textarea
                     value={balanceDeliveryForm.notes}
