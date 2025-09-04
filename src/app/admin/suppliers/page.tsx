@@ -2280,7 +2280,7 @@ export default function Suppliers() {
             </div>
           </div>
         </div>
-      )}
+      ));
 
       {/* Balance Delivery Form Modal - UPDATED WITH MATERIAL SELECTION AND NOTES TYPE */}
       {isBalanceDeliveryForm && selectedBalance && selectedSupplier && (
