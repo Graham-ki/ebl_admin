@@ -175,24 +175,11 @@ const MaterialsPage = () => {
       const combinedTransactions = [...openingStockTransactions, ...inflowTransactions, ...outflowTransactions];
       setAllTransactions(combinedTransactions);
 
-      // Calculate current quantities
+      // Calculate current quantities (inflows minus outflows only)
       const quantities: Record<string, number> = {};
-      const latestOpeningStocks: Record<string, number> = {};
-
-      // Get the most recent opening stock for each material
-      openingStocksData.forEach(record => {
-        const recordDate = new Date(record.date);
-        if (!latestOpeningStocks[record.material_id] || 
-            new Date(latestOpeningStocks[record.material_id]) < recordDate) {
-          latestOpeningStocks[record.material_id] = record.quantity;
-        }
-      });
 
       materialsData.forEach(material => {
         const materialTransactions = combinedTransactions.filter(t => t.material_id === material.id);
-        
-        // Find the most recent opening stock
-        const openingStock = latestOpeningStocks[material.id] || 0;
         
         const totalInflow = materialTransactions
           .filter(t => t.type === "inflow")
@@ -202,7 +189,8 @@ const MaterialsPage = () => {
           .filter(t => t.type === "outflow")
           .reduce((sum, t) => sum + (t.quantity || 0), 0);
         
-        quantities[material.id] = openingStock + totalInflow - totalOutflow;
+        // Calculate current quantity as inflows minus outflows
+        quantities[material.id] = totalInflow - totalOutflow;
       });
 
       setMaterialQuantities(quantities);
