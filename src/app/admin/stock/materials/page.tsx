@@ -109,15 +109,9 @@ const MaterialsPage = () => {
       // Fetch deliveries (inflows) with 'Stock' notes
       const { data: deliveriesData = [], error: deliveriesError } = await supabase
         .from("deliveries")
-        .select("id, supply_item_id, quantity, delivery_date, notes")
+        .select("id, material_id, quantity, delivery_date, notes")
         .eq("notes", "Stock");
       if (deliveriesError) throw deliveriesError;
-
-      // Fetch supply items
-      const { data: supplyItemsData = [], error: supplyItemsError } = await supabase
-        .from("supply_items")
-        .select("id, name");
-      if (supplyItemsError) throw supplyItemsError;
 
       // Fetch outflows
       const { data: outflows = [], error: outflowError } = await supabase
@@ -137,8 +131,7 @@ const MaterialsPage = () => {
       // Process transactions
       const inflowTransactions: MaterialTransaction[] = deliveriesData
         .map(delivery => {
-          const supplyItem = supplyItemsData.find(si => si.id === delivery.supply_item_id);
-          const material = materialsData.find(m => m.name === supplyItem?.name);
+          const material = materialsData.find(m => m.id === delivery.material_id);
           if (!material) return null;
           return {
             id: delivery.id,
@@ -193,15 +186,15 @@ const MaterialsPage = () => {
         const openingStock = latestOpeningStocks[material.id] || 0;
         
         // Get all deliveries for this material
-        const materialDeliveries = inflowTransactions.filter(t => t.material_id === material.id);
-        const totalDeliveries = materialDeliveries.reduce((sum, t) => sum + (t.quantity || 0), 0);
+        const materialDeliveries = deliveriesData.filter(d => d.material_id === material.id);
+        const totalDeliveries = materialDeliveries.reduce((sum, d) => sum + (d.quantity || 0), 0);
         
         // Total inflow = opening stock + deliveries
         const totalInflow = openingStock + totalDeliveries;
         
         // Calculate total outflow (from material_entries)
-        const materialOutflows = outflowTransactions.filter(t => t.material_id === material.id);
-        const totalOutflow = materialOutflows.reduce((sum, t) => sum + (t.quantity || 0), 0);
+        const materialOutflows = outflows.filter(o => o.material_id === material.id);
+        const totalOutflow = materialOutflows.reduce((sum, o) => sum + (o.quantity || 0), 0);
         
         // Current quantity = inflow - outflow
         quantities[material.id] = totalInflow - totalOutflow;
