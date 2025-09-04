@@ -103,7 +103,7 @@ const MaterialsPage = () => {
     
     try {
       // Fetch materials
-      console.log("Fetching materials...");
+     
       const { data: materialsData = [], error: materialsError } = await supabase
         .from("materials")
         .select("id, name, quantity_available, category")
@@ -126,10 +126,10 @@ const MaterialsPage = () => {
         console.error("Error fetching deliveries:", deliveriesError);
         throw deliveriesError;
       }
-      console.log("Deliveries with 'Stock' notes:", deliveriesData);
+      
 
       // Fetch outflows
-      console.log("Fetching outflows...");
+      
       const { data: outflows = [], error: outflowError } = await supabase
         .from("material_entries")
         .select("id, material_id, quantity, action, date");
@@ -138,7 +138,7 @@ const MaterialsPage = () => {
         console.error("Error fetching outflows:", outflowError);
         throw outflowError;
       }
-      console.log("Outflows fetched:", outflows);
+      
 
       // Fetch opening stocks
       console.log("Fetching opening stocks...");
@@ -151,12 +151,12 @@ const MaterialsPage = () => {
         console.error("Error fetching opening stocks:", openingStocksError);
         throw openingStocksError;
       }
-      console.log("Opening stocks fetched:", openingStocksData);
+      
 
       setOpeningStocks(openingStocksData);
 
       // Process transactions
-      console.log("Processing transactions...");
+    
       const inflowTransactions: MaterialTransaction[] = deliveriesData
         .map(delivery => {
           const material = materialsData.find(m => m.id === delivery.material_id);
@@ -198,40 +198,37 @@ const MaterialsPage = () => {
 
       const combinedTransactions = [...openingStockTransactions, ...inflowTransactions, ...outflowTransactions];
       setAllTransactions(combinedTransactions);
-      console.log("All transactions processed:", combinedTransactions);
+      
 
       // Calculate current quantities
-      console.log("Calculating current quantities...");
+     
       const quantities: Record<string, number> = {};
       
       materialsData.forEach(material => {
-        console.log(`\nCalculating for material: ${material.name} (ID: ${material.id})`);
+       
         
         // Calculate total inflow (opening stock + deliveries with 'Stock' notes)
         const materialOpeningStocks = openingStocksData.filter(os => os.material_id === material.id);
         const openingStock = materialOpeningStocks.reduce((sum, os) => sum + (os.quantity || 0), 0);
-        console.log(`Opening stocks: ${materialOpeningStocks.length} records, total: ${openingStock}`);
-        
+       
         // Get all deliveries for this material
         const materialDeliveries = deliveriesData.filter(d => d.material_id === material.id);
         const totalDeliveries = materialDeliveries.reduce((sum, d) => sum + (d.quantity || 0), 0);
-        console.log(`Deliveries: ${materialDeliveries.length} records, total: ${totalDeliveries}`);
+        
         
         // Total inflow = opening stock + deliveries
         const totalInflow = openingStock + totalDeliveries;
-        console.log(`Total inflow (opening + deliveries): ${totalInflow}`);
+      
         
         // Calculate total outflow (from material_entries)
         const materialOutflows = outflows.filter(o => o.material_id === material.id);
         const totalOutflow = materialOutflows.reduce((sum, o) => sum + (o.quantity || 0), 0);
-        console.log(`Outflows: ${materialOutflows.length} records, total: ${totalOutflow}`);
         
         // Current quantity = inflow - outflow
         quantities[material.id] = totalInflow - totalOutflow;
-        console.log(`Final quantity (inflow - outflow): ${quantities[material.id]}`);
       });
 
-      console.log("Final quantities:", quantities);
+      
       setMaterialQuantities(quantities);
       setMaterials(materialsData);
 
@@ -240,7 +237,7 @@ const MaterialsPage = () => {
       CATEGORIES.forEach(c => (expanded[c] = true));
       setExpandedCategories(expanded);
 
-      console.log("=== DATA FETCH COMPLETE ===");
+     
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -250,7 +247,7 @@ const MaterialsPage = () => {
 
   const handleAddMaterial = async () => {
     if (!newMaterial.name) return alert("Please enter a material name");
-    console.log("Adding new material:", newMaterial);
+    
     const { error } = await supabase.from("materials").insert([newMaterial]);
     if (error) {
       console.error("Failed to add material:", error);
@@ -265,7 +262,7 @@ const MaterialsPage = () => {
     if (!outflowForm.material_id || outflowForm.quantity <= 0) {
       return alert("Please fill all required fields");
     }
-    console.log("Recording outflow:", outflowForm);
+    
     const { error } = await supabase.from("material_entries").insert([outflowForm]);
     if (error) {
       console.error("Failed to record outflow:", error);
@@ -285,7 +282,7 @@ const MaterialsPage = () => {
     if (!openingStockForm.material_id || openingStockForm.quantity < 0) {
       return alert("Please fill all required fields");
     }
-    console.log("Recording opening stock:", openingStockForm);
+   
 
     // Check if opening stock already exists for this material and date
     const { data: existingRecord, error: checkError } = await supabase
@@ -300,7 +297,7 @@ const MaterialsPage = () => {
       return alert("Error checking existing records");
     }
     if (existingRecord) {
-      console.log("Opening stock already exists for this material on selected date:", existingRecord);
+      
       return alert("Opening stock already recorded for this material on selected date");
     }
 
@@ -346,7 +343,6 @@ const MaterialsPage = () => {
   };
 
   const calculateOpeningStock = (materialId: string, date: string) => {
-    console.log(`Calculating opening stock for material ${materialId} on date ${date}`);
     
     // Find the most recent opening stock before the given date
     const previousOpeningStocks = openingStocks
@@ -356,7 +352,7 @@ const MaterialsPage = () => {
     const mostRecentOpeningStock = previousOpeningStocks[0]?.quantity || 0;
     const mostRecentOpeningStockDate = previousOpeningStocks[0]?.date || "";
 
-    console.log(`Most recent opening stock before ${date}: ${mostRecentOpeningStock} on ${mostRecentOpeningStockDate}`);
+    
 
     // Get all transactions between the most recent opening stock date and the target date
     const relevantTransactions = allTransactions.filter(t => 
@@ -365,7 +361,7 @@ const MaterialsPage = () => {
       t.date < date
     );
 
-    console.log(`Relevant transactions between ${mostRecentOpeningStockDate} and ${date}:`, relevantTransactions);
+    
 
     const totalInflow = relevantTransactions
       .filter(t => t.type === "inflow" || t.type === "opening_stock")
@@ -375,16 +371,16 @@ const MaterialsPage = () => {
       .filter(t => t.type === "outflow")
       .reduce((sum, t) => sum + (t.quantity || 0), 0);
 
-    console.log(`Total inflow: ${totalInflow}, Total outflow: ${totalOutflow}`);
+    
     
     const result = mostRecentOpeningStock + totalInflow - totalOutflow;
-    console.log(`Calculated opening stock: ${result}`);
+  
     
     return result;
   };
 
   const viewHistoryForDate = async () => {
-    console.log("Viewing history for date:", selectedHistoryDate.toISOString().split('T')[0]);
+    
     setIsHistoryDialogOpen(true);
   };
 
