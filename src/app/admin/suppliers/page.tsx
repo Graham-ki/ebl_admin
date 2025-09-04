@@ -2478,7 +2478,7 @@ export default function Suppliers() {
                     onChange={(e) => setBalanceDeliveryForm({
                       ...balanceDeliveryForm,
                       notes_type: e.target.value,
-                      client_id: e.target.value === 'client' ? balanceDeliveryForm.client_id : ''
+                      client_id: e.target.value === 'Client' ? balanceDeliveryForm.client_id : ''
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
                   >
