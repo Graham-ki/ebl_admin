@@ -535,7 +535,7 @@ const MaterialsPage = () => {
           <Input 
             type="date" 
             value={openingStockForm.date} 
-            onChange(e => setOpeningStockForm({ ...openingStockForm, date: e.target.value })) 
+            onChange={e => setOpeningStockForm({ ...openingStockForm, date: e.target.value })} 
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsOpeningStockDialogOpen(false)}>Cancel</Button>
