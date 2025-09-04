@@ -35,6 +35,7 @@ interface Delivery {
   value: number; // Missing in your reset
   delivery_date: string;
   notes?: string;
+  notes_type?: string;
   client_id?: string;
   created_at: string;
   material_id: string | null; // This can be null
@@ -241,6 +242,7 @@ export default function Suppliers() {
   delivery_date: getEastAfricanDateTime(),
   notes: "",
   client_id: "",
+  notes_type: "",
   material_id: null,
   supplier_id: "",
   balance_id: "",
@@ -1447,6 +1449,7 @@ export default function Suppliers() {
     value: 0, // Added missing field
     delivery_date: getEastAfricanDateTime(),
     notes: "",
+    notes_type: "",
     client_id: "", // Keep as string but ensure it matches the interface
     material_id: null, // Changed from "" to null
     supplier_id: "", // Added missing field
