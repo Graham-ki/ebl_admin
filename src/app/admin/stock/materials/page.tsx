@@ -134,12 +134,30 @@ const MaterialsPage = () => {
 
       setOpeningStocks(openingStocksData);
 
-      // Process transactions
+      // Process transactions - DEBUG: Log the data to see what we're working with
+      console.log("Materials:", materialsData);
+      console.log("Deliveries with Stock notes:", deliveriesData);
+      console.log("Supply Items:", supplyItemsData);
+
       const inflowTransactions: MaterialTransaction[] = deliveriesData
         .map(delivery => {
           const supplyItem = supplyItemsData.find(si => si.id === delivery.supply_item_id);
-          const material = materialsData.find(m => m.name === supplyItem?.name);
-          if (!material) return null;
+          
+          // Try to find material by exact name match first
+          let material = materialsData.find(m => m.name === supplyItem?.name);
+          
+          // If not found, try case-insensitive match
+          if (!material && supplyItem) {
+            material = materialsData.find(m => 
+              m.name.toLowerCase() === supplyItem.name.toLowerCase()
+            );
+          }
+          
+          if (!material) {
+            console.log(`Could not find material for supply item: ${supplyItem?.name} (ID: ${delivery.supply_item_id})`);
+            return null;
+          }
+          
           return {
             id: delivery.id,
             date: new Date(delivery.delivery_date).toISOString().split("T")[0],
@@ -151,6 +169,8 @@ const MaterialsPage = () => {
           };
         })
         .filter((t): t is MaterialTransaction => t !== null);
+
+      console.log("Inflow transactions:", inflowTransactions);
 
       const outflowTransactions: MaterialTransaction[] = outflows.map(entry => ({
         id: entry.id,
@@ -192,6 +212,8 @@ const MaterialsPage = () => {
         // Calculate current quantity as inflows minus outflows
         quantities[material.id] = totalInflow - totalOutflow;
       });
+
+      console.log("Calculated quantities:", quantities);
 
       setMaterialQuantities(quantities);
       setMaterials(materialsData);
@@ -327,6 +349,9 @@ const MaterialsPage = () => {
             View Opening Stock History
           </Button>
           <Button onClick={() => setIsAdding(true)}>Add Material</Button>
+          <Button variant="secondary" onClick={fetchAllData}>
+            Refresh Data
+          </Button>
         </div>
       </div>
 
