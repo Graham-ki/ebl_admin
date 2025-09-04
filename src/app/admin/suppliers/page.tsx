@@ -2474,8 +2474,8 @@ export default function Suppliers() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
                   >
                     <option value="">-- Select Notes Type --</option>
-                    <option value="stock">Stock</option>
-                    <option value="client">Client</option>
+                    <option value="Stock">Stock</option>
+                    <option value="Client">Client</option>
                   </select>
                 </div>
 
