@@ -165,7 +165,9 @@ export default function Suppliers() {
   const [localSupplierBalances, setLocalSupplierBalances] = useState<SupplierBalance[]>([]);
   const [localMaterialBalances, setLocalMaterialBalances] = useState<MaterialBalance[]>([]);
   const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
-  
+   // Added new state for balance delivery visualization
+  const [balanceDeliveryHistory, setBalanceDeliveryHistory] = useState<Delivery[]>([]);
+  const [showBalanceHistoryModal, setShowBalanceHistoryModal] = useState(false);
   // Update the global balance variables when local states change
   useEffect(() => {
     supplierBalances = localSupplierBalances;
@@ -182,6 +184,25 @@ export default function Suppliers() {
   const [selectedMaterial, setSelectedMaterial] = useState('');
   const [balanceStatus, setBalanceStatus] = useState<'pending' | 'partially' | 'paid' | 'delivered'>('pending');
   const [partialAmount, setPartialAmount] = useState(0);
+
+  // Add function to fetch delivery history for a balance
+  const fetchBalanceDeliveryHistory = async (balanceId: string, balanceType: 'money' | 'material') => {
+    try {
+      const { data, error } = await supabase
+        .from('deliveries')
+        .select('*')
+        .eq('balance_id', balanceId)
+        .eq('balance_type', balanceType)
+        .order('delivery_date', { ascending: false });
+
+      if (error) throw error;
+      setBalanceDeliveryHistory(data || []);
+      setShowBalanceHistoryModal(true);
+    } catch (err) {
+      console.error('Error fetching balance delivery history:', err);
+      setError('Failed to load delivery history');
+    }
+  };
   
   const getEastAfricanDateTime = () => {
     const now = new Date();
@@ -306,7 +327,7 @@ export default function Suppliers() {
   };
 
   // Handle delivery against balance
-  const handleBalanceDeliverySubmit = async () => {
+   const handleBalanceDeliverySubmit = async () => {
     if (!selectedBalance || !selectedSupplier) return;
     
     setError(null);
@@ -328,7 +349,7 @@ export default function Suppliers() {
       let notes = balanceDeliveryForm.notes || '';
       let clientId = null;
       
-      if (balanceDeliveryForm.client_id) {
+      if (balanceDeliveryForm.notes_type === 'client' && balanceDeliveryForm.client_id) {
         const clientName = clients.find(c => c.id === balanceDeliveryForm.client_id)?.name || '';
         notes = `${notes ? notes + ' | ' : ''}Client: ${clientName}`;
         clientId = balanceDeliveryForm.client_id;
@@ -358,6 +379,8 @@ export default function Suppliers() {
           });
           throw orderError;
         }
+      } else if (balanceDeliveryForm.notes_type === 'stock') {
+        notes = 'Stock' + (notes ? ` | ${notes}` : '');
       }
       
       // Create a record of the delivery in the deliveries table
@@ -477,6 +500,7 @@ export default function Suppliers() {
         value: 0,
         delivery_date: getEastAfricanDateTime(),
         notes: "",
+        notes_type: "",
         client_id: "",
         material_id: null,
         supplier_id: "",
@@ -1942,9 +1966,9 @@ export default function Suppliers() {
       )}
 
       {/* Balances Modal */}
-      {showBalancesModal && selectedSupplier && (
+      showBalancesModal && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
             <div className="p-6 flex-shrink-0">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
@@ -1963,15 +1987,16 @@ export default function Suppliers() {
               
               <div className="mb-4">
                 <h4 className="text-md font-medium text-gray-800 mb-2">Money Balance</h4>
-                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opening Balance</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Balance</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Type</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Opening Balance</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Current Balance</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Partial Amount</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -1980,40 +2005,51 @@ export default function Suppliers() {
                           .filter(b => b.supplier_id === selectedSupplier.id)
                           .map(balance => (
                             <tr key={balance.id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-4 py-4 whitespace-nowrap">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${balance.balance_type === 'credit' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
                                   {balance.balance_type === 'credit' ? 'Supplier owes company' : 'Company owes supplier'}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-4 py-4 whitespace-nowrap">
                                 {formatCurrency(balance.opening_balance)}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-4 py-4 whitespace-nowrap">
                                 {formatCurrency(balance.current_balance)}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-4 py-4 whitespace-nowrap">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${balance.status === 'paid' ? 'bg-green-100 text-green-800' : balance.status === 'partially' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
                                   {formatBalanceStatus(balance.status, 'money')}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <td className="px-4 py-4 whitespace-nowrap">
+                                {formatCurrency(balance.partial_amount)}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div className="flex justify-end space-x-2">
+                                  <button 
+                                    onClick={() => fetchBalanceDeliveryHistory(balance.id, 'money')}
+                                    className="px-3 py-1 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 flex items-center gap-1"
+                                  >
+                                    <span>📋</span> History
+                                  </button>
                                   <button onClick={() => {
                                     setSelectedBalance(balance);
-                                        setBalanceDeliveryForm({
-                                              ...balanceDeliveryForm,
-                                              quantity: 0,
-                                                unit_price: 0,
-                                                      value: 0,
-                                                delivery_date: getEastAfricanDateTime(),
-                                                  notes: "",
-                                              supplier_id: selectedSupplier?.id || "",
-                                              balance_id: balance.id,
-                                                      balance_type: 'material_id' in balance ? 'material' : 'money',
-                                        material_id: 'material_id' in balance ? (balance as MaterialBalance).material_id : null
-                                              });
-                                      setIsBalanceDeliveryForm(true);
-                                      }}                                  
+                                    setBalanceDeliveryForm({
+                                      ...balanceDeliveryForm,
+                                      quantity: 0,
+                                      unit_price: 0,
+                                      value: 0,
+                                      delivery_date: getEastAfricanDateTime(),
+                                      notes: "",
+                                      notes_type: "",
+                                      client_id: "",
+                                      supplier_id: selectedSupplier?.id || "",
+                                      balance_id: balance.id,
+                                      balance_type: 'money',
+                                      material_id: null
+                                    });
+                                    setIsBalanceDeliveryForm(true);
+                                  }}                                  
                                   className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 flex items-center gap-1"
                                     disabled={balance.current_balance <= 0}
                                   >
@@ -2068,7 +2104,7 @@ export default function Suppliers() {
                           ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                          <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                             No money balance set for this supplier
                           </td>
                         </tr>
@@ -2080,16 +2116,17 @@ export default function Suppliers() {
               
               <div>
                 <h4 className="text-md font-medium text-gray-800 mb-2">Material Balances</h4>
-                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Material</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opening Quantity</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Quantity</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Material</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Type</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Opening Quantity</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Current Quantity</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Partial Amount</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -2100,27 +2137,36 @@ export default function Suppliers() {
                             const material = materials.find(m => m.id === balance.material_id);
                             return (
                               <tr key={balance.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-4 py-4 whitespace-nowrap">
                                   {material?.name || 'Unknown Material'}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-4 py-4 whitespace-nowrap">
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${balance.balance_type === 'credit' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
                                     {balance.balance_type === 'credit' ? 'Supplier owes company' : 'Company owes supplier'}
                                 </span>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-4 py-4 whitespace-nowrap">
                                   {balance.opening_balance} units
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-4 py-4 whitespace-nowrap">
                                   {balance.current_balance} units
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-4 py-4 whitespace-nowrap">
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${balance.status === 'delivered' ? 'bg-green-100 text-green-800' : balance.status === 'partially' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
                                     {formatBalanceStatus(balance.status, 'material')}
                                   </span>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <td className="px-4 py-4 whitespace-nowrap">
+                                  {balance.partial_amount} units
+                                </td>
+                                <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                                   <div className="flex justify-end space-x-2">
+                                    <button 
+                                      onClick={() => fetchBalanceDeliveryHistory(balance.id, 'material')}
+                                      className="px-3 py-1 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 flex items-center gap-1"
+                                    >
+                                      <span>📋</span> History
+                                    </button>
                                     <button
                                       onClick={() => {
                                         setSelectedBalance(balance);
@@ -2131,6 +2177,8 @@ export default function Suppliers() {
                                           value: 0,
                                           delivery_date: getEastAfricanDateTime(),
                                           notes: "",
+                                          notes_type: "",
+                                          client_id: "",
                                           supplier_id: selectedSupplier?.id || "",
                                           balance_id: balance.id,
                                           balance_type: 'material',
@@ -2194,7 +2242,7 @@ export default function Suppliers() {
                           })
                       ) : (
                         <tr>
-                          <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                          <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                             No material balances set for this supplier
                           </td>
                         </tr>
@@ -2231,7 +2279,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* Balance Delivery Form Modal */}
+      {/* Balance Delivery Form Modal - UPDATED WITH MATERIAL SELECTION AND NOTES TYPE */}
       {isBalanceDeliveryForm && selectedBalance && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -2280,28 +2328,26 @@ export default function Suppliers() {
                       />
                     </div>
                   ) : (
+                    // Add material selection for money balance deliveries
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Current Balance
+                        Material
                       </label>
-                      <input
-                        type="text"
-                        value={(() => {
-                          if (!selectedBalance) return '0';
-                          
-                          const isSupplierBalance = 'supplier_id' in selectedBalance && 
-                                                  'current_balance' in selectedBalance &&
-                                                  'id' in selectedBalance;
-                          
-                          if (isSupplierBalance) {
-                            return formatCurrency((selectedBalance as SupplierBalance).current_balance);
-                          }
-                          
-                          return '0';
-                        })()}
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-sm"
-                      />
+                      <select
+                        value={balanceDeliveryForm.material_id || ''}
+                        onChange={(e) => setBalanceDeliveryForm({
+                          ...balanceDeliveryForm,
+                          material_id: e.target.value
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      >
+                        <option value="">-- Select Material --</option>
+                        {materials.map(material => (
+                          <option key={material.id} value={material.id}>
+                            {material.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
                 </div>
@@ -2410,9 +2456,53 @@ export default function Suppliers() {
                   </div>
                 </div>
 
+                {/* Add notes type selection (Stock/Client) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
+                    Notes Type
+                  </label>
+                  <select
+                    value={balanceDeliveryForm.notes_type}
+                    onChange={(e) => setBalanceDeliveryForm({
+                      ...balanceDeliveryForm,
+                      notes_type: e.target.value,
+                      client_id: e.target.value === 'client' ? balanceDeliveryForm.client_id : ''
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  >
+                    <option value="">-- Select Notes Type --</option>
+                    <option value="stock">Stock</option>
+                    <option value="client">Client</option>
+                  </select>
+                </div>
+
+                {balanceDeliveryForm.notes_type === 'client' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Select Client
+                    </label>
+                    <select
+                      value={balanceDeliveryForm.client_id}
+                      onChange={(e) => setBalanceDeliveryForm({
+                        ...balanceDeliveryForm,
+                        client_id: e.target.value
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      required
+                    >
+                      <option value="">-- Select Client --</option>
+                      {clients.map(client => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Additional Notes
                   </label>
                   <textarea
                     value={balanceDeliveryForm.notes}
@@ -2423,27 +2513,6 @@ export default function Suppliers() {
                     rows={2}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Client (Optional)
-                  </label>
-                  <select
-                    value={balanceDeliveryForm.client_id}
-                    onChange={(e) => setBalanceDeliveryForm({
-                      ...balanceDeliveryForm,
-                      client_id: e.target.value
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  >
-                    <option value="">-- Select Client (Optional) --</option>
-                    {clients.map(client => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div className="p-3 bg-gray-50 rounded-lg">
@@ -2522,6 +2591,84 @@ export default function Suppliers() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Balance Delivery History Modal */}
+      {showBalanceHistoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="p-6 flex-shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Delivery History
+                </h3>
+                <button 
+                  onClick={() => setShowBalanceHistoryModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="overflow-y-auto max-h-[70vh]">
+                {balanceDeliveryHistory.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    No delivery history found for this balance.
+                  </div>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Date
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Quantity
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Unit Price
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Total Value
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Notes
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Client
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {balanceDeliveryHistory.map((delivery) => (
+                        <tr key={delivery.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(delivery.delivery_date)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {delivery.quantity}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatCurrency(delivery.unit_price)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatCurrency(delivery.value)}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500">
+                            {delivery.notes}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {delivery.client_id ? getClientName(delivery.client_id) : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
           </div>
         </div>
