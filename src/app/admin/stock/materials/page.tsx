@@ -106,11 +106,11 @@ const MaterialsPage = () => {
         .order("name", { ascending: true });
       if (materialsError) throw materialsError;
 
-      // Fetch deliveries (inflows) - only those with 'Stock' in notes
+      // Fetch deliveries (inflows) with 'Stock' notes
       const { data: deliveriesData = [], error: deliveriesError } = await supabase
         .from("deliveries")
         .select("id, supply_item_id, quantity, delivery_date, notes")
-        .ilike("notes", "%Stock%");
+        .eq("notes", "Stock");
       if (deliveriesError) throw deliveriesError;
 
       // Fetch supply items
@@ -145,7 +145,7 @@ const MaterialsPage = () => {
             date: new Date(delivery.delivery_date).toISOString().split("T")[0],
             type: "inflow",
             quantity: delivery.quantity ?? 0,
-            action: "Delivered",
+            action: "Delivered (Stock)",
             material_id: material.id,
             material_name: material.name,
           };
@@ -175,22 +175,34 @@ const MaterialsPage = () => {
       const combinedTransactions = [...openingStockTransactions, ...inflowTransactions, ...outflowTransactions];
       setAllTransactions(combinedTransactions);
 
-      // Calculate current quantities (inflows minus outflows only)
+      // Calculate current quantities
       const quantities: Record<string, number> = {};
+      const latestOpeningStocks: Record<string, number> = {};
+
+      // Get the most recent opening stock for each material
+      openingStocksData.forEach(record => {
+        const recordDate = new Date(record.date);
+        if (!latestOpeningStocks[record.material_id] || 
+            new Date(latestOpeningStocks[record.material_id]) < recordDate) {
+          latestOpeningStocks[record.material_id] = record.quantity;
+        }
+      });
 
       materialsData.forEach(material => {
         const materialTransactions = combinedTransactions.filter(t => t.material_id === material.id);
         
+        // Find the most recent opening stock
+        const openingStock = latestOpeningStocks[material.id] || 0;
+        
         const totalInflow = materialTransactions
-          .filter(t => t.type === "inflow")
+          .filter(t => t.type === "inflow" || t.type === "opening_stock")
           .reduce((sum, t) => sum + (t.quantity || 0), 0);
         
         const totalOutflow = materialTransactions
           .filter(t => t.type === "outflow")
           .reduce((sum, t) => sum + (t.quantity || 0), 0);
         
-        // Calculate current quantity as inflows minus outflows
-        quantities[material.id] = totalInflow - totalOutflow;
+        quantities[material.id] = openingStock + totalInflow - totalOutflow;
       });
 
       setMaterialQuantities(quantities);
@@ -302,7 +314,7 @@ const MaterialsPage = () => {
     );
 
     const totalInflow = relevantTransactions
-      .filter(t => t.type === "inflow")
+      .filter(t => t.type === "inflow" || t.type === "opening_stock")
       .reduce((sum, t) => sum + (t.quantity || 0), 0);
     
     const totalOutflow = relevantTransactions
