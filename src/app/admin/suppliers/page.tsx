@@ -2528,22 +2528,6 @@ if (!('material_id' in selectedBalance) && !balanceDeliveryForm.material_id) {
                     </select>
                   </div>
                 )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Additional Notes (Type 'Stock' if Stock is selected above)
-                  </label>
-                  <textarea
-                    value={balanceDeliveryForm.notes}
-                    onChange={(e) => setBalanceDeliveryForm({
-                      ...balanceDeliveryForm,
-                      notes: e.target.value
-                    })}
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
