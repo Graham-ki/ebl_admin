@@ -2329,6 +2329,14 @@ export default function Suppliers() {
                         disabled
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-sm"
                       />
+                      <input
+                        type="hidden"
+                        value={selectedBalance.material_id}
+                        onChange={(e) => setBalanceDeliveryForm({
+                          ...balanceDeliveryForm,
+                          material_id: e.target.value
+                        })}
+                      />
                     </div>
                   ) : (
                     // Add material selection for money balance deliveries
@@ -2343,6 +2351,7 @@ export default function Suppliers() {
                           material_id: e.target.value
                         })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        required={!('material_id' in selectedBalance)} 
                       >
                         <option value="">-- Select Material --</option>
                         {materials.map(material => (
