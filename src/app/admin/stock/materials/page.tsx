@@ -171,19 +171,10 @@ const MaterialsPage = () => {
       // Calculate current quantities
       const quantities: Record<string, number> = {};
       
-      // Get the most recent opening stock for each material
-      const latestOpeningStocks: Record<string, number> = {};
-      openingStocksData.forEach(record => {
-        const recordDate = new Date(record.date);
-        if (!latestOpeningStocks[record.material_id] || 
-            new Date(latestOpeningStocks[record.material_id]) < recordDate) {
-          latestOpeningStocks[record.material_id] = record.quantity;
-        }
-      });
-
       materialsData.forEach(material => {
         // Calculate total inflow (opening stock + deliveries with 'Stock' notes)
-        const openingStock = latestOpeningStocks[material.id] || 0;
+        const materialOpeningStocks = openingStocksData.filter(os => os.material_id === material.id);
+        const openingStock = materialOpeningStocks.reduce((sum, os) => sum + (os.quantity || 0), 0);
         
         // Get all deliveries for this material
         const materialDeliveries = deliveriesData.filter(d => d.material_id === material.id);
@@ -544,7 +535,7 @@ const MaterialsPage = () => {
           <Input 
             type="date" 
             value={openingStockForm.date} 
-            onChange={e => setOpeningStockForm({ ...openingStockForm, date: e.target.value })} 
+            onChange(e => setOpeningStockForm({ ...openingStockForm, date: e.target.value })) 
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsOpeningStockDialogOpen(false)}>Cancel</Button>
