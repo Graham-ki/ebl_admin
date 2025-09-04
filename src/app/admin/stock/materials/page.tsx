@@ -93,46 +93,77 @@ const MaterialsPage = () => {
   const [selectedHistoryDate, setSelectedHistoryDate] = useState<Date>(new Date());
 
   useEffect(() => {
+    console.log("Component mounted, fetching data...");
     fetchAllData();
   }, []);
 
   const fetchAllData = async () => {
     setLoading(true);
+    console.log("=== STARTING DATA FETCH ===");
+    
     try {
       // Fetch materials
+      console.log("Fetching materials...");
       const { data: materialsData = [], error: materialsError } = await supabase
         .from("materials")
         .select("id, name, quantity_available, category")
         .order("name", { ascending: true });
-      if (materialsError) throw materialsError;
+      
+      if (materialsError) {
+        console.error("Error fetching materials:", materialsError);
+        throw materialsError;
+      }
+      console.log("Materials fetched:", materialsData);
 
       // Fetch deliveries (inflows) with 'Stock' notes
+      console.log("Fetching deliveries with 'Stock' notes...");
       const { data: deliveriesData = [], error: deliveriesError } = await supabase
         .from("deliveries")
         .select("id, material_id, quantity, delivery_date, notes")
         .eq("notes", "Stock");
-      if (deliveriesError) throw deliveriesError;
+      
+      if (deliveriesError) {
+        console.error("Error fetching deliveries:", deliveriesError);
+        throw deliveriesError;
+      }
+      console.log("Deliveries with 'Stock' notes:", deliveriesData);
 
       // Fetch outflows
+      console.log("Fetching outflows...");
       const { data: outflows = [], error: outflowError } = await supabase
         .from("material_entries")
         .select("id, material_id, quantity, action, date");
-      if (outflowError) throw outflowError;
+      
+      if (outflowError) {
+        console.error("Error fetching outflows:", outflowError);
+        throw outflowError;
+      }
+      console.log("Outflows fetched:", outflows);
 
       // Fetch opening stocks
+      console.log("Fetching opening stocks...");
       const { data: openingStocksData = [], error: openingStocksError } = await supabase
         .from("opening_stocks")
         .select("id, material_id, quantity, date")
         .order("date", { ascending: false });
-      if (openingStocksError) throw openingStocksError;
+      
+      if (openingStocksError) {
+        console.error("Error fetching opening stocks:", openingStocksError);
+        throw openingStocksError;
+      }
+      console.log("Opening stocks fetched:", openingStocksData);
 
       setOpeningStocks(openingStocksData);
 
       // Process transactions
+      console.log("Processing transactions...");
       const inflowTransactions: MaterialTransaction[] = deliveriesData
         .map(delivery => {
           const material = materialsData.find(m => m.id === delivery.material_id);
-          if (!material) return null;
+          if (!material) {
+            console.warn("No material found for delivery:", delivery);
+            return null;
+          }
           return {
             id: delivery.id,
             date: new Date(delivery.delivery_date).toISOString().split("T")[0],
@@ -152,7 +183,7 @@ const MaterialsPage = () => {
         quantity: entry.quantity ?? 0,
         action: entry.action ?? "",
         material_id: entry.material_id,
-        material_name: materialsData.find(m => m.id === entry.material_id)?.name || "",
+        material_name: materialsData.find(m => m.id === entry.material_id)?.name || "Unknown Material",
       }));
 
       const openingStockTransactions: MaterialTransaction[] = openingStocksData.map(record => ({
@@ -162,35 +193,45 @@ const MaterialsPage = () => {
         quantity: record.quantity,
         action: "Opening Stock",
         material_id: record.material_id,
-        material_name: materialsData.find(m => m.id === record.material_id)?.name || "",
+        material_name: materialsData.find(m => m.id === record.material_id)?.name || "Unknown Material",
       }));
 
       const combinedTransactions = [...openingStockTransactions, ...inflowTransactions, ...outflowTransactions];
       setAllTransactions(combinedTransactions);
+      console.log("All transactions processed:", combinedTransactions);
 
       // Calculate current quantities
+      console.log("Calculating current quantities...");
       const quantities: Record<string, number> = {};
       
       materialsData.forEach(material => {
+        console.log(`\nCalculating for material: ${material.name} (ID: ${material.id})`);
+        
         // Calculate total inflow (opening stock + deliveries with 'Stock' notes)
         const materialOpeningStocks = openingStocksData.filter(os => os.material_id === material.id);
         const openingStock = materialOpeningStocks.reduce((sum, os) => sum + (os.quantity || 0), 0);
+        console.log(`Opening stocks: ${materialOpeningStocks.length} records, total: ${openingStock}`);
         
         // Get all deliveries for this material
         const materialDeliveries = deliveriesData.filter(d => d.material_id === material.id);
         const totalDeliveries = materialDeliveries.reduce((sum, d) => sum + (d.quantity || 0), 0);
+        console.log(`Deliveries: ${materialDeliveries.length} records, total: ${totalDeliveries}`);
         
         // Total inflow = opening stock + deliveries
         const totalInflow = openingStock + totalDeliveries;
+        console.log(`Total inflow (opening + deliveries): ${totalInflow}`);
         
         // Calculate total outflow (from material_entries)
         const materialOutflows = outflows.filter(o => o.material_id === material.id);
         const totalOutflow = materialOutflows.reduce((sum, o) => sum + (o.quantity || 0), 0);
+        console.log(`Outflows: ${materialOutflows.length} records, total: ${totalOutflow}`);
         
         // Current quantity = inflow - outflow
         quantities[material.id] = totalInflow - totalOutflow;
+        console.log(`Final quantity (inflow - outflow): ${quantities[material.id]}`);
       });
 
+      console.log("Final quantities:", quantities);
       setMaterialQuantities(quantities);
       setMaterials(materialsData);
 
@@ -198,6 +239,8 @@ const MaterialsPage = () => {
       const expanded: Record<string, boolean> = {};
       CATEGORIES.forEach(c => (expanded[c] = true));
       setExpandedCategories(expanded);
+
+      console.log("=== DATA FETCH COMPLETE ===");
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -207,8 +250,12 @@ const MaterialsPage = () => {
 
   const handleAddMaterial = async () => {
     if (!newMaterial.name) return alert("Please enter a material name");
+    console.log("Adding new material:", newMaterial);
     const { error } = await supabase.from("materials").insert([newMaterial]);
-    if (error) return alert("Failed to add material");
+    if (error) {
+      console.error("Failed to add material:", error);
+      return alert("Failed to add material");
+    }
     setIsAdding(false);
     setNewMaterial({ name: "", quantity_available: 0, category: "Labels" });
     fetchAllData();
@@ -218,8 +265,12 @@ const MaterialsPage = () => {
     if (!outflowForm.material_id || outflowForm.quantity <= 0) {
       return alert("Please fill all required fields");
     }
+    console.log("Recording outflow:", outflowForm);
     const { error } = await supabase.from("material_entries").insert([outflowForm]);
-    if (error) return alert("Failed to record outflow");
+    if (error) {
+      console.error("Failed to record outflow:", error);
+      return alert("Failed to record outflow");
+    }
     setIsOutflowDialogOpen(false);
     setOutflowForm({
       material_id: "",
@@ -234,6 +285,7 @@ const MaterialsPage = () => {
     if (!openingStockForm.material_id || openingStockForm.quantity < 0) {
       return alert("Please fill all required fields");
     }
+    console.log("Recording opening stock:", openingStockForm);
 
     // Check if opening stock already exists for this material and date
     const { data: existingRecord, error: checkError } = await supabase
@@ -243,11 +295,20 @@ const MaterialsPage = () => {
       .eq("date", openingStockForm.date)
       .maybeSingle();
 
-    if (checkError) return alert("Error checking existing records");
-    if (existingRecord) return alert("Opening stock already recorded for this material on selected date");
+    if (checkError) {
+      console.error("Error checking existing records:", checkError);
+      return alert("Error checking existing records");
+    }
+    if (existingRecord) {
+      console.log("Opening stock already exists for this material on selected date:", existingRecord);
+      return alert("Opening stock already recorded for this material on selected date");
+    }
 
     const { error } = await supabase.from("opening_stocks").insert([openingStockForm]);
-    if (error) return alert("Failed to record opening stock");
+    if (error) {
+      console.error("Failed to record opening stock:", error);
+      return alert("Failed to record opening stock");
+    }
     setIsOpeningStockDialogOpen(false);
     setOpeningStockForm({
       material_id: "",
@@ -259,6 +320,7 @@ const MaterialsPage = () => {
 
   const handleDeleteMaterial = async (id: string) => {
     if (!confirm("Are you sure?")) return;
+    console.log("Deleting material with ID:", id);
     await supabase.from("material_entries").delete().eq("material_id", id);
     await supabase.from("opening_stocks").delete().eq("material_id", id);
     await supabase.from("materials").delete().eq("id", id);
@@ -284,6 +346,8 @@ const MaterialsPage = () => {
   };
 
   const calculateOpeningStock = (materialId: string, date: string) => {
+    console.log(`Calculating opening stock for material ${materialId} on date ${date}`);
+    
     // Find the most recent opening stock before the given date
     const previousOpeningStocks = openingStocks
       .filter(record => record.material_id === materialId && record.date < date)
@@ -292,12 +356,16 @@ const MaterialsPage = () => {
     const mostRecentOpeningStock = previousOpeningStocks[0]?.quantity || 0;
     const mostRecentOpeningStockDate = previousOpeningStocks[0]?.date || "";
 
+    console.log(`Most recent opening stock before ${date}: ${mostRecentOpeningStock} on ${mostRecentOpeningStockDate}`);
+
     // Get all transactions between the most recent opening stock date and the target date
     const relevantTransactions = allTransactions.filter(t => 
       t.material_id === materialId && 
       t.date >= mostRecentOpeningStockDate && 
       t.date < date
     );
+
+    console.log(`Relevant transactions between ${mostRecentOpeningStockDate} and ${date}:`, relevantTransactions);
 
     const totalInflow = relevantTransactions
       .filter(t => t.type === "inflow" || t.type === "opening_stock")
@@ -307,10 +375,16 @@ const MaterialsPage = () => {
       .filter(t => t.type === "outflow")
       .reduce((sum, t) => sum + (t.quantity || 0), 0);
 
-    return mostRecentOpeningStock + totalInflow - totalOutflow;
+    console.log(`Total inflow: ${totalInflow}, Total outflow: ${totalOutflow}`);
+    
+    const result = mostRecentOpeningStock + totalInflow - totalOutflow;
+    console.log(`Calculated opening stock: ${result}`);
+    
+    return result;
   };
 
   const viewHistoryForDate = async () => {
+    console.log("Viewing history for date:", selectedHistoryDate.toISOString().split('T')[0]);
     setIsHistoryDialogOpen(true);
   };
 
@@ -325,6 +399,12 @@ const MaterialsPage = () => {
             View Opening Stock History
           </Button>
           <Button onClick={() => setIsAdding(true)}>Add Material</Button>
+          <Button variant="outline" onClick={() => {
+            console.log("Manual refresh triggered");
+            fetchAllData();
+          }}>
+            Refresh Data
+          </Button>
         </div>
       </div>
 
