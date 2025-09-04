@@ -106,10 +106,11 @@ const MaterialsPage = () => {
         .order("name", { ascending: true });
       if (materialsError) throw materialsError;
 
-      // Fetch deliveries (inflows)
+      // Fetch deliveries (inflows) - only those with 'Stock' in notes
       const { data: deliveriesData = [], error: deliveriesError } = await supabase
         .from("deliveries")
-        .select("id, supply_item_id, quantity, delivery_date");
+        .select("id, supply_item_id, quantity, delivery_date, notes")
+        .ilike("notes", "%Stock%");
       if (deliveriesError) throw deliveriesError;
 
       // Fetch supply items
