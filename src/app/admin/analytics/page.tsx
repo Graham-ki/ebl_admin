@@ -931,8 +931,8 @@ const fetchCashAssets = async () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Name</TableHead>
                         <TableHead>Client/Marketer</TableHead>
-                        <TableHead>Type</TableHead>
                         <TableHead className="text-right">Balance</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1002,7 +1002,6 @@ const fetchCashAssets = async () => {
                     <TableRow>
                       <TableHead>Material</TableHead>
                       <TableHead className="text-right">Available Qty</TableHead>
-                      <TableHead className="text-right">Unit Cost</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1011,7 +1010,6 @@ const fetchCashAssets = async () => {
                       <TableRow key={material.id}>
                         <TableCell className="font-medium">{material.name}</TableCell>
                         <TableCell className="text-right">{material.available}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(material.unit_cost || 0)}</TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(material.total_value)}
                         </TableCell>
@@ -1068,7 +1066,6 @@ const fetchCashAssets = async () => {
                     <TableRow>
                       <TableHead>Product</TableHead>
                       <TableHead className="text-right">Available Qty</TableHead>
-                      <TableHead className="text-right">Unit Cost</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1077,7 +1074,6 @@ const fetchCashAssets = async () => {
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">{product.title}</TableCell>
                         <TableCell className="text-right">{product.available}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(product.unit_cost || 0)}</TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(product.total_value)}
                         </TableCell>
