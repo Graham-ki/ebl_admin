@@ -123,6 +123,7 @@ export default function MarketersPage() {
       const { data, error } = await supabase
         .from("opening_balances")
         .select("*")
+        .not("marketer_id","is",null)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
