@@ -216,6 +216,16 @@ export default function CurrentAssetsPage() {
     }
   };
 
+  // Helper function to safely parse numeric values from different data types
+  const safeParseNumber = (value: any): number => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  };
+
   const fetchMaterialAssets = async (costs: InventoryCost[]) => {
     try {
       const { data: materials, error: materialsError } = await supabase
@@ -225,6 +235,40 @@ export default function CurrentAssetsPage() {
       if (materialsError) throw materialsError;
 
       const materialAssetsData: MaterialAsset[] = [];
+
+      // Fetch prepaid value data from the three tables
+      const [
+        { data: materialBalancesData, error: materialBalancesError },
+        { data: deliveriesData, error: deliveriesError },
+        { data: supplierBalancesData, error: supplierBalancesError }
+      ] = await Promise.all([
+        supabase.from("material_balances").select("opening_balance"),
+        supabase.from("deliveries").select("quantity, unit_price"),
+        supabase.from("supplier_balances").select("current_balance")
+      ]);
+
+      if (materialBalancesError) throw materialBalancesError;
+      if (deliveriesError) throw deliveriesError;
+      if (supplierBalancesError) throw supplierBalancesError;
+
+      // Calculate S1 (sum of opening_balance from material_balances)
+      const S1 = materialBalancesData?.reduce((sum, item) => 
+        sum + safeParseNumber(item.opening_balance), 0) || 0;
+
+      // Calculate SQ (sum of quantity from deliveries)
+      const SQ = deliveriesData?.reduce((sum, item) => 
+        sum + safeParseNumber(item.quantity), 0) || 0;
+
+      // Calculate SP (sum of unit_price from deliveries)
+      const SP = deliveriesData?.reduce((sum, item) => 
+        sum + safeParseNumber(item.unit_price), 0) || 0;
+
+      // Calculate CB (sum of current_balance from supplier_balances)
+      const CB = supplierBalancesData?.reduce((sum, item) => 
+        sum + safeParseNumber(item.current_balance), 0) || 0;
+
+      // Calculate prepaid value using the formula: (S1 × SP) - (SQ × SP) + CB
+      const prepaidValue = (S1 * SP) - (SQ * SP) + CB;
 
       for (const material of materials || []) {
         // Get opening stocks for this material
@@ -252,46 +296,10 @@ export default function CurrentAssetsPage() {
 
         if (entriesError) throw entriesError;
 
-        // NEW LOGIC: Get prepaid supply items for this material
-        const { data: prepaidSupplyItems, error: supplyItemsError } = await supabase
-          .from("supply_items")
-          .select("id, quantity, price")
-          .eq("material_id", material.id)
-          .eq("status", "prepaid");
-
-        if (supplyItemsError) throw supplyItemsError;
-
-        // Calculate total prepaid quantity and value
-        let totalPrepaidQuantity = 0;
-        let totalPrepaidValue = 0;
-
-        if (prepaidSupplyItems && prepaidSupplyItems.length > 0) {
-          for (const supplyItem of prepaidSupplyItems) {
-            // Get deliveries for this specific supply item
-            const { data: itemDeliveries, error: itemDeliveriesError } = await supabase
-              .from("deliveries")
-              .select("quantity")
-              .eq("supply_item_id", supplyItem.id)
-              .eq("notes", "Stock");
-
-            if (itemDeliveriesError) throw itemDeliveriesError;
-
-            // Calculate delivered quantity for this supply item
-            const deliveredQuantity = itemDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-            
-            // Calculate remaining prepaid quantity
-            const prepaidQuantity = Math.max(0, (supplyItem.quantity || 0) - deliveredQuantity);
-            totalPrepaidQuantity += prepaidQuantity;
-            
-            // Calculate prepaid value for this supply item
-            totalPrepaidValue += prepaidQuantity * (supplyItem.price || 0);
-          }
-        }
-
-        // Calculate available quantity - FIXED LOGIC
-        const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-        const stockDeliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-        const materialEntriesTotal = materialEntries?.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0) || 0;
+        // Calculate available quantity
+        const openingStocksTotal = openingStocks?.reduce((sum, item) => sum + safeParseNumber(item.quantity), 0) || 0;
+        const stockDeliveriesTotal = stockDeliveries?.reduce((sum, item) => sum + safeParseNumber(item.quantity), 0) || 0;
+        const materialEntriesTotal = materialEntries?.reduce((sum, item) => sum + Math.abs(safeParseNumber(item.quantity)), 0) || 0;
         
         // Available quantity = (Opening stock + All stock deliveries) - Material entries
         const availableQuantity = (openingStocksTotal + stockDeliveriesTotal) - materialEntriesTotal;
@@ -302,17 +310,20 @@ export default function CurrentAssetsPage() {
 
         // Calculate total value
         const availableValue = availableQuantity * unit_cost;
-        const total_value = availableValue + totalPrepaidValue;
+        
+        // Distribute prepaid value proportionally based on material value
+        const materialProportion = availableValue > 0 ? availableValue / (materialAssetsData.reduce((sum, m) => sum + m.total_value, 0) + availableValue) || 1 : 0;
+        const materialPrepaidValue = materialProportion * prepaidValue;
 
         materialAssetsData.push({
           id: material.id,
           name: material.name,
           available: availableQuantity,
-          prepaid: totalPrepaidQuantity,
-          total: availableQuantity + totalPrepaidQuantity,
+          prepaid: 0, // We're not tracking prepaid quantity with the new formula
+          total: availableQuantity,
           unit_cost,
-          total_value,
-          prepaid_value: totalPrepaidValue
+          total_value: availableValue + materialPrepaidValue,
+          prepaid_value: materialPrepaidValue
         });
       }
 
@@ -343,7 +354,7 @@ export default function CurrentAssetsPage() {
         if (openingStocksError) throw openingStocksError;
 
         const openingStocksTotal =
-          openingStocks?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
+          openingStocks?.reduce((sum, item) => sum + safeParseNumber(item.quantity), 0) || 0;
 
         // --- Inflows: Return, Production, Stamped ---
         const { data: productInflows, error: inflowsError } = await supabase
@@ -355,19 +366,19 @@ export default function CurrentAssetsPage() {
         if (inflowsError) throw inflowsError;
 
         const productInflowsTotal =
-          productInflows?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
+          productInflows?.reduce((sum, item) => sum + safeParseNumber(item.quantity), 0) || 0;
 
         // --- Outflows: anything not in [Return, Production, Stamped] ---
         const { data: productOutflows, error: outflowsError } = await supabase
           .from("product_entries")
           .select("quantity")
           .eq("product_id", product.id)
-          .not("transaction", 'in',"('Return','Production','Stamped')"); // fixed
+          .not("transaction", "in", "('Return','Production','Stamped')");
 
         if (outflowsError) throw outflowsError;
 
         const productOutflowsTotal =
-          productOutflows?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
+          productOutflows?.reduce((sum, item) => sum + safeParseNumber(item.quantity), 0) || 0;
 
         // --- Final calculations ---
         const inflowTotal = openingStocksTotal + productInflowsTotal;
@@ -379,7 +390,7 @@ export default function CurrentAssetsPage() {
          const productCost = costs.find(
           (cost) => cost.item_type === "product" && cost.item_id === product.id
         );
-        const unit_cost = Number(productCost?.unit_cost) || 0;
+        const unit_cost = productCost?.unit_cost || 0;
 
         // Total value = available * unit cost
         const total_value = available * unit_cost;
@@ -413,8 +424,8 @@ const fetchCashAssets = async () => {
 
     if (expensesError) throw expensesError;
 
-    const totalPayments = financeData?.reduce((sum, item) => sum + (item.amount_paid || 0), 0) || 0;
-    const totalExpenses = expensesData?.reduce((sum, item) => sum + (item.amount_spent || 0), 0) || 0;
+    const totalPayments = financeData?.reduce((sum, item) => sum + safeParseNumber(item.amount_paid), 0) || 0;
+    const totalExpenses = expensesData?.reduce((sum, item) => sum + safeParseNumber(item.amount_spent), 0) || 0;
     const availableCash = totalPayments - totalExpenses;
 
     // Fetch opening balances with status 'Unpaid' and owner information
@@ -435,7 +446,7 @@ const fetchCashAssets = async () => {
       const supplierIds = new Set<string>();
 
       for (const balance of openingBalancesData) {
-        const amount = balance.amount || 0;
+        const amount = safeParseNumber(balance.amount);
         totalOpeningBalances += amount;
 
         // Determine the owner type and ID
@@ -585,8 +596,8 @@ const fetchCashAssets = async () => {
 
       if (paymentsError) throw paymentsError;
 
-      const totalPaid = orderPayments?.reduce((sum, payment) => sum + (payment.amount_paid || 0), 0) || 0;
-      const balance = (order.total_amount || 0) - totalPaid;
+      const totalPaid = orderPayments?.reduce((sum, payment) => sum + safeParseNumber(payment.amount_paid), 0) || 0;
+      const balance = safeParseNumber(order.total_amount) - totalPaid;
 
       if (balance > 0) {
         const customerName = await getCustomerName(order.user);
@@ -594,7 +605,7 @@ const fetchCashAssets = async () => {
         totalAccountsReceivable += balance;
         balances.push({
           order_id: order.id,
-          total_amount: order.total_amount || 0,
+          total_amount: safeParseNumber(order.total_amount),
           amount_paid: totalPaid,
           balance,
           customer_name: customerName
@@ -938,7 +949,6 @@ const fetchCashAssets = async () => {
                     <TableRow>
                       <TableHead>Material</TableHead>
                       <TableHead className="text-right">Available Qty</TableHead>
-                      <TableHead className="text-right">Prepaid Qty</TableHead>
                       <TableHead className="text-right">Available Value</TableHead>
                       <TableHead className="text-right">Prepaid Value</TableHead>
                       <TableHead className="text-right">Total Value</TableHead>
@@ -949,7 +959,6 @@ const fetchCashAssets = async () => {
                       <TableRow key={material.id}>
                         <TableCell className="font-medium">{material.name}</TableCell>
                         <TableCell className="text-right">{material.available}</TableCell>
-                        <TableCell className="text-right">{material.prepaid}</TableCell>
                         <TableCell className="text-right">{formatCurrency(material.available * (material.unit_cost || 0))}</TableCell>
                         <TableCell className="text-right">{formatCurrency(material.prepaid_value)}</TableCell>
                         <TableCell className="text-right font-semibold">
