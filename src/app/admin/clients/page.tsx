@@ -225,6 +225,7 @@ export default function ClientsPage() {
           *,
           clients!opening_balances_client_id_fkey(id, name)
         `)
+        .not("client_id","is",null)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
