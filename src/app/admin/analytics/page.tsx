@@ -58,6 +58,8 @@ interface OrderBalance {
   amount_paid: number;
   balance: number;
   customer_name: string;
+  customer_id: string;
+  customer_type: 'client' | 'marketer' | 'supplier' | 'unknown';
 }
 
 interface InventoryCost {
@@ -81,6 +83,13 @@ interface OpeningBalanceOwner {
   amount: number;
 }
 
+interface GroupedReceivable {
+  customer_id: string;
+  customer_name: string;
+  customer_type: string;
+  total_balance: number;
+}
+
 export default function CurrentAssetsPage() {
   const [materialAssets, setMaterialAssets] = useState<MaterialAsset[]>([]);
   const [productAssets, setProductAssets] = useState<ProductAsset[]>([]);
@@ -91,6 +100,7 @@ export default function CurrentAssetsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [orderBalances, setOrderBalances] = useState<OrderBalance[]>([]);
+  const [groupedReceivables, setGroupedReceivables] = useState<GroupedReceivable[]>([]);
   const [inventoryCosts, setInventoryCosts] = useState<InventoryCost[]>([]);
   const [showCostForm, setShowCostForm] = useState(false);
   const [editingCost, setEditingCost] = useState<InventoryCost | null>(null);
@@ -184,34 +194,34 @@ export default function CurrentAssetsPage() {
   };
 
   // Function to get customer name from either clients or users table
-  const getCustomerName = async (userId: string) => {
+  const getCustomerName = async (userId: string): Promise<{name: string, type: 'client' | 'marketer'}> => {
     try {
       // First check in clients table
       const { data: clientData, error: clientError } = await supabase
         .from("clients")
-        .select("name")
+        .select("id, name")
         .eq("id", userId)
         .single();
 
       if (!clientError && clientData) {
-        return clientData.name;
+        return { name: clientData.name, type: 'client' };
       }
 
       // If not found in clients, check in users table (marketers)
       const { data: userData, error: userError } = await supabase
         .from("users")
-        .select("name")
+        .select("id, name")
         .eq("id", userId)
         .single();
 
       if (!userError && userData) {
-        return userData.name;
+        return { name: userData.name, type: 'marketer' };
       }
 
-      return "Unknown Customer";
+      return { name: "Unknown Customer", type: 'unknown' as 'marketer' };
     } catch (error) {
       console.error("Error fetching customer name:", error);
-      return "Unknown Customer";
+      return { name: "Unknown Customer", type: 'unknown' as 'marketer' };
     }
   };
 
@@ -362,7 +372,7 @@ export default function CurrentAssetsPage() {
           .from("product_entries")
           .select("quantity")
           .eq("product_id", product.id)
-          .in("transaction", ["Return", "Production", "Stamped"]);
+          .in("transaction", ["Return", 'Production', 'Stamped']);
 
         if (inflowsError) throw inflowsError;
 
@@ -573,6 +583,7 @@ const fetchCashAssets = async () => {
 
     let totalAccountsReceivable = totalOpeningBalances;
     const balances: OrderBalance[] = [];
+    const receivablesMap = new Map<string, GroupedReceivable>();
 
     // Add opening balances to the accounts receivable list (grouped by owner)
     if (openingBalancesData && openingBalancesData.length > 0) {
@@ -583,7 +594,18 @@ const fetchCashAssets = async () => {
           total_amount: owner.amount,
           amount_paid: 0,
           balance: owner.amount,
-          customer_name: `${owner.name} (${owner.type} - Opening Balance)`
+          customer_name: `${owner.name} (${owner.type} - Opening Balance)`,
+          customer_id: owner.id,
+          customer_type: owner.type
+        });
+
+        // Add to grouped receivables
+        const key = `${owner.type}_${owner.id}`;
+        receivablesMap.set(key, {
+          customer_id: owner.id,
+          customer_name: owner.name,
+          customer_type: owner.type,
+          total_balance: owner.amount
         });
       }
     }
@@ -601,7 +623,7 @@ const fetchCashAssets = async () => {
       const balance = safeParseNumber(order.total_amount) - totalPaid;
 
       if (balance > 0) {
-        const customerName = await getCustomerName(order.user);
+        const customerInfo = await getCustomerName(order.user);
         
         totalAccountsReceivable += balance;
         balances.push({
@@ -609,10 +631,30 @@ const fetchCashAssets = async () => {
           total_amount: safeParseNumber(order.total_amount),
           amount_paid: totalPaid,
           balance,
-          customer_name: customerName
+          customer_name: customerInfo.name,
+          customer_id: order.user,
+          customer_type: customerInfo.type
         });
+
+        // Add to grouped receivables
+        const key = `${customerInfo.type}_${order.user}`;
+        if (receivablesMap.has(key)) {
+          const existing = receivablesMap.get(key)!;
+          existing.total_balance += balance;
+          receivablesMap.set(key, existing);
+        } else {
+          receivablesMap.set(key, {
+            customer_id: order.user,
+            customer_name: customerInfo.name,
+            customer_type: customerInfo.type,
+            total_balance: balance
+          });
+        }
       }
     }
+
+    // Convert the map to an array for easier rendering
+    setGroupedReceivables(Array.from(receivablesMap.values()));
 
     setCashAssets({
       available: availableCash,
@@ -882,7 +924,7 @@ const fetchCashAssets = async () => {
               </div>
             </div>
 
-            {orderBalances.length > 0 && (
+            {groupedReceivables.length > 0 && (
               <div>
                 <h3 className="font-semibold mb-3">Accounts Receivable Details</h3>
                 <div className="border rounded-lg overflow-hidden">
@@ -890,15 +932,17 @@ const fetchCashAssets = async () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Client/Marketer</TableHead>
+                        <TableHead>Type</TableHead>
                         <TableHead className="text-right">Balance</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {orderBalances.map((order) => (
-                        <TableRow key={order.order_id}>
-                          <TableCell className="font-medium">{order.customer_name}</TableCell>
+                      {groupedReceivables.map((receivable) => (
+                        <TableRow key={`${receivable.customer_type}_${receivable.customer_id}`}>
+                          <TableCell className="font-medium">{receivable.customer_name}</TableCell>
+                          <TableCell className="capitalize">{receivable.customer_type}</TableCell>
                           <TableCell className="text-right font-semibold text-red-600">
-                            {formatCurrency(order.balance)}
+                            {formatCurrency(receivable.total_balance)}
                           </TableCell>
                         </TableRow>
                       ))}
