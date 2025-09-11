@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Edit, Trash2, Plus } from "lucide-react";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -65,6 +66,10 @@ export default function MarketersPage() {
   const [showOpeningBalanceDialog, setShowOpeningBalanceDialog] = useState(false);
   const [showOpeningBalancesList, setShowOpeningBalancesList] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<any>(null);
+  const [editingPayment, setEditingPayment] = useState<any>(null);
+  const [editingExpense, setEditingExpense] = useState<any>(null);
+  const [editingOpeningBalance, setEditingOpeningBalance] = useState<any>(null);
 
   const fetchMarketers = async () => {
     setLoading(true);
@@ -425,6 +430,64 @@ export default function MarketersPage() {
     }
   };
 
+  const updatePayment = async () => {
+    if (!editingPayment || !editingPayment.amount_paid || !editingPayment.mode_of_payment) return;
+
+    try {
+      const paymentData: any = {
+        amount_paid: parseFloat(editingPayment.amount_paid),
+        created_at: editingPayment.created_at,
+        mode_of_payment: editingPayment.mode_of_payment,
+        purpose: editingPayment.purpose
+      };
+
+      if (editingPayment.mode_of_payment === 'Bank') {
+        paymentData.bank_name = editingPayment.bank_name;
+      } else if (editingPayment.mode_of_payment === 'Mobile Money') {
+        paymentData.mode_of_mobilemoney = editingPayment.mobile_money_provider;
+      }
+
+      const { error } = await supabase
+        .from("finance")
+        .update(paymentData)
+        .eq("id", editingPayment.id);
+
+      if (error) throw error;
+      
+      await fetchPayments(editingPayment.order_id);
+      await fetchTransactions(selectedMarketer.id);
+      await fetchOpeningBalances();
+      
+      setEditingPayment(null);
+      alert("Payment updated successfully!");
+    } catch (error) {
+      console.error("Error updating payment:", error);
+      alert("Error updating payment. Please try again.");
+    }
+  };
+
+  const deletePayment = async (paymentId: string) => {
+    if (!confirm("Are you sure you want to delete this payment?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("finance")
+        .delete()
+        .eq("id", paymentId);
+
+      if (error) throw error;
+      
+      await fetchPayments(selectedOrder.id);
+      await fetchTransactions(selectedMarketer.id);
+      await fetchOpeningBalances();
+      
+      alert("Payment deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting payment:", error);
+      alert("Error deleting payment. Please try again.");
+    }
+  };
+
   const addOrder = async () => {
     if (!selectedMarketer || !newOrder.item || !newOrder.quantity || !newOrder.cost) return;
 
@@ -474,6 +537,109 @@ export default function MarketersPage() {
     }
   };
 
+  const updateOrder = async () => {
+    if (!editingOrder || !editingOrder.item || !editingOrder.quantity || !editingOrder.cost) return;
+
+    try {
+      const product = products.find(p => p.title === editingOrder.item);
+      if (!product) throw new Error("Product not found");
+
+      // First get the original order to calculate the difference
+      const { data: originalOrder, error: fetchError } = await supabase
+        .from("order")
+        .select("*")
+        .eq("id", editingOrder.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const quantityDifference = parseFloat(editingOrder.quantity) - parseFloat(originalOrder.quantity);
+
+      const { error: orderError } = await supabase
+        .from("order")
+        .update({
+          item: editingOrder.item,
+          quantity: parseFloat(editingOrder.quantity),
+          cost: parseFloat(editingOrder.cost),
+          created_at: editingOrder.created_at,
+          total_amount: parseFloat(editingOrder.quantity) * parseFloat(editingOrder.cost)
+        })
+        .eq("id", editingOrder.id);
+
+      if (orderError) throw orderError;
+      
+      // Update product entries if quantity changed
+      if (quantityDifference !== 0) {
+        const { error: entryError } = await supabase
+          .from("product_entries")
+          .insert([{
+            product_id: product.id,
+            title: editingOrder.item,
+            quantity: -quantityDifference,
+            created_at: new Date().toISOString(),
+            created_by: 'Admin',
+            transaction: `${selectedMarketer.name}-Order Update`
+          }]);
+
+        if (entryError) throw entryError;
+      }
+      
+      await fetchOrders(selectedMarketer.id);
+      await fetchTransactions(selectedMarketer.id);
+      setEditingOrder(null);
+      alert("Order updated successfully!");
+    } catch (error) {
+      console.error("Error updating order:", error);
+      alert("Error updating order. Please try again.");
+    }
+  };
+
+  const deleteOrder = async (orderId: string) => {
+    if (!confirm("Are you sure you want to delete this order?")) return;
+
+    try {
+      // First get the order details to reverse the product entry
+      const { data: order, error: fetchError } = await supabase
+        .from("order")
+        .select("*")
+        .eq("id", orderId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const product = products.find(p => p.title === order.item);
+      if (product) {
+        const { error: entryError } = await supabase
+          .from("product_entries")
+          .insert([{
+            product_id: product.id,
+            title: order.item,
+            quantity: parseFloat(order.quantity),
+            created_at: new Date().toISOString(),
+            created_by: 'Admin',
+            transaction: `${selectedMarketer.name}-Order Deletion`
+          }]);
+
+        if (entryError) throw entryError;
+      }
+
+      const { error } = await supabase
+        .from("order")
+        .delete()
+        .eq("id", orderId);
+
+      if (error) throw error;
+      
+      await fetchOrders(selectedMarketer.id);
+      await fetchTransactions(selectedMarketer.id);
+      
+      alert("Order deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      alert("Error deleting order. Please try again.");
+    }
+  };
+
   const addExpense = async () => {
     if (!selectedMarketer || !newExpense.item || !newExpense.amount) return;
 
@@ -512,6 +678,52 @@ export default function MarketersPage() {
     }
   };
 
+  const updateExpense = async () => {
+    if (!editingExpense || !editingExpense.item || !editingExpense.amount_spent) return;
+
+    try {
+      const { error } = await supabase
+        .from("expenses")
+        .update({
+          date: editingExpense.date,
+          item: editingExpense.item,
+          amount_spent: parseFloat(editingExpense.amount_spent)
+        })
+        .eq("id", editingExpense.id);
+
+      if (error) throw error;
+      
+      await fetchExpenses(selectedMarketer.id);
+      await fetchTransactions(selectedMarketer.id);
+      setEditingExpense(null);
+      alert("Expense updated successfully!");
+    } catch (error) {
+      console.error("Error updating expense:", error);
+      alert("Error updating expense. Please try again.");
+    }
+  };
+
+  const deleteExpense = async (expenseId: string) => {
+    if (!confirm("Are you sure you want to delete this expense?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("expenses")
+        .delete()
+        .eq("id", expenseId);
+
+      if (error) throw error;
+      
+      await fetchExpenses(selectedMarketer.id);
+      await fetchTransactions(selectedMarketer.id);
+      
+      alert("Expense deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting expense:", error);
+      alert("Error deleting expense. Please try again.");
+    }
+  };
+
   const addOpeningBalance = async () => {
     if (!newOpeningBalance.marketer_id || !newOpeningBalance.amount) return;
 
@@ -539,6 +751,51 @@ export default function MarketersPage() {
     } catch (error) {
       console.error("Error adding opening balance:", error);
       alert("Error adding opening balance. Please try again.");
+    }
+  };
+
+  const updateOpeningBalance = async () => {
+    if (!editingOpeningBalance || !editingOpeningBalance.amount) return;
+
+    try {
+      const { error } = await supabase
+        .from("opening_balances")
+        .update({
+          amount: parseFloat(editingOpeningBalance.amount),
+          status: editingOpeningBalance.status,
+          created_at: editingOpeningBalance.created_at
+        })
+        .eq("id", editingOpeningBalance.id);
+
+      if (error) throw error;
+      
+      await fetchOpeningBalances();
+      await fetchTransactions(editingOpeningBalance.marketer_id);
+      setEditingOpeningBalance(null);
+      alert("Opening balance updated successfully!");
+    } catch (error) {
+      console.error("Error updating opening balance:", error);
+      alert("Error updating opening balance. Please try again.");
+    }
+  };
+
+  const deleteOpeningBalance = async (balanceId: string) => {
+    if (!confirm("Are you sure you want to delete this opening balance?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("opening_balances")
+        .delete()
+        .eq("id", balanceId);
+
+      if (error) throw error;
+      
+      await fetchOpeningBalances();
+      
+      alert("Opening balance deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting opening balance:", error);
+      alert("Error deleting opening balance. Please try again.");
     }
   };
 
@@ -815,6 +1072,78 @@ export default function MarketersPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Opening Balance Dialog */}
+      <Dialog open={!!editingOpeningBalance} onOpenChange={() => setEditingOpeningBalance(null)}>
+        <DialogContent className="max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Edit Opening Balance
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date
+              </label>
+              <Input
+                type="date"
+                value={editingOpeningBalance?.created_at?.split('T')[0] || ''}
+                onChange={(e) => setEditingOpeningBalance({
+                  ...editingOpeningBalance,
+                  created_at: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Amount
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter amount"
+                value={editingOpeningBalance?.amount || ''}
+                onChange={(e) => setEditingOpeningBalance({
+                  ...editingOpeningBalance,
+                  amount: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Status
+              </label>
+              <Select
+                value={editingOpeningBalance?.status || ''}
+                onValueChange={(value) => setEditingOpeningBalance({
+                  ...editingOpeningBalance,
+                  status: value
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Unpaid">Unpaid</SelectItem>
+                  <SelectItem value="Paid">Paid</SelectItem>
+                  <SelectItem value="Pending Clearance">Pending Clearance</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button onClick={updateOpeningBalance} disabled={!editingOpeningBalance?.amount}>
+              Update Opening Balance
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => deleteOpeningBalance(editingOpeningBalance.id)}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Opening Balances List Dialog */}
       <Dialog open={showOpeningBalancesList} onOpenChange={setShowOpeningBalancesList}>
         <DialogContent className="max-w-4xl rounded-lg">
@@ -858,20 +1187,29 @@ export default function MarketersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Select
-                          value={balance.status}
-                          onValueChange={(value) => updateOpeningBalanceStatus(balance.id, value)}
-                        >
-                          <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="Change Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Unpaid">Unpaid</SelectItem>
-                            <SelectItem value="Pay">Pay</SelectItem>
-                            <SelectItem value="Paid">Paid</SelectItem>
-                            <SelectItem value="Pending Clearance">Pending Clearance</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingOpeningBalance(balance)}
+                          >
+                            <Edit size={14} />
+                          </Button>
+                          <Select
+                            value={balance.status}
+                            onValueChange={(value) => updateOpeningBalanceStatus(balance.id, value)}
+                          >
+                            <SelectTrigger className="w-[180px]">
+                              <SelectValue placeholder="Change Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Unpaid">Unpaid</SelectItem>
+                              <SelectItem value="Pay">Pay</SelectItem>
+                              <SelectItem value="Paid">Paid</SelectItem>
+                              <SelectItem value="Pending Clearance">Pending Clearance</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -1033,6 +1371,127 @@ export default function MarketersPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Payment Dialog */}
+      <Dialog open={!!editingPayment} onOpenChange={() => setEditingPayment(null)}>
+        <DialogContent className="max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Edit Payment
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date
+              </label>
+              <Input
+                type="date"
+                value={editingPayment?.created_at?.split('T')[0] || ''}
+                onChange={(e) => setEditingPayment({
+                  ...editingPayment,
+                  created_at: e.target.value
+                })}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Amount
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter amount"
+                value={editingPayment?.amount_paid || ''}
+                onChange={(e) => setEditingPayment({
+                  ...editingPayment,
+                  amount_paid: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mode of Payment
+              </label>
+              <Select
+                value={editingPayment?.mode_of_payment || ''}
+                onValueChange={(value) => setEditingPayment({
+                  ...editingPayment,
+                  mode_of_payment: value,
+                  bank_name: "",
+                  mobile_money_provider: ""
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select payment mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Bank">Bank</SelectItem>
+                  <SelectItem value="Mobile Money">Mobile Money</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {editingPayment?.mode_of_payment === 'Bank' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Bank Name
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Enter bank name"
+                  value={editingPayment?.bank_name || ''}
+                  onChange={(e) => setEditingPayment({
+                    ...editingPayment,
+                    bank_name: e.target.value
+                  })}
+                />
+              </div>
+            )}
+            {editingPayment?.mode_of_payment === 'Mobile Money' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mobile Money Provider
+                </label>
+                <Select
+                  value={editingPayment?.mobile_money_provider || ''}
+                  onValueChange={(value) => setEditingPayment({
+                    ...editingPayment,
+                    mobile_money_provider: value
+                  })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MTN">MTN</SelectItem>
+                    <SelectItem value="Airtel">Airtel</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              onClick={updatePayment}
+              disabled={
+                !editingPayment?.amount_paid || 
+                !editingPayment?.mode_of_payment || 
+                (editingPayment?.mode_of_payment === 'Bank' && !editingPayment?.bank_name) ||
+                (editingPayment?.mode_of_payment === 'Mobile Money' && !editingPayment?.mobile_money_provider)
+              }
+            >
+              Update Payment
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => deletePayment(editingPayment.id)}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Orders Dialog */}
       <Dialog open={showOrdersDialog} onOpenChange={setShowOrdersDialog}>
         <DialogContent className="max-w-6xl rounded-lg">
@@ -1107,13 +1566,29 @@ export default function MarketersPage() {
                       {(order.quantity * order.cost).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewPayments(order)}
-                      >
-                        View Payments
-                      </Button>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewPayments(order)}
+                        >
+                          View Payments
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingOrder(order)}
+                        >
+                          <Edit size={14} />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deleteOrder(order.id)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1212,6 +1687,94 @@ export default function MarketersPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Order Dialog */}
+      <Dialog open={!!editingOrder} onOpenChange={() => setEditingOrder(null)}>
+        <DialogContent className="max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Edit Order for {selectedMarketer?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date
+              </label>
+              <Input
+                type="date"
+                value={editingOrder?.created_at?.split('T')[0] || ''}
+                onChange={(e) => setEditingOrder({
+                  ...editingOrder,
+                  created_at: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Item
+              </label>
+              <Select
+                value={editingOrder?.item || ''}
+                onValueChange={(value) => setEditingOrder({
+                  ...editingOrder,
+                  item: value
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an item" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.map((product) => (
+                    <SelectItem key={product.title} value={product.title}>
+                      {product.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Quantity
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter quantity"
+                value={editingOrder?.quantity || ''}
+                onChange={(e) => setEditingOrder({
+                  ...editingOrder,
+                  quantity: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Unit Price
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter unit price"
+                value={editingOrder?.cost || ''}
+                onChange={(e) => setEditingOrder({
+                  ...editingOrder,
+                  cost: e.target.value
+                })}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button onClick={updateOrder} disabled={!editingOrder?.item || !editingOrder?.quantity || !editingOrder?.cost}>
+              Update Order
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => deleteOrder(editingOrder.id)}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Add Expense Dialog */}
       <Dialog open={showExpenseDialog} onOpenChange={setShowExpenseDialog}>
         <DialogContent className="max-w-md rounded-lg">
@@ -1266,6 +1829,71 @@ export default function MarketersPage() {
           <DialogFooter>
             <Button onClick={addExpense} disabled={!newExpense.item || !newExpense.amount}>
               Record Expense
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Expense Dialog */}
+      <Dialog open={!!editingExpense} onOpenChange={() => setEditingExpense(null)}>
+        <DialogContent className="max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Edit Expense for {selectedMarketer?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date
+              </label>
+              <Input
+                type="date"
+                value={editingExpense?.date || ''}
+                onChange={(e) => setEditingExpense({
+                  ...editingExpense,
+                  date: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Item
+              </label>
+              <Input
+                type="text"
+                placeholder="Enter expense item"
+                value={editingExpense?.item || ''}
+                onChange={(e) => setEditingExpense({
+                  ...editingExpense,
+                  item: e.target.value
+                })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Amount
+              </label>
+              <Input
+                type="number"
+                placeholder="Enter amount"
+                value={editingExpense?.amount_spent || ''}
+                onChange={(e) => setEditingExpense({
+                  ...editingExpense,
+                  amount_spent: e.target.value
+                })}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button onClick={updateExpense} disabled={!editingExpense?.item || !editingExpense?.amount_spent}>
+              Update Expense
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => deleteExpense(editingExpense.id)}
+            >
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1397,6 +2025,7 @@ export default function MarketersPage() {
                     <TableHead>Mode</TableHead>
                     <TableHead>Details</TableHead>
                     <TableHead>Amount</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1413,11 +2042,29 @@ export default function MarketersPage() {
                       <TableCell>
                         {payment.amount_paid.toLocaleString()}
                       </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingPayment(payment)}
+                          >
+                            <Edit size={14} />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deletePayment(payment.id)}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {payments.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-4 text-gray-500">
+                      <TableCell colSpan={5} className="text-center py-4 text-gray-500">
                         No payments recorded
                       </TableCell>
                     </TableRow>
