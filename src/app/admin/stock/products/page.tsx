@@ -39,6 +39,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import { Edit, Trash2, Plus, Minus } from 'lucide-react';
 
 const supabaseUrl = 'https://kxnrfzcurobahklqefjs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4bnJmemN1cm9iYWhrbHFlZmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc5NTk1MzUsImV4cCI6MjA1MzUzNTUzNX0.pHrrAPHV1ln1OHugnB93DTUY5TL9K8dYREhz1o0GkjE';
@@ -88,18 +89,21 @@ export default function SummaryPage() {
     new Date(),
   ]);
   const [inflowForm, setInflowForm] = useState({
+    id: null as number | null,
     date: new Date().toISOString().split('T')[0],
     product_id: '',
     source: '',
     quantity: '',
   });
   const [outflowForm, setOutflowForm] = useState({
+    id: null as number | null,
     date: new Date().toISOString().split('T')[0],
     product_id: '',
     reason: '',
     quantity: '',
   });
   const [openingStockForm, setOpeningStockForm] = useState({
+    id: null as number | null,
     date: new Date().toISOString().split('T')[0],
     product_id: '',
     quantity: '',
@@ -109,6 +113,13 @@ export default function SummaryPage() {
   const [isOpeningStockDialogOpen, setIsOpeningStockDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [selectedHistoryDate, setSelectedHistoryDate] = useState<Date>(new Date());
+  const [isEditingProduct, setIsEditingProduct] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isEditingCategory, setIsEditingCategory] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [newCategory, setNewCategory] = useState('');
+  const [viewingTransactions, setViewingTransactions] = useState<Product | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<ProductEntry | null>(null);
 
   // Fetch all data
   useEffect(() => {
@@ -221,6 +232,119 @@ export default function SummaryPage() {
     }
   };
 
+  const handleEditProduct = async () => {
+    if (!editingProduct || !editingProduct.title || !editingProduct.category) {
+      alert('Please enter product title and select a category.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('product')
+        .update({ 
+          title: editingProduct.title, 
+          category: editingProduct.category 
+        })
+        .eq('id', editingProduct.id);
+
+      if (error) throw error;
+      
+      alert('Beverage updated successfully!');
+      setProducts(prev => prev.map(p => 
+        p.id === editingProduct.id ? editingProduct : p
+      ));
+      setIsEditingProduct(false);
+      setEditingProduct(null);
+    } catch (error) {
+      console.error('Error updating product:', error);
+      alert('Failed to update product.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCategory) {
+      alert('Please enter a category name.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('category')
+        .insert([{ name: newCategory }])
+        .select();
+
+      if (error) throw error;
+      
+      alert('Category added successfully!');
+      setCategories(prev => [...prev, data[0]]);
+      setNewCategory('');
+    } catch (error) {
+      console.error('Error adding category:', error);
+      alert('Failed to add category.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditCategory = async () => {
+    if (!editingCategory || !editingCategory.name) {
+      alert('Please enter a category name.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('category')
+        .update({ name: editingCategory.name })
+        .eq('id', editingCategory.id);
+
+      if (error) throw error;
+      
+      alert('Category updated successfully!');
+      setCategories(prev => prev.map(c => 
+        c.id === editingCategory.id ? editingCategory : c
+      ));
+      setIsEditingCategory(false);
+      setEditingCategory(null);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      alert('Failed to update category.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this category? Products in this category will not be deleted.')) return;
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('category')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      alert('Category deleted successfully!');
+      setCategories(prev => prev.filter(c => c.id !== id));
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      alert('Failed to delete category.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteProduct = async () => {
     if (!productToDelete) return;
 
@@ -273,20 +397,37 @@ export default function SummaryPage() {
     if (!product) return;
 
     try {
-      const { error } = await supabase
-        .from('product_entries')
-        .insert([{
-          product_id: productId,
-          title: product.title,
-          quantity: Number(inflowForm.quantity),
-          created_at: inflowForm.date,
-          created_by: 'Admin',
-          transaction: inflowForm.source,
-        }]);
+      if (inflowForm.id) {
+        // Update existing inflow
+        const { error } = await supabase
+          .from('product_entries')
+          .update({
+            quantity: Number(inflowForm.quantity),
+            created_at: inflowForm.date,
+            transaction: inflowForm.source,
+          })
+          .eq('id', inflowForm.id);
 
-      if (error) throw error;
+        if (error) throw error;
+        alert('Inflow updated successfully!');
+      } else {
+        // Create new inflow
+        const { error } = await supabase
+          .from('product_entries')
+          .insert([{
+            product_id: productId,
+            title: product.title,
+            quantity: Number(inflowForm.quantity),
+            created_at: inflowForm.date,
+            created_by: 'Admin',
+            transaction: inflowForm.source,
+          }]);
 
-      // Refresh data after recording inflow
+        if (error) throw error;
+        alert('Inflow recorded successfully!');
+      }
+
+      // Refresh data
       const { data: productEntriesData } = await supabase
         .from('product_entries')
         .select('*');
@@ -301,8 +442,8 @@ export default function SummaryPage() {
       setOpeningStocks(stocks || []);
       calculateAvailableQuantities(productEntriesData || [], stocks || []);
 
-      alert('Inflow recorded successfully!');
       setInflowForm({
+        id: null,
         date: new Date().toISOString().split('T')[0],
         product_id: '',
         source: '',
@@ -331,20 +472,37 @@ export default function SummaryPage() {
     }
 
     try {
-      const { error } = await supabase
-        .from('product_entries')
-        .insert([{
-          product_id: productId,
-          title: product.title,
-          quantity: -Number(outflowForm.quantity),
-          created_at: outflowForm.date,
-          created_by: 'Admin',
-          transaction: outflowForm.reason,
-        }]);
+      if (outflowForm.id) {
+        // Update existing outflow
+        const { error } = await supabase
+          .from('product_entries')
+          .update({
+            quantity: -Number(outflowForm.quantity),
+            created_at: outflowForm.date,
+            transaction: outflowForm.reason,
+          })
+          .eq('id', outflowForm.id);
 
-      if (error) throw error;
+        if (error) throw error;
+        alert('Outflow updated successfully!');
+      } else {
+        // Create new outflow
+        const { error } = await supabase
+          .from('product_entries')
+          .insert([{
+            product_id: productId,
+            title: product.title,
+            quantity: -Number(outflowForm.quantity),
+            created_at: outflowForm.date,
+            created_by: 'Admin',
+            transaction: outflowForm.reason,
+          }]);
 
-      // Refresh data after recording outflow
+        if (error) throw error;
+        alert('Outflow recorded successfully!');
+      }
+
+      // Refresh data
       const { data: productEntriesData } = await supabase
         .from('product_entries')
         .select('*');
@@ -359,8 +517,8 @@ export default function SummaryPage() {
       setOpeningStocks(stocks || []);
       calculateAvailableQuantities(productEntriesData || [], stocks || []);
 
-      alert('Outflow recorded successfully!');
       setOutflowForm({
+        id: null,
         date: new Date().toISOString().split('T')[0],
         product_id: '',
         reason: '',
@@ -369,6 +527,39 @@ export default function SummaryPage() {
     } catch (error) {
       console.error('Error recording outflow:', error);
       alert('Failed to record outflow');
+    }
+  };
+
+  const handleDeleteTransaction = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this transaction?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('product_entries')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Refresh data
+      const { data: productEntriesData } = await supabase
+        .from('product_entries')
+        .select('*');
+      
+      const { data: stocks } = await supabase
+        .from('opening_stocks')
+        .select('*')
+        .eq('type', 'product')
+        .order('date', { ascending: false });
+      
+      setProductEntries(productEntriesData || []);
+      setOpeningStocks(stocks || []);
+      calculateAvailableQuantities(productEntriesData || [], stocks || []);
+
+      alert('Transaction deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      alert('Failed to delete transaction');
     }
   };
 
@@ -382,34 +573,48 @@ export default function SummaryPage() {
     const quantity = Number(openingStockForm.quantity);
 
     try {
-      // Check for existing record
-      const { data: existing, error: checkError } = await supabase
-        .from('opening_stocks')
-        .select('*')
-        .eq('product_id', productId)
-        .eq('date', openingStockForm.date)
-        .eq('type', 'product')
-        .maybeSingle();
+      if (openingStockForm.id) {
+        // Update existing opening stock
+        const { error } = await supabase
+          .from('opening_stocks')
+          .update({
+            quantity: quantity,
+          })
+          .eq('id', openingStockForm.id);
 
-      if (checkError) throw checkError;
-      if (existing) {
-        alert('Opening stock already recorded for this product on the selected date');
-        return;
+        if (error) throw error;
+        alert('Opening stock updated successfully!');
+      } else {
+        // Check for existing record
+        const { data: existing, error: checkError } = await supabase
+          .from('opening_stocks')
+          .select('*')
+          .eq('product_id', productId)
+          .eq('date', openingStockForm.date)
+          .eq('type', 'product')
+          .maybeSingle();
+
+        if (checkError) throw checkError;
+        if (existing) {
+          alert('Opening stock already recorded for this product on the selected date');
+          return;
+        }
+
+        // Record new opening stock
+        const { error } = await supabase
+          .from('opening_stocks')
+          .insert([{
+            product_id: productId,
+            date: openingStockForm.date,
+            quantity: quantity,
+            type: 'product'
+          }]);
+
+        if (error) throw error;
+        alert('Opening stock recorded successfully!');
       }
 
-      // Record new opening stock
-      const { error } = await supabase
-        .from('opening_stocks')
-        .insert([{
-          product_id: productId,
-          date: openingStockForm.date,
-          quantity: quantity,
-          type: 'product'
-        }]);
-
-      if (error) throw error;
-
-      // Refresh ALL data after recording opening stock
+      // Refresh ALL data
       const { data: productEntriesData, error: entriesError } = await supabase
         .from('product_entries')
         .select('*');
@@ -425,9 +630,9 @@ export default function SummaryPage() {
       setProductEntries(productEntriesData || []);
       calculateAvailableQuantities(productEntriesData || [], stocks || []);
 
-      alert('Opening stock recorded successfully!');
       setIsOpeningStockDialogOpen(false);
       setOpeningStockForm({
+        id: null,
         date: new Date().toISOString().split('T')[0],
         product_id: '',
         quantity: '',
@@ -435,6 +640,34 @@ export default function SummaryPage() {
     } catch (error) {
       console.error('Error recording opening stock:', error);
       alert('Failed to record opening stock');
+    }
+  };
+
+  const handleDeleteOpeningStock = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this opening stock record?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('opening_stocks')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Refresh data
+      const { data: stocks } = await supabase
+        .from('opening_stocks')
+        .select('*')
+        .eq('type', 'product')
+        .order('date', { ascending: false });
+      
+      setOpeningStocks(stocks || []);
+      calculateAvailableQuantities(productEntries, stocks || []);
+
+      alert('Opening stock record deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting opening stock:', error);
+      alert('Failed to delete opening stock record');
     }
   };
 
@@ -476,6 +709,27 @@ export default function SummaryPage() {
     return category ? category.name : 'Unknown';
   };
 
+  const openEditTransaction = (transaction: ProductEntry) => {
+    setEditingTransaction(transaction);
+    if (transaction.quantity > 0) {
+      setInflowForm({
+        id: transaction.id,
+        date: new Date(transaction.created_at).toISOString().split('T')[0],
+        product_id: String(transaction.product_id),
+        source: transaction.transaction,
+        quantity: String(transaction.quantity),
+      });
+    } else {
+      setOutflowForm({
+        id: transaction.id,
+        date: new Date(transaction.created_at).toISOString().split('T')[0],
+        product_id: String(transaction.product_id),
+        reason: transaction.transaction,
+        quantity: String(Math.abs(transaction.quantity)),
+      });
+    }
+  };
+
   return (
     <div className="container mx-auto p-4 md:p-6">
       {/* Header Section */}
@@ -491,7 +745,7 @@ export default function SummaryPage() {
         <Dialog>
           <DialogTrigger asChild>
             <Button variant="default" className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700">
-              <span>➕</span>
+              <Plus size={16} />
               <span>Add New Beverage</span>
             </Button>
           </DialogTrigger>
@@ -546,6 +800,85 @@ export default function SummaryPage() {
         </Dialog>
       </div>
 
+      {/* Category Management */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Categories</span>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm" className="flex items-center gap-1">
+                  <Plus size={16} />
+                  Add Category
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="rounded-lg max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Add New Category</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <Input
+                    placeholder="Category Name"
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                  />
+                  <Button onClick={handleAddCategory} disabled={loading}>
+                    {loading ? 'Adding...' : 'Add Category'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {categories.map(category => (
+              <div key={category.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <span>{category.name}</span>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditingCategory(category);
+                      setIsEditingCategory(true);
+                    }}
+                  >
+                    <Edit size={14} />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleDeleteCategory(category.id)}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Edit Category Dialog */}
+      <Dialog open={isEditingCategory} onOpenChange={setIsEditingCategory}>
+        <DialogContent className="rounded-lg max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Category</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              placeholder="Category Name"
+              value={editingCategory?.name || ''}
+              onChange={(e) => setEditingCategory(prev => prev ? {...prev, name: e.target.value} : null)}
+            />
+            <Button onClick={handleEditCategory} disabled={loading}>
+              {loading ? 'Updating...' : 'Update Category'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Transaction Recording Buttons */}
       <div className="flex flex-wrap gap-4 mb-6">
         {/* Record Inflow Button */}
@@ -557,7 +890,7 @@ export default function SummaryPage() {
           </DialogTrigger>
           <DialogContent className="rounded-lg max-w-md">
             <DialogHeader>
-              <DialogTitle>📥 Record Beverage Inflow</DialogTitle>
+              <DialogTitle>{inflowForm.id ? 'Edit' : 'Record'} Beverage Inflow</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -575,6 +908,7 @@ export default function SummaryPage() {
                 <Select 
                   onValueChange={(value) => setInflowForm(prev => ({ ...prev, product_id: value }))}
                   value={inflowForm.product_id}
+                  disabled={!!inflowForm.id}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a beverage" />
@@ -618,10 +952,18 @@ export default function SummaryPage() {
             </div>
             <DialogFooter>
               <Button onClick={recordInflow} className="bg-green-600 hover:bg-green-700">
-                Record Inflow
+                {inflowForm.id ? 'Update' : 'Record'} Inflow
               </Button>
               <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button variant="outline" onClick={() => setInflowForm({
+                  id: null,
+                  date: new Date().toISOString().split('T')[0],
+                  product_id: '',
+                  source: '',
+                  quantity: '',
+                })}>
+                  Cancel
+                </Button>
               </DialogClose>
             </DialogFooter>
           </DialogContent>
@@ -636,7 +978,7 @@ export default function SummaryPage() {
           </DialogTrigger>
           <DialogContent className="rounded-lg max-w-md">
             <DialogHeader>
-              <DialogTitle>📤 Record Beverage Outflow</DialogTitle>
+              <DialogTitle>{outflowForm.id ? 'Edit' : 'Record'} Beverage Outflow</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -654,6 +996,7 @@ export default function SummaryPage() {
                 <Select 
                   onValueChange={(value) => setOutflowForm(prev => ({ ...prev, product_id: value }))}
                   value={outflowForm.product_id}
+                  disabled={!!outflowForm.id}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a beverage" />
@@ -697,10 +1040,18 @@ export default function SummaryPage() {
             </div>
             <DialogFooter>
               <Button onClick={recordOutflow} className="bg-red-600 hover:bg-red-700">
-                Record Outflow
+                {outflowForm.id ? 'Update' : 'Record'} Outflow
               </Button>
               <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button variant="outline" onClick={() => setOutflowForm({
+                  id: null,
+                  date: new Date().toISOString().split('T')[0],
+                  product_id: '',
+                  reason: '',
+                  quantity: '',
+                })}>
+                  Cancel
+                </Button>
               </DialogClose>
             </DialogFooter>
           </DialogContent>
@@ -715,9 +1066,9 @@ export default function SummaryPage() {
           </DialogTrigger>
           <DialogContent className="rounded-lg max-w-md">
             <DialogHeader>
-              <DialogTitle>📅 Record Opening Stock</DialogTitle>
+              <DialogTitle>{openingStockForm.id ? 'Edit' : 'Record'} Opening Stock</DialogTitle>
               <DialogDescription>
-                Record the starting quantity for a beverage on a specific date
+                {openingStockForm.id ? 'Edit' : 'Record'} the starting quantity for a beverage on a specific date
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -728,6 +1079,7 @@ export default function SummaryPage() {
                   value={openingStockForm.date}
                   onChange={(e) => setOpeningStockForm(prev => ({ ...prev, date: e.target.value }))}
                   className="w-full"
+                  disabled={!!openingStockForm.id}
                 />
               </div>
               <div>
@@ -735,6 +1087,7 @@ export default function SummaryPage() {
                 <Select 
                   onValueChange={(value) => setOpeningStockForm(prev => ({ ...prev, product_id: value }))}
                   value={openingStockForm.product_id}
+                  disabled={!!openingStockForm.id}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a beverage" />
@@ -761,10 +1114,17 @@ export default function SummaryPage() {
             </div>
             <DialogFooter>
               <Button onClick={handleRecordOpeningStock} className="bg-blue-600 hover:bg-blue-700">
-                Record Opening Stock
+                {openingStockForm.id ? 'Update' : 'Record'} Opening Stock
               </Button>
               <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button variant="outline" onClick={() => setOpeningStockForm({
+                  id: null,
+                  date: new Date().toISOString().split('T')[0],
+                  product_id: '',
+                  quantity: '',
+                })}>
+                  Cancel
+                </Button>
               </DialogClose>
             </DialogFooter>
           </DialogContent>
@@ -803,6 +1163,7 @@ export default function SummaryPage() {
                       <TableHead>Recorded Opening Stock</TableHead>
                       <TableHead>Calculated Opening Stock</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -810,7 +1171,7 @@ export default function SummaryPage() {
                       const dateKey = selectedHistoryDate.toISOString().split('T')[0];
                       const recordedStock = openingStocks.find(
                         s => s.product_id === product.id && s.date === dateKey
-                      )?.quantity;
+                      );
                       
                       const calculatedStock = calculateOpeningStock(product.id, dateKey);
 
@@ -818,11 +1179,39 @@ export default function SummaryPage() {
                         <TableRow key={product.id}>
                           <TableCell>{product.title}</TableCell>
                           <TableCell>{getCategoryName(product.category)}</TableCell>
-                          <TableCell>{recordedStock ?? 'Not recorded'}</TableCell>
+                          <TableCell>{recordedStock?.quantity ?? 'Not recorded'}</TableCell>
                           <TableCell>{calculatedStock}</TableCell>
                           <TableCell>
-                            {recordedStock !== undefined && recordedStock !== calculatedStock 
+                            {recordedStock && recordedStock.quantity !== calculatedStock 
                               ? 'Mismatch' : 'Match'}
+                          </TableCell>
+                          <TableCell>
+                            {recordedStock && (
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setOpeningStockForm({
+                                      id: recordedStock.id,
+                                      date: recordedStock.date,
+                                      product_id: String(recordedStock.product_id),
+                                      quantity: String(recordedStock.quantity),
+                                    });
+                                    setIsOpeningStockDialogOpen(true);
+                                  }}
+                                >
+                                  <Edit size={14} />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDeleteOpeningStock(recordedStock.id)}
+                                >
+                                  <Trash2 size={14} />
+                                </Button>
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -839,6 +1228,47 @@ export default function SummaryPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={isEditingProduct} onOpenChange={setIsEditingProduct}>
+        <DialogContent className="rounded-lg max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Beverage</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Beverage Name</label>
+              <Input
+                type="text"
+                value={editingProduct?.title || ''}
+                onChange={(e) => setEditingProduct(prev => prev ? {...prev, title: e.target.value} : null)}
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <Select 
+                value={String(editingProduct?.category || '')}
+                onValueChange={(value) => setEditingProduct(prev => prev ? {...prev, category: Number(value)} : null)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={String(category.id)}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleEditProduct} disabled={loading} className="w-full">
+              {loading ? 'Updating...' : 'Update Beverage'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Beverage Inventory List */}
       <Card className="mb-8">
@@ -866,7 +1296,10 @@ export default function SummaryPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleProductClick(product.id)}
+                        onClick={() => {
+                          setViewingTransactions(product);
+                          handleProductClick(product.id);
+                        }}
                         className="flex-1"
                       >
                         View Transactions
@@ -887,6 +1320,7 @@ export default function SummaryPage() {
                               <TableHead>Type</TableHead>
                               <TableHead>Reason/Source</TableHead>
                               <TableHead>Quantity</TableHead>
+                              <TableHead>Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -904,6 +1338,24 @@ export default function SummaryPage() {
                                   <TableCell>{entry.transaction}</TableCell>
                                   <TableCell className={entry.quantity > 0 ? 'text-green-600' : 'text-red-600'}>
                                     {entry.quantity > 0 ? '+' : ''}{entry.quantity}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => openEditTransaction(entry)}
+                                      >
+                                        <Edit size={14} />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => handleDeleteTransaction(entry.id)}
+                                      >
+                                        <Trash2 size={14} />
+                                      </Button>
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -929,6 +1381,18 @@ export default function SummaryPage() {
                     Record Opening
                   </Button>
 
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditingProduct(product);
+                      setIsEditingProduct(true);
+                    }}
+                    className="flex-1"
+                  >
+                    <Edit size={14} />
+                  </Button>
+
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button
@@ -937,7 +1401,7 @@ export default function SummaryPage() {
                         onClick={() => setProductToDelete(product.id)}
                         className="flex-1"
                       >
-                        Delete
+                        <Trash2 size={14} />
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-md">
