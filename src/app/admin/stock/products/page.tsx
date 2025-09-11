@@ -644,7 +644,7 @@ export default function SummaryPage() {
     }
   };
 
-  const handleDeleteOpeningStock = async (id: number) {
+  const handleDeleteOpeningStock = async (id: number) => {
     if (!confirm('Are you sure you want to delete this opening stock record?')) return;
 
     try {
