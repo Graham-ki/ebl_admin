@@ -802,65 +802,7 @@ export default function SummaryPage() {
       </div>
 
       {/* Category Management */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Categories</span>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm" className="flex items-center gap-1">
-                  <Plus size={16} />
-                  Add Category
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="rounded-lg max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Add New Category</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Category Name"
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                  />
-                  <Button onClick={handleAddCategory} disabled={loading}>
-                    {loading ? 'Adding...' : 'Add Category'}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {categories.map(category => (
-              <div key={category.id} className="flex items-center justify-between p-3 border rounded-lg">
-                <span>{category.name}</span>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setEditingCategory(category);
-                      setIsEditingCategory(true);
-                    }}
-                  >
-                    <Edit size={14} />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => handleDeleteCategory(category.id)}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
+    
       {/* Edit Category Dialog */}
       <Dialog open={isEditingCategory} onOpenChange={setIsEditingCategory}>
         <DialogContent className="rounded-lg max-w-md">
