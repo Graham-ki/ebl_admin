@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { createClient } from "@supabase/supabase-js";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Trash2 } from "lucide-react";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,6 +47,7 @@ interface OpeningStockRecord {
 }
 
 interface OutflowFormData {
+  id?: string;
   material_id: string;
   action: "Damaged" | "Sold" | "Used in production";
   quantity: number;
@@ -54,6 +55,7 @@ interface OutflowFormData {
 }
 
 interface OpeningStockFormData {
+  id?: string;
   material_id: string;
   quantity: number;
   date: string;
@@ -65,6 +67,7 @@ const MaterialsPage = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [isOutflowDialogOpen, setIsOutflowDialogOpen] = useState(false);
   const [isOpeningStockDialogOpen, setIsOpeningStockDialogOpen] = useState(false);
@@ -78,6 +81,7 @@ const MaterialsPage = () => {
     quantity_available: 0,
     category: "Labels",
   });
+  const [editMaterial, setEditMaterial] = useState<Material | null>(null);
   const [outflowForm, setOutflowForm] = useState<OutflowFormData>({
     material_id: "",
     action: "Damaged",
@@ -91,6 +95,8 @@ const MaterialsPage = () => {
   });
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [selectedHistoryDate, setSelectedHistoryDate] = useState<Date>(new Date());
+  const [editingTransaction, setEditingTransaction] = useState<MaterialTransaction | null>(null);
+  const [editingOpeningStock, setEditingOpeningStock] = useState<OpeningStockRecord | null>(null);
 
   useEffect(() => {
     console.log("Component mounted, fetching data...");
@@ -103,7 +109,6 @@ const MaterialsPage = () => {
     
     try {
       // Fetch materials
-     
       const { data: materialsData = [], error: materialsError } = await supabase
         .from("materials")
         .select("id, name, quantity_available, category")
@@ -129,7 +134,6 @@ const MaterialsPage = () => {
       
 
       // Fetch outflows
-      
       const { data: outflows = [], error: outflowError } = await supabase
         .from("material_entries")
         .select("id, material_id, quantity, action, date");
@@ -156,7 +160,6 @@ const MaterialsPage = () => {
       setOpeningStocks(openingStocksData);
 
       // Process transactions
-    
       const inflowTransactions: MaterialTransaction[] = deliveriesData
         .map(delivery => {
           const material = materialsData.find(m => m.id === delivery.material_id);
@@ -201,12 +204,9 @@ const MaterialsPage = () => {
       
 
       // Calculate current quantities
-     
       const quantities: Record<string, number> = {};
       
       materialsData.forEach(material => {
-       
-        
         // Calculate total inflow (opening stock + deliveries with 'Stock' notes)
         const materialOpeningStocks = openingStocksData.filter(os => os.material_id === material.id);
         const openingStock = materialOpeningStocks.reduce((sum, os) => sum + (os.quantity || 0), 0);
@@ -215,11 +215,9 @@ const MaterialsPage = () => {
         const materialDeliveries = deliveriesData.filter(d => d.material_id === material.id);
         const totalDeliveries = materialDeliveries.reduce((sum, d) => sum + (d.quantity || 0), 0);
         
-        
         // Total inflow = opening stock + deliveries
         const totalInflow = openingStock + totalDeliveries;
       
-        
         // Calculate total outflow (from material_entries)
         const materialOutflows = outflows.filter(o => o.material_id === material.id);
         const totalOutflow = materialOutflows.reduce((sum, o) => sum + (o.quantity || 0), 0);
@@ -228,7 +226,6 @@ const MaterialsPage = () => {
         quantities[material.id] = totalInflow - totalOutflow;
       });
 
-      
       setMaterialQuantities(quantities);
       setMaterials(materialsData);
 
@@ -237,7 +234,6 @@ const MaterialsPage = () => {
       CATEGORIES.forEach(c => (expanded[c] = true));
       setExpandedCategories(expanded);
 
-     
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -258,16 +254,63 @@ const MaterialsPage = () => {
     fetchAllData();
   };
 
+  const handleEditMaterial = async () => {
+    if (!editMaterial?.name) return alert("Please enter a material name");
+    
+    const { error } = await supabase
+      .from("materials")
+      .update({
+        name: editMaterial.name,
+        category: editMaterial.category
+      })
+      .eq("id", editMaterial.id);
+    
+    if (error) {
+      console.error("Failed to update material:", error);
+      return alert("Failed to update material");
+    }
+    
+    setIsEditing(false);
+    setEditMaterial(null);
+    fetchAllData();
+  };
+
   const handleRecordOutflow = async () => {
     if (!outflowForm.material_id || outflowForm.quantity <= 0) {
       return alert("Please fill all required fields");
     }
     
-    const { error } = await supabase.from("material_entries").insert([outflowForm]);
-    if (error) {
-      console.error("Failed to record outflow:", error);
-      return alert("Failed to record outflow");
+    // If we're editing an existing outflow
+    if (outflowForm.id) {
+      const { error } = await supabase
+        .from("material_entries")
+        .update({
+          material_id: outflowForm.material_id,
+          action: outflowForm.action,
+          quantity: outflowForm.quantity,
+          date: outflowForm.date
+        })
+        .eq("id", outflowForm.id);
+      
+      if (error) {
+        console.error("Failed to update outflow:", error);
+        return alert("Failed to update outflow");
+      }
+    } else {
+      // Creating a new outflow
+      const { error } = await supabase.from("material_entries").insert([{
+        material_id: outflowForm.material_id,
+        action: outflowForm.action,
+        quantity: outflowForm.quantity,
+        date: outflowForm.date
+      }]);
+      
+      if (error) {
+        console.error("Failed to record outflow:", error);
+        return alert("Failed to record outflow");
+      }
     }
+    
     setIsOutflowDialogOpen(false);
     setOutflowForm({
       material_id: "",
@@ -282,30 +325,51 @@ const MaterialsPage = () => {
     if (!openingStockForm.material_id || openingStockForm.quantity < 0) {
       return alert("Please fill all required fields");
     }
-   
 
-    // Check if opening stock already exists for this material and date
-    const { data: existingRecord, error: checkError } = await supabase
-      .from("opening_stocks")
-      .select("*")
-      .eq("material_id", openingStockForm.material_id)
-      .eq("date", openingStockForm.date)
-      .maybeSingle();
-
-    if (checkError) {
-      console.error("Error checking existing records:", checkError);
-      return alert("Error checking existing records");
-    }
-    if (existingRecord) {
+    // If we're editing an existing opening stock
+    if (openingStockForm.id) {
+      const { error } = await supabase
+        .from("opening_stocks")
+        .update({
+          material_id: openingStockForm.material_id,
+          quantity: openingStockForm.quantity,
+          date: openingStockForm.date
+        })
+        .eq("id", openingStockForm.id);
       
-      return alert("Opening stock already recorded for this material on selected date");
-    }
+      if (error) {
+        console.error("Failed to update opening stock:", error);
+        return alert("Failed to update opening stock");
+      }
+    } else {
+      // Check if opening stock already exists for this material and date
+      const { data: existingRecord, error: checkError } = await supabase
+        .from("opening_stocks")
+        .select("*")
+        .eq("material_id", openingStockForm.material_id)
+        .eq("date", openingStockForm.date)
+        .maybeSingle();
 
-    const { error } = await supabase.from("opening_stocks").insert([openingStockForm]);
-    if (error) {
-      console.error("Failed to record opening stock:", error);
-      return alert("Failed to record opening stock");
+      if (checkError) {
+        console.error("Error checking existing records:", checkError);
+        return alert("Error checking existing records");
+      }
+      if (existingRecord) {
+        return alert("Opening stock already recorded for this material on selected date");
+      }
+
+      const { error } = await supabase.from("opening_stocks").insert([{
+        material_id: openingStockForm.material_id,
+        quantity: openingStockForm.quantity,
+        date: openingStockForm.date
+      }]);
+      
+      if (error) {
+        console.error("Failed to record opening stock:", error);
+        return alert("Failed to record opening stock");
+      }
     }
+    
     setIsOpeningStockDialogOpen(false);
     setOpeningStockForm({
       material_id: "",
@@ -316,11 +380,53 @@ const MaterialsPage = () => {
   };
 
   const handleDeleteMaterial = async (id: string) => {
-    if (!confirm("Are you sure?")) return;
-    console.log("Deleting material with ID:", id);
-    await supabase.from("material_entries").delete().eq("material_id", id);
-    await supabase.from("opening_stocks").delete().eq("material_id", id);
-    await supabase.from("materials").delete().eq("id", id);
+    if (!confirm("Are you sure you want to delete this material?")) return;
+    
+    const { error } = await supabase.from("materials").delete().eq("id", id);
+    if (error) {
+      console.error("Failed to delete material:", error);
+      return alert("Failed to delete material");
+    }
+    
+    fetchAllData();
+  };
+
+  const handleDeleteTransaction = async (id: string, type: TransactionType) => {
+    if (!confirm("Are you sure you want to delete this transaction?")) return;
+    
+    let tableName = "";
+    switch(type) {
+      case "inflow":
+        tableName = "deliveries";
+        break;
+      case "outflow":
+        tableName = "material_entries";
+        break;
+      case "opening_stock":
+        tableName = "opening_stocks";
+        break;
+    }
+    
+    if (!tableName) return;
+    
+    const { error } = await supabase.from(tableName).delete().eq("id", id);
+    if (error) {
+      console.error("Failed to delete transaction:", error);
+      return alert("Failed to delete transaction");
+    }
+    
+    fetchAllData();
+  };
+
+  const handleDeleteOpeningStock = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this opening stock record?")) return;
+    
+    const { error } = await supabase.from("opening_stocks").delete().eq("id", id);
+    if (error) {
+      console.error("Failed to delete opening stock:", error);
+      return alert("Failed to delete opening stock");
+    }
+    
     fetchAllData();
   };
 
@@ -343,7 +449,6 @@ const MaterialsPage = () => {
   };
 
   const calculateOpeningStock = (materialId: string, date: string) => {
-    
     // Find the most recent opening stock before the given date
     const previousOpeningStocks = openingStocks
       .filter(record => record.material_id === materialId && record.date < date)
@@ -352,16 +457,12 @@ const MaterialsPage = () => {
     const mostRecentOpeningStock = previousOpeningStocks[0]?.quantity || 0;
     const mostRecentOpeningStockDate = previousOpeningStocks[0]?.date || "";
 
-    
-
     // Get all transactions between the most recent opening stock date and the target date
     const relevantTransactions = allTransactions.filter(t => 
       t.material_id === materialId && 
       t.date >= mostRecentOpeningStockDate && 
       t.date < date
     );
-
-    
 
     const totalInflow = relevantTransactions
       .filter(t => t.type === "inflow" || t.type === "opening_stock")
@@ -371,17 +472,48 @@ const MaterialsPage = () => {
       .filter(t => t.type === "outflow")
       .reduce((sum, t) => sum + (t.quantity || 0), 0);
 
-    
-    
     const result = mostRecentOpeningStock + totalInflow - totalOutflow;
-  
     
     return result;
   };
 
   const viewHistoryForDate = async () => {
-    
     setIsHistoryDialogOpen(true);
+  };
+
+  const openEditTransactionDialog = (transaction: MaterialTransaction) => {
+    setEditingTransaction(transaction);
+    
+    if (transaction.type === "outflow") {
+      setOutflowForm({
+        id: transaction.id,
+        material_id: transaction.material_id,
+        action: transaction.action as OutflowFormData["action"],
+        quantity: transaction.quantity,
+        date: transaction.date
+      });
+      setIsOutflowDialogOpen(true);
+    } else if (transaction.type === "opening_stock") {
+      setOpeningStockForm({
+        id: transaction.id,
+        material_id: transaction.material_id,
+        quantity: transaction.quantity,
+        date: transaction.date
+      });
+      setIsOpeningStockDialogOpen(true);
+    }
+    // Note: Inflows are from deliveries table which might have a different structure
+  };
+
+  const openEditOpeningStockDialog = (record: OpeningStockRecord) => {
+    setEditingOpeningStock(record);
+    setOpeningStockForm({
+      id: record.id,
+      material_id: record.material_id,
+      quantity: record.quantity,
+      date: record.date
+    });
+    setIsOpeningStockDialogOpen(true);
   };
 
   return (
@@ -462,6 +594,17 @@ const MaterialsPage = () => {
                           </Button>
                           <Button 
                             size="sm" 
+                            variant="secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditMaterial(mat);
+                              setIsEditing(true);
+                            }}
+                          >
+                            <Edit size={16} />
+                          </Button>
+                          <Button 
+                            size="sm" 
                             variant="secondary" 
                             onClick={(e) => {
                               e.stopPropagation();
@@ -475,7 +618,16 @@ const MaterialsPage = () => {
                           >
                             Record Opening
                           </Button>
-                          <Button size="sm" variant="destructive" onClick={() => handleDeleteMaterial(mat.id)}>Delete</Button>
+                          <Button 
+                            size="sm" 
+                            variant="destructive" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMaterial(mat.id);
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -502,9 +654,32 @@ const MaterialsPage = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Material Dialog */}
+      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Material</DialogTitle></DialogHeader>
+          <Input 
+            placeholder="Material Name" 
+            value={editMaterial?.name || ""} 
+            onChange={e => setEditMaterial(prev => prev ? {...prev, name: e.target.value} : null)} 
+          />
+          <Select 
+            value={editMaterial?.category || "Labels"} 
+            onValueChange={v => setEditMaterial(prev => prev ? {...prev, category: v as Material["category"]} : null)}
+          >
+            <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+            <Button onClick={handleEditMaterial}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* View Details Dialog */}
       <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>
               {viewMaterial?.id === viewMaterial?.category ? 
@@ -525,6 +700,7 @@ const MaterialsPage = () => {
                   <TableHead>Type</TableHead>
                   <TableHead>Quantity</TableHead>
                   <TableHead>Action</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -538,6 +714,25 @@ const MaterialsPage = () => {
                       <TableCell className="capitalize">{transaction.type.replace("_", " ")}</TableCell>
                       <TableCell>{transaction.quantity}</TableCell>
                       <TableCell>{transaction.action}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEditTransactionDialog(transaction)}
+                            disabled={transaction.type === "inflow"} // Disable edit for inflows for now
+                          >
+                            <Edit size={14} />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleDeleteTransaction(transaction.id, transaction.type)}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
               </TableBody>
@@ -583,15 +778,19 @@ const MaterialsPage = () => {
       <Dialog open={isOpeningStockDialogOpen} onOpenChange={setIsOpeningStockDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Record Opening Stock</DialogTitle>
+            <DialogTitle>
+              {openingStockForm.id ? "Edit Opening Stock" : "Record Opening Stock"}
+            </DialogTitle>
             <DialogDescription>
-              Record the opening stock quantity for a material on a specific date
+              {openingStockForm.id 
+                ? "Edit the opening stock quantity for a material" 
+                : "Record the opening stock quantity for a material on a specific date"}
             </DialogDescription>
           </DialogHeader>
           <Select 
             value={openingStockForm.material_id}
             onValueChange={v => setOpeningStockForm({ ...openingStockForm, material_id: v })}
-            disabled={!!viewMaterial?.id && viewMaterial.id !== viewMaterial.category}
+            disabled={!!openingStockForm.id} // Disable material selection when editing
           >
             <SelectTrigger>
               <SelectValue placeholder="Select Material" />
@@ -612,10 +811,20 @@ const MaterialsPage = () => {
             type="date" 
             value={openingStockForm.date} 
             onChange={e => setOpeningStockForm({ ...openingStockForm, date: e.target.value })} 
+            disabled={!!openingStockForm.id} // Disable date change when editing
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsOpeningStockDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleRecordOpeningStock}>Record</Button>
+            <Button variant="outline" onClick={() => {
+              setIsOpeningStockDialogOpen(false);
+              setOpeningStockForm({
+                material_id: "",
+                quantity: 0,
+                date: new Date().toISOString().split("T")[0],
+              });
+            }}>Cancel</Button>
+            <Button onClick={handleRecordOpeningStock}>
+              {openingStockForm.id ? "Update" : "Record"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -623,11 +832,15 @@ const MaterialsPage = () => {
       {/* Record Outflow Dialog */}
       <Dialog open={isOutflowDialogOpen} onOpenChange={setIsOutflowDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Record Outflow</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              {outflowForm.id ? "Edit Outflow" : "Record Outflow"}
+            </DialogTitle>
+          </DialogHeader>
           <Select 
             value={outflowForm.material_id}
             onValueChange={v => setOutflowForm({ ...outflowForm, material_id: v })}
-            disabled={!!viewMaterial?.id && viewMaterial.id !== viewMaterial.category}
+            disabled={!!outflowForm.id} // Disable material selection when editing
           >
             <SelectTrigger><SelectValue placeholder="Select Material" /></SelectTrigger>
             <SelectContent>
@@ -655,15 +868,25 @@ const MaterialsPage = () => {
             onChange={e => setOutflowForm({ ...outflowForm, date: e.target.value })} 
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsOutflowDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleRecordOutflow}>Record</Button>
+            <Button variant="outline" onClick={() => {
+              setIsOutflowDialogOpen(false);
+              setOutflowForm({
+                material_id: "",
+                action: "Damaged",
+                quantity: 0,
+                date: new Date().toISOString().split("T")[0],
+              });
+            }}>Cancel</Button>
+            <Button onClick={handleRecordOutflow}>
+              {outflowForm.id ? "Update" : "Record"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Opening Stock History Dialog */}
       <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>Opening Stock History</DialogTitle>
             <DialogDescription>
@@ -690,27 +913,42 @@ const MaterialsPage = () => {
                   <TableHead>Material</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Opening Stock</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {materials.map(material => {
-                  const dateKey = selectedHistoryDate.toISOString().split("T")[0];
-                  const record = openingStocks.find(
-                    r => r.material_id === material.id && r.date === dateKey
-                  );
-                  const calculatedStock = calculateOpeningStock(material.id, dateKey);
-                  
-                  return (
-                    <TableRow key={material.id}>
-                      <TableCell>{material.name}</TableCell>
-                      <TableCell>{material.category}</TableCell>
-                      <TableCell className="text-right">
-                        {record ? record.quantity : calculatedStock}
-                        {!record && " (calculated)"}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {openingStocks
+                  .filter(record => record.date === selectedHistoryDate.toISOString().split("T")[0])
+                  .map(record => {
+                    const material = materials.find(m => m.id === record.material_id);
+                    return (
+                      <TableRow key={record.id}>
+                        <TableCell>{material?.name || "Unknown Material"}</TableCell>
+                        <TableCell>{material?.category || "Unknown"}</TableCell>
+                        <TableCell className="text-right">{record.quantity}</TableCell>
+                        <TableCell>{record.date}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEditOpeningStockDialog(record)}
+                            >
+                              <Edit size={14} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteOpeningStock(record.id)}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
               </TableBody>
             </Table>
           </div>
