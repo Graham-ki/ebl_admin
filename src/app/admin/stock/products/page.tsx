@@ -1,6 +1,6 @@
 'use client';
 import slugify from 'slugify';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import {
@@ -121,6 +121,25 @@ export default function SummaryPage() {
   const [viewingTransactions, setViewingTransactions] = useState<Product | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<ProductEntry | null>(null);
 
+  // Calculate available quantities with useCallback to prevent infinite re-renders
+  const calculateAvailableQuantities = useCallback((entries: ProductEntry[], stocks: OpeningStock[]) => {
+    const quantities: Record<number, number> = {};
+
+    // Initialize with opening stocks
+    stocks.forEach(stock => {
+      if (!quantities[stock.product_id]) quantities[stock.product_id] = 0;
+      quantities[stock.product_id] += stock.quantity;
+    });
+
+    // Add inflows and subtract outflows
+    entries.forEach(entry => {
+      if (!quantities[entry.product_id]) quantities[entry.product_id] = 0;
+      quantities[entry.product_id] += entry.quantity;
+    });
+
+    setAvailableQuantities(quantities);
+  }, []);
+
   // Fetch all data
   useEffect(() => {
     const fetchAllData = async () => {
@@ -165,30 +184,12 @@ export default function SummaryPage() {
     };
 
     fetchAllData();
-  }, []);
+  }, [calculateAvailableQuantities]);
 
   // Recalculate available quantities when product entries or opening stocks change
   useEffect(() => {
     calculateAvailableQuantities(productEntries, openingStocks);
-  }, [productEntries, openingStocks]);
-
-  const calculateAvailableQuantities = (entries: ProductEntry[], stocks: OpeningStock[]) => {
-    const quantities: Record<number, number> = {};
-
-    // Initialize with opening stocks
-    stocks.forEach(stock => {
-      if (!quantities[stock.product_id]) quantities[stock.product_id] = 0;
-      quantities[stock.product_id] += stock.quantity;
-    });
-
-    // Add inflows and subtract outflows
-    entries.forEach(entry => {
-      if (!quantities[entry.product_id]) quantities[entry.product_id] = 0;
-      quantities[entry.product_id] += entry.quantity;
-    });
-
-    setAvailableQuantities(quantities);
-  };
+  }, [productEntries, openingStocks, calculateAvailableQuantities]);
 
   const fetchProductEntriesForProduct = async (productId: number) => {
     const { data, error } = await supabase
@@ -643,7 +644,7 @@ export default function SummaryPage() {
     }
   };
 
-  const handleDeleteOpeningStock = async (id: number) => {
+  const handleDeleteOpeningStock = async (id: number) {
     if (!confirm('Are you sure you want to delete this opening stock record?')) return;
 
     try {
@@ -1315,13 +1316,11 @@ export default function SummaryPage() {
                       <div className="max-h-[500px] overflow-auto">
                         <Table>
                           <TableHeader>
-                            <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Reason/Source</TableHead>
-                              <TableHead>Quantity</TableHead>
-                              <TableHead>Actions</TableHead>
-                            </TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Reason/Source</TableHead>
+                            <TableHead>Quantity</TableHead>
+                            <TableHead>Actions</TableHead>
                           </TableHeader>
                           <TableBody>
                             {productEntries
@@ -1370,6 +1369,7 @@ export default function SummaryPage() {
                     size="sm"
                     onClick={() => {
                       setOpeningStockForm({
+                        id: null, // Fixed: Added the missing id property
                         date: new Date().toISOString().split('T')[0],
                         product_id: String(product.id),
                         quantity: String(availableQuantities[product.id] || '0'),
