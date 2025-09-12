@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { createClient } from "@supabase/supabase-js";
-import { ChevronDown, ChevronRight, Edit, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Trash2, Plus, RefreshCw } from "lucide-react";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -133,7 +133,7 @@ const MaterialsPage = () => {
       }
       
 
-      // Fetch outflows
+      // Fetch outflows - convert negative values to positive
       const { data: outflows = [], error: outflowError } = await supabase
         .from("material_entries")
         .select("id, material_id, quantity, action, date");
@@ -143,6 +143,11 @@ const MaterialsPage = () => {
         throw outflowError;
       }
       
+      // Convert negative outflow quantities to positive
+      const processedOutflows = outflows.map(outflow => ({
+        ...outflow,
+        quantity: Math.abs(outflow.quantity) // Convert negative values to positive
+      }));
 
       // Fetch opening stocks
       console.log("Fetching opening stocks...");
@@ -179,7 +184,7 @@ const MaterialsPage = () => {
         })
         .filter((t): t is MaterialTransaction => t !== null);
 
-      const outflowTransactions: MaterialTransaction[] = outflows.map(entry => ({
+      const outflowTransactions: MaterialTransaction[] = processedOutflows.map(entry => ({
         id: entry.id,
         date: new Date(entry.date).toISOString().split("T")[0],
         type: "outflow",
@@ -203,7 +208,7 @@ const MaterialsPage = () => {
       setAllTransactions(combinedTransactions);
       
 
-      // Calculate current quantities
+      // Calculate current quantities with corrected logic
       const quantities: Record<string, number> = {};
       
       materialsData.forEach(material => {
@@ -218,8 +223,8 @@ const MaterialsPage = () => {
         // Total inflow = opening stock + deliveries
         const totalInflow = openingStock + totalDeliveries;
       
-        // Calculate total outflow (from material_entries)
-        const materialOutflows = outflows.filter(o => o.material_id === material.id);
+        // Calculate total outflow (from material_entries) - using absolute values
+        const materialOutflows = processedOutflows.filter(o => o.material_id === material.id);
         const totalOutflow = materialOutflows.reduce((sum, o) => sum + (o.quantity || 0), 0);
         
         // Current quantity = inflow - outflow
@@ -526,116 +531,122 @@ const MaterialsPage = () => {
           <Button variant="outline" onClick={() => viewHistoryForDate()}>
             View Opening Stock History
           </Button>
-          <Button onClick={() => setIsAdding(true)}>Add Material</Button>
+          <Button onClick={() => setIsAdding(true)}>
+            <Plus size={16} className="mr-1" /> Add Material
+          </Button>
           <Button variant="outline" onClick={() => {
             console.log("Manual refresh triggered");
             fetchAllData();
           }}>
-            Refresh Data
+            <RefreshCw size={16} className="mr-1" /> Refresh Data
           </Button>
         </div>
       </div>
 
       {loading ? (
-        <div>Loading...</div>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+        </div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="text-right">Quantity</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {CATEGORIES.map(cat => {
-              const catMats = getMaterialsByCategory(cat);
-              if (!catMats.length) return null;
-              return (
-                <>
-                  <TableRow key={`${cat}-header`} onClick={() => toggleCategory(cat)} className="cursor-pointer">
-                    <TableCell className="font-bold flex items-center">
-                      {expandedCategories[cat] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                      {cat}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {catMats.reduce((sum, m) => sum + (materialQuantities[m.id] || 0), 0)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setViewMaterial({ id: cat, name: cat, category: cat, quantity_available: 0 });
-                          setIsViewDetailsOpen(true);
-                        }}
-                      >
-                        View All
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                  {expandedCategories[cat] &&
-                    catMats.map(mat => (
-                      <TableRow key={mat.id} className="bg-gray-50">
-                        <TableCell className="pl-8">{mat.name}</TableCell>
-                        <TableCell className="text-right">{materialQuantities[mat.id] || 0}</TableCell>
-                        <TableCell className="text-right flex justify-end gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setViewMaterial(mat);
-                              setIsViewDetailsOpen(true);
-                            }}
-                          >
-                            Details
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="secondary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditMaterial(mat);
-                              setIsEditing(true);
-                            }}
-                          >
-                            <Edit size={16} />
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="secondary" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpeningStockForm({
-                                ...openingStockForm,
-                                material_id: mat.id,
-                                date: new Date().toISOString().split("T")[0],
-                              });
-                              setIsOpeningStockDialogOpen(true);
-                            }}
-                          >
-                            Record Opening
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="destructive" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteMaterial(mat.id);
-                            }}
-                          >
-                            <Trash2 size={16} />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-100">
+                <TableHead className="font-semibold">Name</TableHead>
+                <TableHead className="text-right font-semibold">Quantity</TableHead>
+                <TableHead className="text-right font-semibold">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {CATEGORIES.map(cat => {
+                const catMats = getMaterialsByCategory(cat);
+                if (!catMats.length) return null;
+                return (
+                  <>
+                    <TableRow key={`${cat}-header`} onClick={() => toggleCategory(cat)} className="cursor-pointer bg-gray-50 hover:bg-gray-100">
+                      <TableCell className="font-bold flex items-center">
+                        {expandedCategories[cat] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                        {cat}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {catMats.reduce((sum, m) => sum + (materialQuantities[m.id] || 0), 0)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={e => {
+                            e.stopPropagation();
+                            setViewMaterial({ id: cat, name: cat, category: cat, quantity_available: 0 });
+                            setIsViewDetailsOpen(true);
+                          }}
+                        >
+                          View All
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                    {expandedCategories[cat] &&
+                      catMats.map(mat => (
+                        <TableRow key={mat.id} className="hover:bg-gray-50">
+                          <TableCell className="pl-8">{mat.name}</TableCell>
+                          <TableCell className="text-right font-medium">{materialQuantities[mat.id] || 0}</TableCell>
+                          <TableCell className="text-right flex justify-end gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setViewMaterial(mat);
+                                setIsViewDetailsOpen(true);
+                              }}
+                            >
+                              Details
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="secondary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditMaterial(mat);
+                                setIsEditing(true);
+                              }}
+                            >
+                              <Edit size={16} />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="secondary" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpeningStockForm({
+                                  ...openingStockForm,
+                                  material_id: mat.id,
+                                  date: new Date().toISOString().split("T")[0],
+                                });
+                                setIsOpeningStockDialogOpen(true);
+                              }}
+                            >
+                              Record Opening
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="destructive" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteMaterial(mat.id);
+                              }}
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
       )}
 
       {/* Add Material Dialog */}
