@@ -247,15 +247,16 @@ export default function MarketersPage() {
 
       if (openingBalancesError) throw openingBalancesError;
 
+      // Create transactions with proper financial logic
       const allTransactions = [
         ...(openingBalancesData?.map(balance => ({
           type: 'opening_balance',
           id: balance.id,
           date: balance.created_at,
           item: `Opening Balance`,
-          amount: balance.amount,
+          amount: -parseFloat(balance.amount), // Opening balance is a liability (negative)
           quantity: 1,
-          unit_price: balance.amount,
+          unit_price: -parseFloat(balance.amount),
           payment: 0,
           expense: 0,
           status: balance.status,
@@ -271,7 +272,7 @@ export default function MarketersPage() {
           item: order.item,
           quantity: order.quantity,
           unit_price: order.cost,
-          amount: order.quantity * order.cost,
+          amount: -(order.quantity * order.cost), // Orders create debt (negative)
           payment: 0,
           expense: 0,
           purpose: '',
@@ -286,7 +287,7 @@ export default function MarketersPage() {
           date: payment.created_at,
           order_id: payment.order_id,
           amount: 0,
-          payment: payment.amount_paid,
+          payment: payment.amount_paid, // Payments are income (positive)
           expense: 0,
           item: `Payment (${payment.mode_of_payment})`,
           mode_of_payment: payment.mode_of_payment,
@@ -304,7 +305,7 @@ export default function MarketersPage() {
           item: expense.item,
           amount: 0,
           payment: 0,
-          expense: expense.amount_spent,
+          expense: -expense.amount_spent, // Expenses are negative
           description: `Expense: ${expense.item}`,
           purpose: '',
           status: '',
@@ -316,27 +317,23 @@ export default function MarketersPage() {
         })) || [])
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      let orderBalance = 0;
+      // Calculate running balances
       let netBalance = 0;
       const transactionsWithBalance = allTransactions.map(transaction => {
         if (transaction.type === 'opening_balance') {
           netBalance += transaction.amount;
         } else if (transaction.type === 'order') {
-          orderBalance += transaction.amount;
           netBalance += transaction.amount;
         } else if (transaction.type === 'payment') {
-          if (transaction.purpose === 'Debt Clearance') {
-            netBalance -= transaction.payment;
-          } else {
-            orderBalance -= transaction.payment;
-            netBalance -= transaction.payment;
-          }
+          netBalance += transaction.payment;
         } else if (transaction.type === 'expense') {
-          netBalance -= transaction.expense;
+          netBalance += transaction.expense;
         }
+        
         return {
           ...transaction,
-          order_balance: orderBalance,
+          // Order balance is only shown for order entries, not a running total
+          order_balance: transaction.type === 'order' ? transaction.amount : 0,
           net_balance: netBalance
         };
       });
@@ -1523,7 +1520,7 @@ export default function MarketersPage() {
                 setNewPayment({
                   date: new Date().toISOString().split('T')[0],
                   amount: "",
-                  mode_of_payment: "",
+                    mode_of_payment: "",
                   bank_name: "",
                   mobile_money_provider: "",
                   purpose: "Order Payment",
@@ -1961,15 +1958,15 @@ export default function MarketersPage() {
                       {transaction.type === 'payment' ? transaction.payment.toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'expense' ? transaction.expense.toLocaleString() : '-'}
+                      {transaction.type === 'expense' ? (-transaction.expense).toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className={`text-right font-medium ${
-                      transaction.order_balance > 0 ? 'text-red-600' : 'text-green-600'
+                      transaction.order_balance < 0 ? 'text-red-600' : 'text-green-600'
                     }`}>
                       {transaction.order_balance.toLocaleString()}
                     </TableCell>
                     <TableCell className={`text-right font-medium ${
-                      transaction.net_balance > 0 ? 'text-red-600' : 'text-green-600'
+                      transaction.net_balance < 0 ? 'text-red-600' : 'text-green-600'
                     }`}>
                       {transaction.net_balance.toLocaleString()}
                     </TableCell>
