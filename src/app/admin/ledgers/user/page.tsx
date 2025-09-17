@@ -253,9 +253,9 @@ export default function MarketersPage() {
           id: balance.id,
           date: balance.created_at,
           item: `Opening Balance`,
-          amount: -parseFloat(balance.amount),
+          amount: parseFloat(balance.amount),
           quantity: 1,
-          unit_price: -parseFloat(balance.amount),
+          unit_price: parseFloat(balance.amount),
           payment: 0,
           expense: 0,
           status: balance.status,
@@ -271,7 +271,7 @@ export default function MarketersPage() {
           item: order.item,
           quantity: order.quantity,
           unit_price: order.cost,
-          amount: -(order.quantity * order.cost),
+          amount: order.quantity * order.cost,
           payment: 0,
           expense: 0,
           purpose: '',
@@ -304,7 +304,7 @@ export default function MarketersPage() {
           item: expense.item,
           amount: 0,
           payment: 0,
-          expense: -expense.amount_spent,
+          expense: expense.amount_spent,
           description: `Expense: ${expense.item}`,
           purpose: '',
           status: '',
@@ -321,16 +321,16 @@ export default function MarketersPage() {
         if (transaction.type === 'opening_balance') {
           netBalance += transaction.amount;
         } else if (transaction.type === 'order') {
-          netBalance += transaction.amount;
+          netBalance -= transaction.amount;
         } else if (transaction.type === 'payment') {
           netBalance += transaction.payment;
         } else if (transaction.type === 'expense') {
-          netBalance += transaction.expense;
+          netBalance -= transaction.expense;
         }
         
         return {
           ...transaction,
-          order_balance: transaction.type === 'order' ? transaction.amount : 0,
+          order_balance: transaction.type === 'order' ? -transaction.amount : 0,
           net_balance: netBalance
         };
       });
@@ -856,7 +856,7 @@ export default function MarketersPage() {
         t.type === 'order' || t.type === 'opening_balance' ? t.unit_price : '',
         t.type === 'order' || t.type === 'opening_balance' ? t.amount : '',
         t.type === 'payment' ? t.payment : '',
-        t.type === 'expense' ? (-t.expense).toLocaleString() : '',
+        t.type === 'expense' ? t.expense.toLocaleString() : '',
         t.order_balance,
         t.net_balance
       ].map(v => `"${v}"`).join(","))
@@ -1901,7 +1901,7 @@ export default function MarketersPage() {
                         transaction.type === 'payment' ?
                         `Payment (${transaction.mode_of_payment}) - ${transaction.purpose}` :
                         transaction.type === 'opening_balance' ?
-                        `Opening Balance (${transaction.status})` :
+                        `Opening Balance (${transaction.status)` :
                         `Expense: ${transaction.item}`}
                       {transaction.bank_name && ` - ${transaction.bank_name}`}
                       {transaction.mobile_money_provider && ` - ${transaction.mobile_money_provider}`}
@@ -1919,7 +1919,7 @@ export default function MarketersPage() {
                       {transaction.type === 'payment' ? transaction.payment.toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'expense' ? (-transaction.expense).toLocaleString() : '-'}
+                      {transaction.type === 'expense' ? transaction.expense.toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className={`text-right font-medium ${
                       transaction.order_balance < 0 ? 'text-red-600' : 'text-green-600'
@@ -2012,6 +2012,18 @@ export default function MarketersPage() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+            <div className="flex justify-between items-center">
+              <div className="font-medium">
+                Total Paid: {totalPaid.toLocaleString()}
+              </div>
+              {selectedOrder && (
+                <div className={`font-medium ${
+                  balance > 0 ? 'text-red-600' : 'text-green-600'
+                }`}>
+                  Balance: {Math.abs(balance).toLocaleString()} ({balance > 0 ? 'Due' : 'Overpaid'})
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
