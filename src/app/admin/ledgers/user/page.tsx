@@ -919,6 +919,7 @@ export default function MarketersPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-6">
+      <div className="container mx-auto p-4 md:p-6">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
           Marketers Management
@@ -1150,7 +1151,6 @@ export default function MarketersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Opening Balances List Dialog */}
       <Dialog open={showOpeningBalancesList} onOpenChange={setShowOpeningBalancesList}>
         <DialogContent className="max-w-4xl rounded-lg max-h-[80vh] overflow-y-auto">
@@ -1876,7 +1876,7 @@ export default function MarketersPage() {
       <Dialog open={showLedgerDialog} onOpenChange={setShowLedgerDialog}>
         <DialogContent className="max-w-6xl rounded-lg">
           <DialogHeader>
-            <DialogTitle className="text-lg font-sem极目bold">
+            <DialogTitle className="text-lg font-semibold">
               General Ledger for {selectedMarketer?.name}
             </DialogTitle>
           </DialogHeader>
@@ -1897,9 +1897,9 @@ export default function MarketersPage() {
                   <TableHead className="font-semibold">Description</TableHead>
                   <TableHead className="font-semibold text-right">Quantity</TableHead>
                   <TableHead className="font-semibold text-right">Unit Price</TableHead>
-                  <TableHead className="font-sem极目bold text-right">Order Amount</TableHead>
+                  <TableHead className="font-semibold text-right">Order Amount</TableHead>
                   <TableHead className="font-semibold text-right">Payment</TableHead>
-                  <Table极目className="font-semibold text-right">Expense</Table极目>
+                  <TableHead className="font-semibold text-right">Expense</TableHead>
                   <TableHead className="font-semibold text-right">Order Balance</TableHead>
                   <TableHead className="font-semibold text-right">Net Balance</TableHead>
                 </TableRow>
@@ -1928,7 +1928,7 @@ export default function MarketersPage() {
                       {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.unit_price.toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {transaction.type === 'order' || transaction.type === 'opening极目alance' ? transaction.amount.toLocaleString() : '-'}
+                      {transaction.type === 'order' || transaction.type === 'opening_balance' ? transaction.amount.toLocaleString() : '-'}
                     </TableCell>
                     <TableCell className="text-right">
                       {transaction.type === 'payment' ? transaction.payment.toLocaleString() : '-'}
@@ -1944,7 +1944,7 @@ export default function MarketersPage() {
                     <TableCell className={`text-right font-medium ${
                       transaction.net_balance < 0 ? 'text-red-600' : 'text-green-600'
                     }`}>
-                      {transaction.net_balance.toLocale极目()}
+                      {transaction.net_balance.toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -2012,7 +2012,7 @@ export default function MarketersPage() {
                             variant="destructive"
                             onClick={() => deletePayment(payment.id)}
                           >
-                            <Trash2 size极目4} />
+                            <Trash2 size={14} />
                           </Button>
                         </div>
                       </TableCell>
