@@ -93,6 +93,7 @@ interface Payment {
   mode_of_mobilemoney?: string;
   purpose?: string;
   order_id?: string;
+  user_id?: string;
 }
 
 interface Expense {
@@ -113,6 +114,7 @@ interface OpeningBalance {
     id: string;
     name: string;
   };
+  paid_amount?: number;
 }
 
 export default function ClientsPage() {
@@ -126,6 +128,7 @@ export default function ClientsPage() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [openingBalances, setOpeningBalances] = useState<OpeningBalance[]>([]);
+  const [clientPayments, setClientPayments] = useState<Payment[]>([]);
   
   const [newPayment, setNewPayment] = useState({
     date: getCurrentEATDateTime(),
@@ -133,7 +136,7 @@ export default function ClientsPage() {
     mode_of_payment: "",
     bank_name: "",
     mobile_money_provider: "",
-    purpose: "Order Payment",
+    purpose: "Payment for Orders",
     order_id: ""
   });
   
@@ -253,7 +256,29 @@ export default function ClientsPage() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setOpeningBalances(data || []);
+      
+      // Calculate paid amounts for each opening balance
+      const balancesWithPaidAmounts = await Promise.all(
+        (data || []).map(async (balance) => {
+          const { data: paymentsData, error: paymentsError } = await supabase
+            .from("finance")
+            .select("amount_paid")
+            .eq("user_id", balance.client_id)
+            .eq("purpose", "Debt Clearance")
+            .order("created_at", { ascending: true });
+
+          if (paymentsError) throw paymentsError;
+
+          const paidAmount = paymentsData?.reduce((sum, payment) => sum + payment.amount_paid, 0) || 0;
+          
+          return {
+            ...balance,
+            paid_amount: paidAmount
+          };
+        })
+      );
+
+      setOpeningBalances(balancesWithPaidAmounts || []);
     } catch (error) {
       console.error("Error fetching opening balances:", error);
     } finally {
@@ -301,6 +326,24 @@ export default function ClientsPage() {
       setPayments(data || []);
     } catch (error) {
       console.error("Error fetching payments:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchClientPayments = async (clientId: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("finance")
+        .select("*")
+        .eq("user_id", clientId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setClientPayments(data || []);
+    } catch (error) {
+      console.error("Error fetching client payments:", error);
     } finally {
       setLoading(false);
     }
@@ -483,60 +526,170 @@ export default function ClientsPage() {
     if (!selectedClient || !newPayment.amount || !newPayment.mode_of_payment) return;
 
     try {
-      const paymentData: any = {
-        amount_paid: parseFloat(newPayment.amount),
-        created_at: newPayment.date,
-        user_id: selectedClient.id,
-        mode_of_payment: newPayment.mode_of_payment,
-        payment_reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-        purpose: newPayment.purpose
-      };
+      // Check if client has an opening balance
+      const { data: balances, error: balanceError } = await supabase
+        .from("opening_balances")
+        .select("*")
+        .eq("client_id", selectedClient.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      if (newPayment.purpose === "Order Payment" && newPayment.order_id) {
-        paymentData.order_id = newPayment.order_id;
-      }
-
-      if (newPayment.mode_of_payment === 'Bank') {
-        paymentData.bank_name = newPayment.bank_name;
-      } else if (newPayment.mode_of_payment === 'Mobile Money') {
-        paymentData.mode_of_mobilemoney = newPayment.mobile_money_provider;
-      }
-
-      const { error } = await supabase
-        .from("finance")
-        .insert([paymentData]);
-
-      if (error) throw error;
+      if (balanceError) throw balanceError;
       
-      if (newPayment.purpose === "Debt Clearance") {
-        const { data: balances, error: balanceError } = await supabase
-          .from("opening_balances")
-          .select("*")
-          .eq("client_id", selectedClient.id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (balanceError) throw balanceError;
+      let paymentPurpose = "Payment for Orders";
+      let amountToDeduct = parseFloat(newPayment.amount);
+      
+      // If client has an opening balance that's not fully paid
+      if (balances && balances.length > 0 && balances[0].status !== "Paid") {
+        const balance = balances[0];
+        const balanceAmount = parseFloat(balance.amount);
         
-        if (balances && balances.length > 0) {
-          const balance = balances[0];
-          const newAmount = parseFloat(balance.amount) - parseFloat(newPayment.amount);
+        // Get total payments made for debt clearance
+        const { data: debtPayments, error: debtPaymentsError } = await supabase
+          .from("finance")
+          .select("amount_paid")
+          .eq("user_id", selectedClient.id)
+          .eq("purpose", "Debt Clearance");
+
+        if (debtPaymentsError) throw debtPaymentsError;
+        
+        const totalPaidForDebt = debtPayments?.reduce((sum, payment) => sum + payment.amount_paid, 0) || 0;
+        const remainingDebt = balanceAmount - totalPaidForDebt;
+        
+        if (remainingDebt > 0) {
+          paymentPurpose = "Debt Clearance";
           
-          const { error: updateError } = await supabase
-            .from("opening_balances")
-            .update({ 
-              amount: newAmount.toString(),
-              status: newAmount <= 0 ? "Paid" : "Pending Clearance"
-            })
-            .eq("id", balance.id);
+          // If payment amount is more than remaining debt, split the payment
+          if (amountToDeduct > remainingDebt) {
+            // First part for debt clearance
+            const debtClearanceAmount = remainingDebt;
+            
+            // Create debt clearance payment
+            const debtPaymentData: any = {
+              amount_paid: debtClearanceAmount,
+              created_at: newPayment.date,
+              user_id: selectedClient.id,
+              mode_of_payment: newPayment.mode_of_payment,
+              payment_reference: `PAY-DEBT-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+              purpose: "Debt Clearance"
+            };
 
-          if (updateError) throw updateError;
+            if (newPayment.mode_of_payment === 'Bank') {
+              debtPaymentData.bank_name = newPayment.bank_name;
+            } else if (newPayment.mode_of_payment === 'Mobile Money') {
+              debtPaymentData.mode_of_mobilemoney = newPayment.mobile_money_provider;
+            }
+
+            const { error: debtPaymentError } = await supabase
+              .from("finance")
+              .insert([debtPaymentData]);
+
+            if (debtPaymentError) throw debtPaymentError;
+            
+            // Update opening balance status to Paid
+            const { error: updateError } = await supabase
+              .from("opening_balances")
+              .update({ 
+                status: "Paid"
+              })
+              .eq("id", balance.id);
+
+            if (updateError) throw updateError;
+            
+            // Second part for order payment (if any)
+            const orderPaymentAmount = amountToDeduct - debtClearanceAmount;
+            if (orderPaymentAmount > 0) {
+              const orderPaymentData: any = {
+                amount_paid: orderPaymentAmount,
+                created_at: newPayment.date,
+                user_id: selectedClient.id,
+                mode_of_payment: newPayment.mode_of_payment,
+                payment_reference: `PAY-ORDER-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+                purpose: "Payment for Orders"
+              };
+
+              if (newPayment.mode_of_payment === 'Bank') {
+                orderPaymentData.bank_name = newPayment.bank_name;
+              } else if (newPayment.mode_of_payment === 'Mobile Money') {
+                orderPaymentData.mode_of_mobilemoney = newPayment.mobile_money_provider;
+              }
+
+              const { error: orderPaymentError } = await supabase
+                .from("finance")
+                .insert([orderPaymentData]);
+
+              if (orderPaymentError) throw orderPaymentError;
+            }
+          } else {
+            // Entire payment goes to debt clearance
+            const paymentData: any = {
+              amount_paid: amountToDeduct,
+              created_at: newPayment.date,
+              user_id: selectedClient.id,
+              mode_of_payment: newPayment.mode_of_payment,
+              payment_reference: `PAY-DEBT-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+              purpose: "Debt Clearance"
+            };
+
+            if (newPayment.mode_of_payment === 'Bank') {
+              paymentData.bank_name = newPayment.bank_name;
+            } else if (newPayment.mode_of_payment === 'Mobile Money') {
+              paymentData.mode_of_mobilemoney = newPayment.mobile_money_provider;
+            }
+
+            const { error } = await supabase
+              .from("finance")
+              .insert([paymentData]);
+
+            if (error) throw error;
+            
+            // Check if debt is fully paid after this payment
+            const newTotalPaid = totalPaidForDebt + amountToDeduct;
+            const newStatus = newTotalPaid >= balanceAmount ? "Paid" : "Pending Clearance";
+            
+            const { error: updateError } = await supabase
+              .from("opening_balances")
+              .update({ 
+                status: newStatus
+              })
+              .eq("id", balance.id);
+
+            if (updateError) throw updateError;
+          }
+        } else {
+          // No remaining debt, proceed with normal order payment
+          paymentPurpose = "Payment for Orders";
         }
+      } else {
+        // No opening balance or already paid, proceed with normal order payment
+        paymentPurpose = "Payment for Orders";
+      }
+      
+      // If payment wasn't already processed as debt clearance, process as order payment
+      if (paymentPurpose === "Payment for Orders") {
+        const paymentData: any = {
+          amount_paid: amountToDeduct,
+          created_at: newPayment.date,
+          user_id: selectedClient.id,
+          mode_of_payment: newPayment.mode_of_payment,
+          payment_reference: `PAY-ORDER-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+          purpose: "Payment for Orders"
+        };
+
+        if (newPayment.mode_of_payment === 'Bank') {
+          paymentData.bank_name = newPayment.bank_name;
+        } else if (newPayment.mode_of_payment === 'Mobile Money') {
+          paymentData.mode_of_mobilemoney = newPayment.mobile_money_provider;
+        }
+
+        const { error } = await supabase
+          .from("finance")
+          .insert([paymentData]);
+
+        if (error) throw error;
       }
 
-      if (newPayment.order_id) {
-        await fetchPayments(newPayment.order_id);
-      }
+      await fetchClientPayments(selectedClient.id);
       await fetchTransactions(selectedClient.id);
       await fetchOpeningBalances();
       
@@ -546,7 +699,7 @@ export default function ClientsPage() {
         mode_of_payment: "",
         bank_name: "",
         mobile_money_provider: "",
-        purpose: "Order Payment",
+        purpose: "Payment for Orders",
         order_id: ""
       });
       setShowPaymentForm(false);
@@ -583,6 +736,7 @@ export default function ClientsPage() {
         await fetchPayments(editPayment.order_id);
       }
       if (selectedClient) {
+        await fetchClientPayments(selectedClient.id);
         await fetchTransactions(selectedClient.id);
       }
       await fetchOpeningBalances();
@@ -941,6 +1095,7 @@ export default function ClientsPage() {
             await fetchPayments(selectedOrder.id);
           }
           if (selectedClient) {
+            await fetchClientPayments(selectedClient.id);
             await fetchTransactions(selectedClient.id);
           }
           break;
@@ -1029,6 +1184,7 @@ export default function ClientsPage() {
     fetchOrders(client.id);
     fetchExpenses(client.id);
     fetchTransactions(client.id);
+    fetchClientPayments(client.id);
     setShowOrdersDialog(true);
   };
 
@@ -1484,6 +1640,8 @@ export default function ClientsPage() {
                   <TableHead className="font-semibold">Date & Time</TableHead>
                   <TableHead className="font-semibold">Client</TableHead>
                   <TableHead className="font-semibold text-right">Amount</TableHead>
+                  <TableHead className="font-semibold text-right">Paid</TableHead>
+                  <TableHead className="font-semibold text-right">Balance</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                   <TableHead className="font-semibold text-right">Actions</TableHead>
                 </TableRow>
@@ -1491,6 +1649,10 @@ export default function ClientsPage() {
               <TableBody>
                 {openingBalances.map((balance) => {
                   const client = clients.find(c => c.id === balance.client_id);
+                  const balanceAmount = parseFloat(balance.amount || "0");
+                  const paidAmount = balance.paid_amount || 0;
+                  const remainingBalance = balanceAmount - paidAmount;
+                  
                   return (
                     <TableRow key={balance.id}>
                       <TableCell>
@@ -1498,7 +1660,13 @@ export default function ClientsPage() {
                       </TableCell>
                       <TableCell>{client?.name || 'Unknown Client'}</TableCell>
                       <TableCell className="text-right">
-                        {parseFloat(balance.amount || "0").toLocaleString()}
+                        {balanceAmount.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {paidAmount.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {remainingBalance.toLocaleString()}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -1548,7 +1716,7 @@ export default function ClientsPage() {
                 })}
                 {openingBalances.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                       No client opening balances recorded
                     </TableCell>
                   </TableRow>
@@ -1564,9 +1732,7 @@ export default function ClientsPage() {
         <DialogContent className="max-w-md rounded-lg">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">
-              {newPayment.purpose === "Debt Clearance" 
-                ? "Record Payment for Debt Clearance" 
-                : "Record Payment for Order"}
+              Record Payment for {selectedClient?.name}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -1583,32 +1749,6 @@ export default function ClientsPage() {
                 })}
               />
             </div>
-            
-            {newPayment.purpose === "Order Payment" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Order
-                </label>
-                <Select
-                  value={newPayment.order_id}
-                  onValueChange={(value) => setNewPayment({
-                    ...newPayment,
-                    order_id: value
-                  })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select order" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {orders.map((order) => (
-                      <SelectItem key={order.id} value={order.id}>
-                        {order.material} (Qty: {order.quantity}) - {(order.total_amount || 0).toLocaleString()}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1677,7 +1817,7 @@ export default function ClientsPage() {
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select provider" />
-                  </SelectTrigger>
+                    </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="MTN">MTN</SelectItem>
                     <SelectItem value="Airtel">Airtel</SelectItem>
@@ -1693,8 +1833,7 @@ export default function ClientsPage() {
                 !newPayment.amount || 
                 !newPayment.mode_of_payment || 
                 (newPayment.mode_of_payment === 'Bank' && !newPayment.bank_name) ||
-                (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider) ||
-                (newPayment.purpose === "Order Payment" && !newPayment.order_id)
+                (newPayment.mode_of_payment === 'Mobile Money' && !newPayment.mobile_money_provider)
               }
             >
               Record Payment
@@ -1853,7 +1992,7 @@ export default function ClientsPage() {
                   mode_of_payment: "",
                   bank_name: "",
                   mobile_money_provider: "",
-                  purpose: "Order Payment",
+                  purpose: "Payment for Orders",
                   order_id: ""
                 });
               }}
