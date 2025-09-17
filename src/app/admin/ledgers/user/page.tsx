@@ -31,7 +31,7 @@ export default function MarketersPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
-  const [openingBalances, setOpeningBalances] useState<any[]>([]);
+  const [openingBalances, setOpeningBalances] = useState<any[]>([]);
   const [newPayment, setNewPayment] = useState({
     date: new Date().toISOString().split('T')[0],
     amount: "",
@@ -247,14 +247,13 @@ export default function MarketersPage() {
 
       if (openingBalancesError) throw openingBalancesError;
 
-      // Create transactions with proper financial logic
       const allTransactions = [
         ...(openingBalancesData?.map(balance => ({
           type: 'opening_balance',
           id: balance.id,
           date: balance.created_at,
           item: `Opening Balance`,
-          amount: -parseFloat(balance.amount), // Opening balance is a liability (negative)
+          amount: -parseFloat(balance.amount),
           quantity: 1,
           unit_price: -parseFloat(balance.amount),
           payment: 0,
@@ -272,7 +271,7 @@ export default function MarketersPage() {
           item: order.item,
           quantity: order.quantity,
           unit_price: order.cost,
-          amount: -(order.quantity * order.cost), // Orders create debt (negative)
+          amount: -(order.quantity * order.cost),
           payment: 0,
           expense: 0,
           purpose: '',
@@ -287,7 +286,7 @@ export default function MarketersPage() {
           date: payment.created_at,
           order_id: payment.order_id,
           amount: 0,
-          payment: payment.amount_paid, // Payments are income (positive)
+          payment: payment.amount_paid,
           expense: 0,
           item: `Payment (${payment.mode_of_payment}) - ${payment.purpose}`,
           mode_of_payment: payment.mode_of_payment,
@@ -305,7 +304,7 @@ export default function MarketersPage() {
           item: expense.item,
           amount: 0,
           payment: 0,
-          expense: -expense.amount_spent, // Expenses are negative
+          expense: -expense.amount_spent,
           description: `Expense: ${expense.item}`,
           purpose: '',
           status: '',
@@ -317,7 +316,6 @@ export default function MarketersPage() {
         })) || [])
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      // Calculate running balances
       let netBalance = 0;
       const transactionsWithBalance = allTransactions.map(transaction => {
         if (transaction.type === 'opening_balance') {
@@ -332,7 +330,6 @@ export default function MarketersPage() {
         
         return {
           ...transaction,
-          // Order balance is only shown for order entries, not a running total
           order_balance: transaction.type === 'order' ? transaction.amount : 0,
           net_balance: netBalance
         };
@@ -350,7 +347,6 @@ export default function MarketersPage() {
     if (!selectedMarketer || !newPayment.amount || !newPayment.mode_of_payment) return;
 
     try {
-      // Check if marketer has an opening balance
       const { data: balances, error: balanceError } = await supabase
         .from("opening_balances")
         .select("*")
@@ -363,14 +359,11 @@ export default function MarketersPage() {
       let paymentPurpose = newPayment.purpose;
       let remainingPaymentAmount = parseFloat(newPayment.amount);
       
-      // If there's an opening balance and it's not fully paid
       if (balances && balances.length > 0 && balances[0].status !== "Paid") {
         const balance = balances[0];
         const balanceAmount = parseFloat(balance.amount);
         
-        // If payment is enough to cover the remaining balance
         if (remainingPaymentAmount >= balanceAmount) {
-          // Update opening balance to paid
           const { error: updateError } = await supabase
             .from("opening_balances")
             .update({ 
@@ -381,16 +374,13 @@ export default function MarketersPage() {
 
           if (updateError) throw updateError;
           
-          // Use part of payment for debt clearance
           remainingPaymentAmount -= balanceAmount;
           paymentPurpose = "Debt Clearance";
           
-          // If there's remaining payment after clearing debt, use it for order payment
           if (remainingPaymentAmount > 0) {
             paymentPurpose = "Debt Clearance and Order Payment";
           }
         } else {
-          // Partially pay the opening balance
           const newBalanceAmount = balanceAmount - remainingPaymentAmount;
           
           const { error: updateError } = await supabase
@@ -404,14 +394,12 @@ export default function MarketersPage() {
           if (updateError) throw updateError;
           
           paymentPurpose = "Debt Clearance";
-          remainingPaymentAmount = 0; // All payment used for debt clearance
+          remainingPaymentAmount = 0;
         }
       } else {
-        // No opening balance or it's already paid, so payment is for orders
         paymentPurpose = "Order Payment";
       }
 
-      // Record the payment
       const paymentData: any = {
         amount_paid: parseFloat(newPayment.amount),
         created_at: newPayment.date,
@@ -567,7 +555,6 @@ export default function MarketersPage() {
       const product = products.find(p => p.title === editingOrder.item);
       if (!product) throw new Error("Product not found");
 
-      // First get the original order to calculate the difference
       const { data: originalOrder, error: fetchError } = await supabase
         .from("order")
         .select("*")
@@ -591,7 +578,6 @@ export default function MarketersPage() {
 
       if (orderError) throw orderError;
       
-      // Update product entries if quantity changed
       if (quantityDifference !== 0) {
         const { error: entryError } = await supabase
           .from("product_entries")
@@ -621,7 +607,6 @@ export default function MarketersPage() {
     if (!confirm("Are you sure you want to delete this order?")) return;
 
     try {
-      // First get the order details to reverse the product entry
       const { data: order, error: fetchError } = await supabase
         .from("order")
         .select("*")
@@ -802,7 +787,7 @@ export default function MarketersPage() {
     }
   };
 
-  const deleteOpeningBalance = async (balanceId: string) {
+  const deleteOpeningBalance = async (balanceId: string) => {
     if (!confirm("Are you sure you want to delete this opening balance?")) return;
 
     try {
