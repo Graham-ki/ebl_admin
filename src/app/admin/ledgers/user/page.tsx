@@ -203,7 +203,7 @@ export default function MarketersPage() {
     }
   };
 
-  const fetchTransactions = async (userId: string) => {
+const fetchTransactions = async (userId: string) => {
     setLoading(true);
     try {
       const { data: userData, error: userError } = await supabase
@@ -231,14 +231,6 @@ export default function MarketersPage() {
 
       if (paymentsError) throw paymentsError;
 
-      const { data: expensesData, error: expensesError } = await supabase
-        .from("expenses")
-        .select("*")
-        .eq("department", userData.name)
-        .order("date", { ascending: true });
-
-      if (expensesError) throw expensesError;
-
       const { data: openingBalancesData, error: openingBalancesError } = await supabase
         .from("opening_balances")
         .select("*")
@@ -253,41 +245,38 @@ export default function MarketersPage() {
           id: balance.id,
           date: balance.created_at,
           item: `Opening Balance`,
-          amount: parseFloat(balance.amount),
+          amount: Math.abs(parseFloat(balance.amount || "0")),
           quantity: 1,
-          unit_price: parseFloat(balance.amount),
+          unit_price: Math.abs(parseFloat(balance.amount || "0")),
           payment: 0,
-          expense: 0,
           status: balance.status,
           purpose: '',
           mode_of_payment: '',
           bank_name: '',
           mobile_money_provider: ''
         })) || []),
-        ...(ordersData?.map(order => ({
+        ...((ordersData || []).map(order => ({
           type: 'order',
           id: order.id,
           date: order.created_at,
           item: order.item,
           quantity: order.quantity,
           unit_price: order.cost,
-          amount: order.quantity * order.cost,
+          amount: Math.abs(order.quantity * order.cost),
           payment: 0,
-          expense: 0,
           purpose: '',
           status: '',
           mode_of_payment: '',
           bank_name: '',
           mobile_money_provider: ''
         })) || []),
-        ...(paymentsData?.map(payment => ({
+        ...((paymentsData || []).map(payment => ({
           type: 'payment',
           id: payment.id,
           date: payment.created_at,
           order_id: payment.order_id,
           amount: 0,
-          payment: payment.amount_paid,
-          expense: 0,
+          payment: Math.abs(payment.amount_paid),
           item: `Payment (${payment.mode_of_payment}) - ${payment.purpose}`,
           mode_of_payment: payment.mode_of_payment,
           bank_name: payment.bank_name,
@@ -296,41 +285,41 @@ export default function MarketersPage() {
           status: '',
           quantity: 0,
           unit_price: 0
-        })) || []),
-        ...(expensesData?.map(expense => ({
-          type: 'expense',
-          id: expense.id,
-          date: expense.date,
-          item: expense.item,
-          amount: 0,
-          payment: 0,
-          expense: expense.amount_spent,
-          description: `Expense: ${expense.item}`,
-          purpose: '',
-          status: '',
-          mode_of_payment: '',
-          bank_name: '',
-          mobile_money_provider: '',
-          quantity: 0,
-          unit_price: 0
         })) || [])
       ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       let netBalance = 0;
+      let orderBalance = 0;
       const transactionsWithBalance = allTransactions.map(transaction => {
         if (transaction.type === 'opening_balance') {
-          netBalance += transaction.amount;
+          netBalance += transaction.amount; // Add opening balance permanently
         } else if (transaction.type === 'order') {
-          netBalance -= transaction.amount;
+          orderBalance += transaction.amount; // Add to order balance
+          netBalance += transaction.amount; // Add to net balance (increases debt)
         } else if (transaction.type === 'payment') {
-          netBalance += transaction.payment;
-        } else if (transaction.type === 'expense') {
-          netBalance -= transaction.expense;
+          if (transaction.purpose === 'Debt Clearance') {
+            // Direct debt reduction
+            netBalance -= transaction.payment;
+          } else {
+            // Regular payment reduces order balance first, then net balance
+            const paymentApplied = Math.min(transaction.payment, orderBalance);
+            orderBalance -= paymentApplied;
+            netBalance -= paymentApplied;
+            
+            // If payment exceeds order balance, apply remainder to net balance
+            if (transaction.payment > paymentApplied) {
+              netBalance -= (transaction.payment - paymentApplied);
+            }
+          }
         }
+        
+        // Ensure balances don't go negative
+        orderBalance = Math.max(0, orderBalance);
+        netBalance = Math.max(0, netBalance);
         
         return {
           ...transaction,
-          order_balance: transaction.type === 'order' ? -transaction.amount : 0,
+          order_balance: orderBalance,
           net_balance: netBalance
         };
       });
