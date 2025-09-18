@@ -219,7 +219,7 @@ export default function MarketersPage() {
         .from("order")
         .select("*")
         .eq("user", userId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
 
       if (ordersError) throw ordersError;
 
@@ -227,7 +227,7 @@ export default function MarketersPage() {
         .from("finance")
         .select("*")
         .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
 
       if (paymentsError) throw paymentsError;
 
@@ -235,7 +235,7 @@ export default function MarketersPage() {
         .from("expenses")
         .select("*")
         .eq("department", userData.name)
-        .order("date", { ascending: false });
+        .order("date", { ascending: true });
 
       if (expensesError) throw expensesError;
 
@@ -243,7 +243,7 @@ export default function MarketersPage() {
         .from("opening_balances")
         .select("*")
         .eq("marketer_id", userId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
 
       if (openingBalancesError) throw openingBalancesError;
 
@@ -351,7 +351,7 @@ export default function MarketersPage() {
         .from("opening_balances")
         .select("*")
         .eq("marketer_id", selectedMarketer.id)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: true })
         .limit(1);
 
       if (balanceError) throw balanceError;
@@ -1901,7 +1901,7 @@ export default function MarketersPage() {
                         transaction.type === 'payment' ?
                         `Payment (${transaction.mode_of_payment}) - ${transaction.purpose}` :
                         transaction.type === 'opening_balance' ?
-                        `Opening Balance (${transaction.status)` :
+                        `Opening Balance (${transaction.status})` :
                         `Expense: ${transaction.item}`}
                       {transaction.bank_name && ` - ${transaction.bank_name}`}
                       {transaction.mobile_money_provider && ` - ${transaction.mobile_money_provider}`}
