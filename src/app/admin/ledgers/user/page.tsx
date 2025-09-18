@@ -313,9 +313,9 @@ const fetchTransactions = async (userId: string) => {
           }
         }
         
-        // Ensure balances don't go negative
-        orderBalance = Math.max(0, orderBalance);
-        netBalance = Math.max(0, netBalance);
+        // REMOVED the Math.max(0, netBalance) constraint to allow negative balances
+        // This allows negative net balance to indicate overpayment (company owes marketer)
+        orderBalance = Math.max(0, orderBalance); // Order balance should still not go negative
         
         return {
           ...transaction,
