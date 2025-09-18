@@ -472,8 +472,8 @@ export default function ClientsPage() {
           netBalance -= transaction.payment; // Subtract payment from debt
         }
         
-        // Ensure net balance doesn't go negative (client can't have negative debt)
-        netBalance = Math.max(0, netBalance);
+        // REMOVED the Math.max(0, netBalance) constraint to allow negative balances
+        // This allows negative net balance to indicate overpayment (company owes client)
         
         return {
           ...transaction,
