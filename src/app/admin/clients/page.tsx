@@ -392,7 +392,7 @@ export default function ClientsPage() {
         .from("order")
         .select("*")
         .eq("user", clientId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
 
       if (ordersError) throw ordersError;
 
@@ -400,7 +400,7 @@ export default function ClientsPage() {
         .from("finance")
         .select("*")
         .eq("user_id", clientId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
 
       if (paymentsError) throw paymentsError;
 
@@ -408,7 +408,7 @@ export default function ClientsPage() {
         .from("expenses")
         .select("*")
         .eq("department", clientData.name)
-        .order("date", { ascending: false });
+        .order("date", { ascending: true });
 
       if (expensesError) throw expensesError;
 
@@ -416,7 +416,7 @@ export default function ClientsPage() {
         .from("opening_balances")
         .select("*")
         .eq("client_id", clientId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
 
       if (openingBalancesError) throw openingBalancesError;
 
@@ -426,9 +426,9 @@ export default function ClientsPage() {
           id: balance.id,
           date: balance.created_at,
           item: `Opening Balance`,
-          amount: parseFloat(balance.amount || "0"),
+          amount: Math.abs(parseFloat(balance.amount || "0")),
           quantity: 1,
-          unit_price: parseFloat(balance.amount || "0"),
+          unit_price: Math.abs(parseFloat(balance.amount || "0")),
           payment: 0,
           expense: 0,
           status: balance.status,
@@ -444,7 +444,7 @@ export default function ClientsPage() {
           item: order.material,
           quantity: order.quantity,
           unit_price: order.cost,
-          amount: order.quantity * order.cost,
+          amount: Math.abs(order.quantity * order.cost),
           payment: 0,
           expense: 0,
           purpose: '',
@@ -459,7 +459,7 @@ export default function ClientsPage() {
           date: payment.created_at,
           order_id: payment.order_id,
           amount: 0,
-          payment: payment.amount_paid,
+          payment: Math.abs(payment.amount_paid),
           expense: 0,
           item: `Payment (${payment.mode_of_payment})`,
           mode_of_payment: payment.mode_of_payment,
@@ -477,7 +477,7 @@ export default function ClientsPage() {
           item: expense.item,
           amount: 0,
           payment: 0,
-          expense: expense.amount_spent,
+          expense: Math.abs(expense.amount_spent),
           description: `Expense: ${expense.item}`,
           purpose: '',
           status: '',
@@ -507,6 +507,11 @@ export default function ClientsPage() {
         } else if (transaction.type === 'expense') {
           netBalance -= transaction.expense;
         }
+        
+        // Ensure balances are always positive
+        orderBalance = Math.max(0, orderBalance);
+        netBalance = Math.max(0, netBalance);
+        
         return {
           ...transaction,
           order_balance: orderBalance,
@@ -521,6 +526,7 @@ export default function ClientsPage() {
       setLoading(false);
     }
   };
+
 
   const addPayment = async () => {
     if (!selectedClient || !newPayment.amount || !newPayment.mode_of_payment) return;
