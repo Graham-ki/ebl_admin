@@ -1944,13 +1944,6 @@ export default function ClientsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowExpenseDialog(true)}
-            >
-              Record Expense
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
               onClick={() => {
                 setShowPaymentForm(true);
                 setNewPayment({
