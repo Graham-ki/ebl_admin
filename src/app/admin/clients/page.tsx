@@ -487,7 +487,7 @@ export default function ClientsPage() {
           quantity: 0,
           unit_price: 0
         })) || [])
-      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       let orderBalance = 0;
       let netBalance = 0;
