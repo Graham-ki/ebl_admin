@@ -314,7 +314,7 @@ export default function MarketersPage() {
           quantity: 0,
           unit_price: 0
         })) || [])
-      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       let netBalance = 0;
       const transactionsWithBalance = allTransactions.map(transaction => {
