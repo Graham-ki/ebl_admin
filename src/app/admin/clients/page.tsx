@@ -376,7 +376,7 @@ export default function ClientsPage() {
     }
   };
 
-  const fetchTransactions = async (clientId: string) => {
+ const fetchTransactions = async (clientId: string) => {
     setLoading(true);
     try {
       const { data: clientData, error: clientError } = await supabase
@@ -404,14 +404,6 @@ export default function ClientsPage() {
 
       if (paymentsError) throw paymentsError;
 
-      const { data: expensesData, error: expensesError } = await supabase
-        .from("expenses")
-        .select("*")
-        .eq("department", clientData.name)
-        .order("date", { ascending: true });
-
-      if (expensesError) throw expensesError;
-
       const { data: openingBalancesData, error: openingBalancesError } = await supabase
         .from("opening_balances")
         .select("*")
@@ -420,6 +412,7 @@ export default function ClientsPage() {
 
       if (openingBalancesError) throw openingBalancesError;
 
+      // Combine transactions (excluding expenses since they don't affect client debt)
       const allTransactions = [
         ...(openingBalancesData?.map(balance => ({
           type: 'opening_balance',
@@ -430,7 +423,6 @@ export default function ClientsPage() {
           quantity: 1,
           unit_price: Math.abs(parseFloat(balance.amount || "0")),
           payment: 0,
-          expense: 0,
           status: balance.status,
           purpose: '',
           mode_of_payment: '',
@@ -446,7 +438,6 @@ export default function ClientsPage() {
           unit_price: order.cost,
           amount: Math.abs(order.quantity * order.cost),
           payment: 0,
-          expense: 0,
           purpose: '',
           status: '',
           mode_of_payment: '',
@@ -460,7 +451,6 @@ export default function ClientsPage() {
           order_id: payment.order_id,
           amount: 0,
           payment: Math.abs(payment.amount_paid),
-          expense: 0,
           item: `Payment (${payment.mode_of_payment})`,
           mode_of_payment: payment.mode_of_payment,
           bank_name: payment.bank_name,
@@ -469,52 +459,24 @@ export default function ClientsPage() {
           status: '',
           quantity: 0,
           unit_price: 0
-        })) || []),
-        ...((expensesData || []).map(expense => ({
-          type: 'expense',
-          id: expense.id,
-          date: expense.date,
-          item: expense.item,
-          amount: 0,
-          payment: 0,
-          expense: Math.abs(expense.amount_spent),
-          description: `Expense: ${expense.item}`,
-          purpose: '',
-          status: '',
-          mode_of_payment: '',
-          bank_name: '',
-          mobile_money_provider: '',
-          quantity: 0,
-          unit_price: 0
         })) || [])
       ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-      let orderBalance = 0;
       let netBalance = 0;
       const transactionsWithBalance = allTransactions.map(transaction => {
         if (transaction.type === 'opening_balance') {
-          netBalance += transaction.amount;
+          netBalance += transaction.amount; // Add opening balance permanently
         } else if (transaction.type === 'order') {
-          orderBalance += transaction.amount;
-          netBalance += transaction.amount;
+          netBalance += transaction.amount; // Add order amount to debt
         } else if (transaction.type === 'payment') {
-          if (transaction.purpose === 'Debt Clearance') {
-            netBalance -= transaction.payment;
-          } else {
-            orderBalance -= transaction.payment;
-            netBalance -= transaction.payment;
-          }
-        } else if (transaction.type === 'expense') {
-          netBalance -= transaction.expense;
+          netBalance -= transaction.payment; // Subtract payment from debt
         }
         
-        // Ensure balances are always positive
-        orderBalance = Math.max(0, orderBalance);
+        // Ensure net balance doesn't go negative (client can't have negative debt)
         netBalance = Math.max(0, netBalance);
         
         return {
           ...transaction,
-          order_balance: orderBalance,
           net_balance: netBalance
         };
       });
@@ -526,7 +488,6 @@ export default function ClientsPage() {
       setLoading(false);
     }
   };
-
 
   const addPayment = async () => {
     if (!selectedClient || !newPayment.amount || !newPayment.mode_of_payment) return;
