@@ -863,7 +863,7 @@ if (!('material_id' in selectedBalance) && !balanceDeliveryForm.material_id) {
       }
       
       // Sort by date
-      ledgerEntries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      ledgerEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       setLedgerData(ledgerEntries);
     } catch (err) {
       console.error('Error fetching ledger data:', err);
