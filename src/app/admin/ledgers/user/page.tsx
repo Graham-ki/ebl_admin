@@ -71,6 +71,129 @@ export default function MarketersPage() {
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [editingOpeningBalance, setEditingOpeningBalance] = useState<any>(null);
 
+  // Function to calculate net balance for a marketer
+  const calculateMarketerNetBalance = async (marketerId: string): Promise<number> => {
+    try {
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("name")
+        .eq("id", marketerId)
+        .single();
+
+      if (userError) throw userError;
+      if (!userData) throw new Error("User not found");
+
+      const { data: ordersData, error: ordersError } = await supabase
+        .from("order")
+        .select("*")
+        .eq("user", marketerId)
+        .order("created_at", { ascending: true });
+
+      if (ordersError) throw ordersError;
+
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from("finance")
+        .select("*")
+        .eq("user_id", marketerId)
+        .order("created_at", { ascending: true });
+
+      if (paymentsError) throw paymentsError;
+
+      const { data: openingBalancesData, error: openingBalancesError } = await supabase
+        .from("opening_balances")
+        .select("*")
+        .eq("marketer_id", marketerId)
+        .order("created_at", { ascending: true });
+
+      if (openingBalancesError) throw openingBalancesError;
+
+      const allTransactions = [
+        ...(openingBalancesData?.map(balance => ({
+          type: 'opening_balance',
+          id: balance.id,
+          date: balance.created_at,
+          item: `Opening Balance`,
+          amount: Math.abs(parseFloat(balance.amount || "0")),
+          quantity: 1,
+          unit_price: Math.abs(parseFloat(balance.amount || "0")),
+          payment: 0,
+          status: balance.status,
+          purpose: '',
+          mode_of_payment: '',
+          bank_name: '',
+          mobile_money_provider: ''
+        })) || []),
+        ...((ordersData || []).map(order => ({
+          type: 'order',
+          id: order.id,
+          date: order.created_at,
+          item: order.item,
+          quantity: order.quantity,
+          unit_price: order.cost,
+          amount: Math.abs(order.quantity * order.cost),
+          payment: 0,
+          purpose: '',
+          status: '',
+          mode_of_payment: '',
+          bank_name: '',
+          mobile_money_provider: ''
+        })) || []),
+        ...((paymentsData || []).map(payment => ({
+          type: 'payment',
+          id: payment.id,
+          date: payment.created_at,
+          order_id: payment.order_id,
+          amount: 0,
+          payment: Math.abs(payment.amount_paid),
+          item: `Payment (${payment.mode_of_payment}) - ${payment.purpose}`,
+          mode_of_payment: payment.mode_of_payment,
+          bank_name: payment.bank_name,
+          mobile_money_provider: payment.mode_of_mobilemoney,
+          purpose: payment.purpose || '',
+          status: '',
+          quantity: 0,
+          unit_price: 0
+        })) || [])
+      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      let netBalance = 0;
+      let orderBalance = 0;
+      
+      allTransactions.forEach(transaction => {
+        if (transaction.type === 'opening_balance') {
+          netBalance += transaction.amount; // Add opening balance permanently
+        } else if (transaction.type === 'order') {
+          orderBalance += transaction.amount; // Add to order balance
+          netBalance += transaction.amount; // Add to net balance (increases debt)
+        } else if (transaction.type === 'payment') {
+          if (transaction.purpose === 'Debt Clearance') {
+            // Direct debt reduction
+            netBalance -= transaction.payment;
+          } else {
+            // Regular payment reduces order balance first, then net balance
+            const paymentApplied = Math.min(transaction.payment, orderBalance);
+            orderBalance -= paymentApplied;
+            netBalance -= paymentApplied;
+            
+            // If payment exceeds order balance, apply remainder to net balance
+            if (transaction.payment > paymentApplied) {
+              netBalance -= (transaction.payment - paymentApplied);
+            }
+          }
+        }
+        
+        // REMOVED the Math.max(0, netBalance) constraint to allow negative balances
+        // This allows negative net balance to indicate overpayment (company owes marketer)
+        orderBalance = Math.max(0, orderBalance); // Order balance should still not go negative
+      });
+
+      return netBalance;
+    } catch (error) {
+      console.error("Error calculating net balance:", error);
+      return 0;
+    }
+  };
+
   const fetchMarketers = async () => {
     setLoading(true);
     try {
@@ -81,23 +204,18 @@ export default function MarketersPage() {
       
       if (usersError) throw usersError;
 
-      const marketersWithCounts = await Promise.all(
+      const marketersWithNetBalances = await Promise.all(
         users.map(async (user) => {
-          const { count, error: countError } = await supabase
-            .from("order")
-            .select("*", { count: "exact", head: true })
-            .eq("user", user.id);
+          const netBalance = await calculateMarketerNetBalance(user.id);
           
-          if (countError) throw countError;
-
           return {
             ...user,
-            orderCount: count || 0
+            netBalance: netBalance
           };
         })
       );
 
-      setMarketers(marketersWithCounts);
+      setMarketers(marketersWithNetBalances);
     } catch (error) {
       console.error("Error fetching marketers:", error);
     } finally {
@@ -413,6 +531,7 @@ const fetchTransactions = async (userId: string) => {
       await fetchPayments(selectedMarketer.id);
       await fetchTransactions(selectedMarketer.id);
       await fetchOpeningBalances();
+      await fetchMarketers(); // Refresh marketers to update net balances
       
       setNewPayment({
         date: new Date().toISOString().split('T')[0],
@@ -444,7 +563,7 @@ const fetchTransactions = async (userId: string) => {
       if (editingPayment.mode_of_payment === 'Bank') {
         paymentData.bank_name = editingPayment.bank_name;
       } else if (editingPayment.mode_of_payment === 'Mobile Money') {
-        paymentData.mode_of_mobilemoney = editingPayment.mobile_money_provider;
+        paymentData.mode_of_mobilemoney = editingPayment.mode_of_mobilemoney;
       }
 
       const { error } = await supabase
@@ -457,6 +576,7 @@ const fetchTransactions = async (userId: string) => {
       await fetchPayments(selectedMarketer.id);
       await fetchTransactions(selectedMarketer.id);
       await fetchOpeningBalances();
+      await fetchMarketers(); // Refresh marketers to update net balances
       
       setEditingPayment(null);
       alert("Payment updated successfully!");
@@ -480,6 +600,7 @@ const fetchTransactions = async (userId: string) => {
       await fetchPayments(selectedMarketer.id);
       await fetchTransactions(selectedMarketer.id);
       await fetchOpeningBalances();
+      await fetchMarketers(); // Refresh marketers to update net balances
       
       alert("Payment deleted successfully!");
     } catch (error) {
@@ -524,6 +645,7 @@ const fetchTransactions = async (userId: string) => {
       
       await fetchOrders(selectedMarketer.id);
       await fetchTransactions(selectedMarketer.id);
+      await fetchMarketers(); // Refresh marketers to update net balances
       setNewOrder({
         date: new Date().toISOString().split('T')[0],
         item: "",
@@ -584,6 +706,7 @@ const fetchTransactions = async (userId: string) => {
       
       await fetchOrders(selectedMarketer.id);
       await fetchTransactions(selectedMarketer.id);
+      await fetchMarketers(); // Refresh marketers to update net balances
       setEditingOrder(null);
       alert("Order updated successfully!");
     } catch (error) {
@@ -629,6 +752,7 @@ const fetchTransactions = async (userId: string) => {
       
       await fetchOrders(selectedMarketer.id);
       await fetchTransactions(selectedMarketer.id);
+      await fetchMarketers(); // Refresh marketers to update net balances
       
       alert("Order deleted successfully!");
     } catch (error) {
@@ -738,6 +862,7 @@ const fetchTransactions = async (userId: string) => {
       
       await fetchOpeningBalances();
       await fetchTransactions(newOpeningBalance.marketer_id);
+      await fetchMarketers(); // Refresh marketers to update net balances
       setNewOpeningBalance({
         date: new Date().toISOString().split('T')[0],
         amount: "",
@@ -768,6 +893,7 @@ const fetchTransactions = async (userId: string) => {
       
       await fetchOpeningBalances();
       await fetchTransactions(editingOpeningBalance.marketer_id);
+      await fetchMarketers(); // Refresh marketers to update net balances
       setEditingOpeningBalance(null);
       alert("Opening balance updated successfully!");
     } catch (error) {
@@ -788,6 +914,7 @@ const fetchTransactions = async (userId: string) => {
       if (error) throw error;
       
       await fetchOpeningBalances();
+      await fetchMarketers(); // Refresh marketers to update net balances
       
       alert("Opening balance deleted successfully!");
     } catch (error) {
@@ -898,7 +1025,7 @@ const fetchTransactions = async (userId: string) => {
           Marketers Management
         </h1>
         <p className="text-gray-600 dark:text-gray-300">
-          View and manage marketers and their orders
+          View and manage marketers and their balances
         </p>
       </div>
 
@@ -923,7 +1050,7 @@ const fetchTransactions = async (userId: string) => {
           <TableHeader className="bg-gray-50">
             <TableRow>
               <TableHead className="font-semibold text-gray-700">Marketer Name</TableHead>
-              <TableHead className="font-semibold text-gray-700">Number of Orders</TableHead>
+              <TableHead className="font-semibold text-gray-700">Net Balance</TableHead>
               <TableHead className="font-semibold text-gray-700 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -939,7 +1066,12 @@ const fetchTransactions = async (userId: string) => {
                 <TableRow key={marketer.id} className="hover:bg-gray-50">
                   <TableCell className="font-medium">{marketer.name}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{marketer.orderCount}</Badge>
+                    <Badge 
+                      variant={marketer.netBalance && marketer.netBalance > 0 ? "destructive" : "outline"}
+                      className={marketer.netBalance && marketer.netBalance > 0 ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}
+                    >
+                      {marketer.netBalance?.toLocaleString() || 0}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
