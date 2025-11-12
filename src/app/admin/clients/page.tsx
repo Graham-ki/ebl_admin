@@ -67,6 +67,7 @@ interface Client {
   contact: string;
   address: string;
   orderCount?: number;
+  netBalance?: number;
 }
 
 interface Material {
@@ -193,6 +194,112 @@ export default function ClientsPage() {
     name: ""
   });
 
+  // Function to calculate net balance for a client
+  const calculateClientNetBalance = async (clientId: string): Promise<number> => {
+    try {
+      // Fetch all transactions for the client
+      const { data: clientData, error: clientError } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("id", clientId)
+        .single();
+
+      if (clientError) throw clientError;
+      if (!clientData) throw new Error("Client not found");
+
+      const { data: ordersData, error: ordersError } = await supabase
+        .from("order")
+        .select("*")
+        .eq("user", clientId)
+        .order("created_at", { ascending: true });
+
+      if (ordersError) throw ordersError;
+
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from("finance")
+        .select("*")
+        .eq("user_id", clientId)
+        .order("created_at", { ascending: true });
+
+      if (paymentsError) throw paymentsError;
+
+      const { data: openingBalancesData, error: openingBalancesError } = await supabase
+        .from("opening_balances")
+        .select("*")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: true });
+
+      if (openingBalancesError) throw openingBalancesError;
+
+      // Combine transactions (excluding expenses since they don't affect client debt)
+      const allTransactions = [
+        ...(openingBalancesData?.map(balance => ({
+          type: 'opening_balance',
+          id: balance.id,
+          date: balance.created_at,
+          item: `Opening Balance`,
+          amount: Math.abs(parseFloat(balance.amount || "0")),
+          quantity: 1,
+          unit_price: Math.abs(parseFloat(balance.amount || "0")),
+          payment: 0,
+          status: balance.status,
+          purpose: '',
+          mode_of_payment: '',
+          bank_name: '',
+          mobile_money_provider: ''
+        })) || []),
+        ...((ordersData || []).map(order => ({
+          type: 'order',
+          id: order.id,
+          date: order.created_at,
+          item: order.material,
+          quantity: order.quantity,
+          unit_price: order.cost,
+          amount: Math.abs(order.quantity * order.cost),
+          payment: 0,
+          purpose: '',
+          status: '',
+          mode_of_payment: '',
+          bank_name: '',
+          mobile_money_provider: ''
+        })) || []),
+        ...((paymentsData || []).map(payment => ({
+          type: 'payment',
+          id: payment.id,
+          date: payment.created_at,
+          order_id: payment.order_id,
+          amount: 0,
+          payment: Math.abs(payment.amount_paid),
+          item: `Payment (${payment.mode_of_payment})`,
+          mode_of_payment: payment.mode_of_payment,
+          bank_name: payment.bank_name,
+          mobile_money_provider: payment.mode_of_mobilemoney,
+          purpose: payment.purpose || '',
+          status: '',
+          quantity: 0,
+          unit_price: 0
+        })) || [])
+      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Calculate net balance using the same logic as general ledger
+      let netBalance = 0;
+      allTransactions.forEach(transaction => {
+        if (transaction.type === 'opening_balance') {
+          netBalance += transaction.amount; // Add opening balance permanently
+        } else if (transaction.type === 'order') {
+          netBalance += transaction.amount; // Add order amount to debt
+        } else if (transaction.type === 'payment') {
+          netBalance -= transaction.payment; // Subtract payment from debt
+        }
+      });
+
+      return netBalance;
+    } catch (error) {
+      console.error("Error calculating net balance:", error);
+      return 0;
+    }
+  };
+
   const fetchClients = async () => {
     setLoading(true);
     try {
@@ -202,23 +309,18 @@ export default function ClientsPage() {
       
       if (clientsError) throw clientsError;
 
-      const clientsWithCounts = await Promise.all(
+      const clientsWithNetBalances = await Promise.all(
         (clients || []).map(async (client) => {
-          const { count, error: countError } = await supabase
-            .from("order")
-            .select("*", { count: "exact", head: true })
-            .eq("user", client.id);
+          const netBalance = await calculateClientNetBalance(client.id);
           
-          if (countError) throw countError;
-
           return {
             ...client,
-            orderCount: count || 0
+            netBalance: netBalance
           };
         })
       );
 
-      setClients(clientsWithCounts || []);
+      setClients(clientsWithNetBalances || []);
     } catch (error) {
       console.error("Error fetching clients:", error);
     } finally {
@@ -659,6 +761,7 @@ export default function ClientsPage() {
       await fetchClientPayments(selectedClient.id);
       await fetchTransactions(selectedClient.id);
       await fetchOpeningBalances();
+      await fetchClients(); // Refresh clients to update net balances
       
       setNewPayment({
         date: getCurrentEATDateTime(),
@@ -707,6 +810,7 @@ export default function ClientsPage() {
         await fetchTransactions(selectedClient.id);
       }
       await fetchOpeningBalances();
+      await fetchClients(); // Refresh clients to update net balances
       
       setEditPayment(null);
       setShowEditPaymentDialog(false);
@@ -753,6 +857,7 @@ export default function ClientsPage() {
       
       await fetchOrders(selectedClient.id);
       await fetchTransactions(selectedClient.id);
+      await fetchClients(); // Refresh clients to update net balances
       setNewOrder({
         date: getCurrentEATDateTime(),
         material: "",
@@ -786,6 +891,7 @@ export default function ClientsPage() {
         await fetchOrders(selectedClient.id);
         await fetchTransactions(selectedClient.id);
       }
+      await fetchClients(); // Refresh clients to update net balances
       
       setEditOrder(null);
       setShowEditOrderDialog(false);
@@ -878,6 +984,7 @@ export default function ClientsPage() {
       
       await fetchOpeningBalances();
       await fetchTransactions(newOpeningBalance.client_id);
+      await fetchClients(); // Refresh clients to update net balances
       setNewOpeningBalance({
         date: getCurrentEATDateTime(),
         amount: "",
@@ -910,6 +1017,7 @@ export default function ClientsPage() {
       if (editOpeningBalance.client_id) {
         await fetchTransactions(editOpeningBalance.client_id);
       }
+      await fetchClients(); // Refresh clients to update net balances
       
       setEditOpeningBalance(null);
       setShowEditOpeningBalanceDialog(false);
@@ -1056,6 +1164,7 @@ export default function ClientsPage() {
             await fetchOrders(selectedClient.id);
             await fetchTransactions(selectedClient.id);
           }
+          await fetchClients(); // Refresh clients to update net balances
           break;
         case "payment":
           if (selectedOrder) {
@@ -1065,6 +1174,7 @@ export default function ClientsPage() {
             await fetchClientPayments(selectedClient.id);
             await fetchTransactions(selectedClient.id);
           }
+          await fetchClients(); // Refresh clients to update net balances
           break;
         case "expense":
           if (selectedClient) {
@@ -1077,6 +1187,7 @@ export default function ClientsPage() {
           if (selectedClient) {
             await fetchTransactions(selectedClient.id);
           }
+          await fetchClients(); // Refresh clients to update net balances
           break;
       }
       
@@ -1201,7 +1312,7 @@ export default function ClientsPage() {
           Clients Management
         </h1>
         <p className="text-gray-600 dark:text-gray-300">
-          View and manage clients and their orders
+          View and manage clients and their balances
         </p>
       </div>
 
@@ -1233,7 +1344,7 @@ export default function ClientsPage() {
             <TableRow>
               <TableHead className="font-semibold text-gray-700">Client Name</TableHead>
               <TableHead className="font-semibold text-gray-700">Contact</TableHead>
-              <TableHead className="font-semibold text-gray-700">Number of Orders</TableHead>
+              <TableHead className="font-semibold text-gray-700">Net Balance</TableHead>
               <TableHead className="font-semibold text-gray-700 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -1250,7 +1361,12 @@ export default function ClientsPage() {
                   <TableCell className="font-medium">{client.name}</TableCell>
                   <TableCell>{client.contact}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{client.orderCount}</Badge>
+                    <Badge 
+                      variant={client.netBalance && client.netBalance > 0 ? "destructive" : "outline"}
+                      className={client.netBalance && client.netBalance > 0 ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}
+                    >
+                      {client.netBalance?.toLocaleString() || 0}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
