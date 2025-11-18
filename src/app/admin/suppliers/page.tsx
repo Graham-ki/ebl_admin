@@ -142,6 +142,7 @@ export default function Suppliers() {
     partial_amount: 0
   });
 
+  // Fetch all data on component mount
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -159,7 +160,7 @@ export default function Suppliers() {
           supabase.from('clients').select('id, name, created_at').order('name', { ascending: true }),
           supabase.from('materials').select('*').order('name', { ascending: true }),
           supabase.from('supplier_balances').select('*'),
-          supabase.from('finance').select('mode_of_payment, bank_name, mode_of_mobilemoney')
+          supabase.from('finance').select('mode_of_payment, bank_name, mode_of_mobilemoney').limit(100)
         ]);
 
         if (suppliersError) throw suppliersError;
@@ -167,6 +168,9 @@ export default function Suppliers() {
         if (materialsError) throw materialsError;
         if (balancesError) throw balancesError;
         if (financeError) throw financeError;
+
+        console.log('Finance data loaded:', financeData?.length || 0, 'records');
+        console.log('Supplier balances loaded:', balancesData?.length || 0, 'records');
 
         setSuppliers(suppliersData || []);
         setClients(clientsData || []);
@@ -184,15 +188,22 @@ export default function Suppliers() {
     fetchData();
   }, []);
 
+  // Fetch ledger data for a specific supplier
   const fetchLedgerData = async (supplierId: string) => {
     try {
+      console.log('Fetching ledger for supplier:', supplierId);
       const { data, error } = await supabase
         .from('ledger_entries')
         .select('*')
         .eq('supplier_id', supplierId)
         .order('date', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching ledger:', error);
+        throw error;
+      }
+
+      console.log('Fetched ledger data:', data?.length || 0, 'records');
       setLedgerData(data || []);
     } catch (err) {
       console.error('Error fetching ledger data:', err);
@@ -200,6 +211,7 @@ export default function Suppliers() {
     }
   };
 
+  // Calculate running balance for ledger entries
   const calculateRunningBalance = (entries: LedgerEntry[]) => {
     let balance = 0;
     return entries.map(entry => {
@@ -208,27 +220,49 @@ export default function Suppliers() {
     });
   };
 
+  // Get current ledger balance for display
   const getCurrentBalance = () => {
     if (ledgerData.length === 0) return 0;
     const lastEntry = ledgerData[ledgerData.length - 1];
     return lastEntry.balance;
   };
 
+  // Get ledger balance for a specific supplier
+  const getSupplierLedgerBalance = (supplierId: string) => {
+    const supplierLedgerEntries = ledgerData.filter(entry => entry.supplier_id === supplierId);
+    if (supplierLedgerEntries.length === 0) return 0;
+    
+    let balance = 0;
+    supplierLedgerEntries.forEach(entry => {
+      balance += entry.debit - entry.credit;
+    });
+    return balance;
+  };
+
+  // Calculate total balance (opening + ledger) for a supplier
   const getSupplierTotalBalance = (supplierId: string) => {
     const openingBalance = supplierBalances.find(b => b.supplier_id === supplierId);
-    const ledgerEntries = ledgerData.filter(entry => entry.supplier_id === supplierId);
-    const ledgerBalance = ledgerEntries.length > 0 ? 
-      ledgerEntries[ledgerEntries.length - 1].balance : 0;
+    const ledgerBalance = getSupplierLedgerBalance(supplierId);
     
     const openingAmount = openingBalance ? 
       (openingBalance.balance_type === 'debit' ? openingBalance.current_balance : -openingBalance.current_balance) : 0;
     
-    return openingAmount + ledgerBalance;
+    const totalBalance = openingAmount + ledgerBalance;
+    
+    console.log(`Balance calculation for ${supplierId}:`, { 
+      openingBalance: openingAmount, 
+      ledgerBalance, 
+      totalBalance 
+    });
+    
+    return totalBalance;
   };
 
+  // Supplier balance display component
   const SupplierBalanceDisplay = ({ supplierId }: { supplierId: string }) => {
     const totalBalance = getSupplierTotalBalance(supplierId);
     const openingBalance = supplierBalances.find(b => b.supplier_id === supplierId);
+    const ledgerBalance = getSupplierLedgerBalance(supplierId);
     
     if (!openingBalance && totalBalance === 0) {
       return <span className="text-gray-500">No balance set</span>;
@@ -238,47 +272,80 @@ export default function Suppliers() {
     const isPositive = totalBalance > 0;
 
     return (
-      <div className="flex items-center gap-2">
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          isPositive ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
-        }`}>
-          {isPositive ? '+' : ''}{amount}
-        </span>
-        <span className="text-sm text-gray-600">
-          {isPositive ? "(Supplier owes company)" : "(Company owes supplier)"}
-        </span>
-        {openingBalance && (
-          <span className="text-xs text-gray-400">
-            (Opening: {formatCurrency(openingBalance.opening_balance)})
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+            isPositive ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
+          }`}>
+            {isPositive ? '+' : ''}{amount}
           </span>
+          <span className="text-sm text-gray-600">
+            {isPositive ? "(Supplier owes company)" : "(Company owes supplier)"}
+          </span>
+        </div>
+        {openingBalance && (
+          <div className="text-xs text-gray-500 flex gap-2">
+            <span>Opening: {formatCurrency(openingBalance.opening_balance)}</span>
+            <span>•</span>
+            <span>Ledger: {formatCurrency(ledgerBalance)}</span>
+          </div>
         )}
       </div>
     );
   };
 
+  // Get unique accounts from finance data
   const getUniqueAccounts = () => {
     const accounts = new Set<string>();
     
+    console.log('Processing finance accounts:', financeAccounts);
+    
+    // Add default accounts first
+    accounts.add('cash');
+    
+    // Process finance records
     financeAccounts.forEach(account => {
-      if (account.mode_of_payment === 'cash') {
-        accounts.add('cash');
-      } else if (account.mode_of_payment === 'bank' && account.bank_name) {
-        accounts.add(`bank_${account.bank_name}`);
-      } else if (account.mode_of_payment === 'mobile_money' && account.mode_of_mobilemoney) {
-        accounts.add(`mobile_${account.mode_of_mobilemoney}`);
+      if (account.mode_of_payment) {
+        const mode = account.mode_of_payment.toLowerCase().trim();
+        
+        if (mode === 'cash') {
+          accounts.add('cash');
+        } else if (mode === 'bank' && account.bank_name) {
+          const bankKey = `bank_${account.bank_name.trim()}`;
+          accounts.add(bankKey);
+        } else if ((mode === 'mobile_money' || mode === 'mobile money') && account.mode_of_mobilemoney) {
+          const mobileKey = `mobile_${account.mode_of_mobilemoney.trim()}`;
+          accounts.add(mobileKey);
+        } else if (mode === 'bank') {
+          // Add generic bank if no bank name specified
+          accounts.add('bank_generic');
+        } else if (mode === 'mobile_money' || mode === 'mobile money') {
+          // Add generic mobile money if no provider specified
+          accounts.add('mobile_generic');
+        }
       }
     });
 
-    return Array.from(accounts);
+    const accountList = Array.from(accounts);
+    console.log('Available accounts:', accountList);
+    return accountList;
   };
 
+  // Format account display name
   const formatAccountName = (account: string) => {
     if (account === 'cash') return 'Cash';
-    if (account.startsWith('bank_')) return `Bank - ${account.split('_')[1]}`;
-    if (account.startsWith('mobile_')) return `Mobile Money - ${account.split('_')[1]}`;
-    return account;
+    if (account.startsWith('bank_')) {
+      const bankName = account.split('_').slice(1).join(' ');
+      return bankName === 'generic' ? 'Bank' : `Bank - ${bankName}`;
+    }
+    if (account.startsWith('mobile_')) {
+      const provider = account.split('_').slice(1).join(' ');
+      return provider === 'generic' ? 'Mobile Money' : `Mobile Money - ${provider}`;
+    }
+    return account.charAt(0).toUpperCase() + account.slice(1);
   };
 
+  // Handle supplier form submission
   const handleSupplierSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -301,6 +368,7 @@ export default function Suppliers() {
     }
   };
 
+  // Handle opening balance submission
   const handleBalanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -338,6 +406,7 @@ export default function Suppliers() {
     }
   };
 
+  // Handle transaction submission
   const handleTransactionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -366,8 +435,8 @@ export default function Suppliers() {
           // Record expense for deposit
           const selectedFinanceAccount = financeAccounts.find(acc => {
             if (transactionForm.account === 'cash') return acc.mode_of_payment === 'cash';
-            if (transactionForm.account === 'bank') return acc.mode_of_payment === 'bank' && acc.bank_name;
-            if (transactionForm.account === 'mobile_money') return acc.mode_of_payment === 'mobile_money' && acc.mode_of_mobilemoney;
+            if (transactionForm.account.startsWith('bank_')) return acc.mode_of_payment === 'bank';
+            if (transactionForm.account.startsWith('mobile_')) return acc.mode_of_payment === 'mobile_money' || acc.mode_of_payment === 'mobile money';
             return false;
           });
 
@@ -385,7 +454,10 @@ export default function Suppliers() {
             .from('expenses')
             .insert([expenseData]);
 
-          if (expenseError) throw expenseError;
+          if (expenseError) {
+            console.error('Error saving expense:', expenseError);
+            throw expenseError;
+          }
           break;
 
         case 'delivery':
@@ -438,6 +510,7 @@ export default function Suppliers() {
     }
   };
 
+  // Handle supplier deletion
   const handleDeleteSupplier = async (id: string) => {
     setError(null);
     
@@ -470,6 +543,7 @@ export default function Suppliers() {
     }
   };
 
+  // Handle ledger entry deletion
   const handleDeleteLedgerEntry = async (id: number) => {
     setError(null);
     
@@ -488,6 +562,7 @@ export default function Suppliers() {
     }
   };
 
+  // Form reset functions
   const resetSupplierForm = () => {
     setSupplierForm({
       name: "",
@@ -556,6 +631,29 @@ export default function Suppliers() {
       {error && (
         <div className="mb-4 p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg">
           {error}
+        </div>
+      )}
+
+      {/* Debug Information */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mb-4 p-4 bg-yellow-100 border border-yellow-300 rounded-lg">
+          <h4 className="font-medium mb-2">Debug Info:</h4>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p>Suppliers: {suppliers.length}</p>
+              <p>Finance Accounts: {financeAccounts.length}</p>
+              <p>Supplier Balances: {supplierBalances.length}</p>
+              <p>Ledger Entries: {ledgerData.length}</p>
+            </div>
+            <div>
+              <p>Available Accounts:</p>
+              <ul className="text-xs">
+                {getUniqueAccounts().map(acc => (
+                  <li key={acc}>- {formatAccountName(acc)}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </div>
       )}
 
@@ -892,12 +990,20 @@ export default function Suppliers() {
                         required
                       >
                         <option value="">Select Account</option>
-                        {getUniqueAccounts().map(account => (
-                          <option key={account} value={account}>
-                            {formatAccountName(account)}
-                          </option>
-                        ))}
+                        {getUniqueAccounts().map(account => {
+                          const displayName = formatAccountName(account);
+                          return (
+                            <option key={account} value={account}>
+                              {displayName}
+                            </option>
+                          );
+                        })}
                       </select>
+                      {getUniqueAccounts().length === 0 && (
+                        <p className="text-xs text-red-500 mt-1">
+                          No accounts found. Please check your finance table data.
+                        </p>
+                      )}
                     </div>
                   </>
                 )}
