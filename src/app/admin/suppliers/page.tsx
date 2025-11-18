@@ -18,7 +18,7 @@ interface Supplier {
 }
 
 interface LedgerEntry {
-  id: string;
+  id: number;
   supplier_id: string;
   date: string;
   description: 'Deposit' | 'Delivery' | 'Sold to Client';
@@ -30,6 +30,7 @@ interface LedgerEntry {
   balance: number;
   item_name?: string;
   client_name?: string;
+  notes?: string;
   created_at: string;
 }
 
@@ -43,6 +44,24 @@ interface Material {
   id: string;
   name: string;
   created_at: string;
+}
+
+interface SupplierBalance {
+  id: string;
+  supplier_id: string;
+  opening_balance: number;
+  balance_type: 'debit' | 'credit';
+  current_balance: number;
+  status: 'pending' | 'partially' | 'paid';
+  partial_amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface FinanceAccount {
+  mode_of_payment: string;
+  bank_name?: string;
+  mode_of_mobilemoney?: string;
 }
 
 const formatCurrency = (amount: number) => {
@@ -84,6 +103,8 @@ export default function Suppliers() {
   const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [supplierBalances, setSupplierBalances] = useState<SupplierBalance[]>([]);
+  const [financeAccounts, setFinanceAccounts] = useState<FinanceAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -92,6 +113,7 @@ export default function Suppliers() {
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
+  const [showBalanceForm, setShowBalanceForm] = useState(false);
   
   const [supplierForm, setSupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
     name: "",
@@ -108,7 +130,16 @@ export default function Suppliers() {
     unit_price: 0,
     selling_price: 0,
     client_id: "",
-    notes: ""
+    notes: "",
+    account: ""
+  });
+
+  const [balanceForm, setBalanceForm] = useState({
+    supplier_id: "",
+    opening_balance: 0,
+    balance_type: "debit" as 'debit' | 'credit',
+    status: 'pending' as 'pending' | 'partially' | 'paid',
+    partial_amount: 0
   });
 
   useEffect(() => {
@@ -120,20 +151,28 @@ export default function Suppliers() {
         const [
           { data: suppliersData, error: suppliersError },
           { data: clientsData, error: clientsError },
-          { data: materialsData, error: materialsError }
+          { data: materialsData, error: materialsError },
+          { data: balancesData, error: balancesError },
+          { data: financeData, error: financeError }
         ] = await Promise.all([
           supabase.from('suppliers').select('*').order('created_at', { ascending: false }),
           supabase.from('clients').select('id, name, created_at').order('name', { ascending: true }),
-          supabase.from('materials').select('*').order('name', { ascending: true })
+          supabase.from('materials').select('*').order('name', { ascending: true }),
+          supabase.from('supplier_balances').select('*'),
+          supabase.from('finance').select('mode_of_payment, bank_name, mode_of_mobilemoney')
         ]);
 
         if (suppliersError) throw suppliersError;
         if (clientsError) throw clientsError;
         if (materialsError) throw materialsError;
+        if (balancesError) throw balancesError;
+        if (financeError) throw financeError;
 
         setSuppliers(suppliersData || []);
         setClients(clientsData || []);
         setMaterials(materialsData || []);
+        setSupplierBalances(balancesData || []);
+        setFinanceAccounts(financeData || []);
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load data. Please try again.');
@@ -147,8 +186,6 @@ export default function Suppliers() {
 
   const fetchLedgerData = async (supplierId: string) => {
     try {
-      // In a real implementation, you would fetch from a ledger table
-      // For now, we'll simulate with existing data structure
       const { data, error } = await supabase
         .from('ledger_entries')
         .select('*')
@@ -171,6 +208,77 @@ export default function Suppliers() {
     });
   };
 
+  const getCurrentBalance = () => {
+    if (ledgerData.length === 0) return 0;
+    const lastEntry = ledgerData[ledgerData.length - 1];
+    return lastEntry.balance;
+  };
+
+  const getSupplierTotalBalance = (supplierId: string) => {
+    const openingBalance = supplierBalances.find(b => b.supplier_id === supplierId);
+    const ledgerEntries = ledgerData.filter(entry => entry.supplier_id === supplierId);
+    const ledgerBalance = ledgerEntries.length > 0 ? 
+      ledgerEntries[ledgerEntries.length - 1].balance : 0;
+    
+    const openingAmount = openingBalance ? 
+      (openingBalance.balance_type === 'debit' ? openingBalance.current_balance : -openingBalance.current_balance) : 0;
+    
+    return openingAmount + ledgerBalance;
+  };
+
+  const SupplierBalanceDisplay = ({ supplierId }: { supplierId: string }) => {
+    const totalBalance = getSupplierTotalBalance(supplierId);
+    const openingBalance = supplierBalances.find(b => b.supplier_id === supplierId);
+    
+    if (!openingBalance && totalBalance === 0) {
+      return <span className="text-gray-500">No balance set</span>;
+    }
+
+    const amount = formatCurrency(Math.abs(totalBalance));
+    const isPositive = totalBalance > 0;
+
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+          isPositive ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
+        }`}>
+          {isPositive ? '+' : ''}{amount}
+        </span>
+        <span className="text-sm text-gray-600">
+          {isPositive ? "(Supplier owes company)" : "(Company owes supplier)"}
+        </span>
+        {openingBalance && (
+          <span className="text-xs text-gray-400">
+            (Opening: {formatCurrency(openingBalance.opening_balance)})
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const getUniqueAccounts = () => {
+    const accounts = new Set<string>();
+    
+    financeAccounts.forEach(account => {
+      if (account.mode_of_payment === 'cash') {
+        accounts.add('cash');
+      } else if (account.mode_of_payment === 'bank' && account.bank_name) {
+        accounts.add(`bank_${account.bank_name}`);
+      } else if (account.mode_of_payment === 'mobile_money' && account.mode_of_mobilemoney) {
+        accounts.add(`mobile_${account.mode_of_mobilemoney}`);
+      }
+    });
+
+    return Array.from(accounts);
+  };
+
+  const formatAccountName = (account: string) => {
+    if (account === 'cash') return 'Cash';
+    if (account.startsWith('bank_')) return `Bank - ${account.split('_')[1]}`;
+    if (account.startsWith('mobile_')) return `Mobile Money - ${account.split('_')[1]}`;
+    return account;
+  };
+
   const handleSupplierSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -190,6 +298,43 @@ export default function Suppliers() {
     } catch (err) {
       console.error('Error saving supplier:', err);
       setError('Failed to save supplier. Please try again.');
+    }
+  };
+
+  const handleBalanceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    
+    try {
+      if (!selectedSupplier) return;
+      
+      const { data, error } = await supabase
+        .from('supplier_balances')
+        .upsert([{ 
+          supplier_id: selectedSupplier.id,
+          opening_balance: balanceForm.opening_balance,
+          balance_type: balanceForm.balance_type,
+          current_balance: balanceForm.opening_balance,
+          status: balanceForm.status,
+          partial_amount: balanceForm.partial_amount
+        }])
+        .select();
+
+      if (error) throw error;
+
+      if (data?.[0]) {
+        setSupplierBalances(prev => {
+          const existing = prev.find(b => b.supplier_id === selectedSupplier.id);
+          if (existing) {
+            return prev.map(b => b.supplier_id === selectedSupplier.id ? data[0] : b);
+          }
+          return [...prev, data[0]];
+        });
+        setShowBalanceForm(false);
+      }
+    } catch (err) {
+      console.error('Error saving balance:', err);
+      setError('Failed to save balance. Please try again.');
     }
   };
 
@@ -217,6 +362,30 @@ export default function Suppliers() {
             debit: transactionForm.amount,
             unit_price: 0
           };
+          
+          // Record expense for deposit
+          const selectedFinanceAccount = financeAccounts.find(acc => {
+            if (transactionForm.account === 'cash') return acc.mode_of_payment === 'cash';
+            if (transactionForm.account === 'bank') return acc.mode_of_payment === 'bank' && acc.bank_name;
+            if (transactionForm.account === 'mobile_money') return acc.mode_of_payment === 'mobile_money' && acc.mode_of_mobilemoney;
+            return false;
+          });
+
+          const expenseData = {
+            item: 'Material Payment',
+            amount_spent: transactionForm.amount,
+            department: selectedSupplier.name,
+            account: transactionForm.account,
+            mode_of_payment: selectedFinanceAccount?.mode_of_payment || transactionForm.account,
+            submittedby: 'Admin',
+            date: new Date(transactionForm.date).toISOString()
+          };
+
+          const { error: expenseError } = await supabase
+            .from('expenses')
+            .insert([expenseData]);
+
+          if (expenseError) throw expenseError;
           break;
 
         case 'delivery':
@@ -279,6 +448,12 @@ export default function Suppliers() {
         .delete()
         .eq('supplier_id', id);
 
+      // Delete supplier balances
+      await supabase
+        .from('supplier_balances')
+        .delete()
+        .eq('supplier_id', id);
+
       // Then delete the supplier
       const { error } = await supabase
         .from('suppliers')
@@ -288,13 +463,14 @@ export default function Suppliers() {
       if (error) throw error;
 
       setSuppliers(prev => prev.filter(s => s.id !== id));
+      setSupplierBalances(prev => prev.filter(b => b.supplier_id !== id));
     } catch (err) {
       console.error('Error deleting supplier:', err);
       setError('Failed to delete supplier. Please try again.');
     }
   };
 
-  const handleDeleteLedgerEntry = async (id: string) => {
+  const handleDeleteLedgerEntry = async (id: number) => {
     setError(null);
     
     try {
@@ -331,14 +507,20 @@ export default function Suppliers() {
       unit_price: 0,
       selling_price: 0,
       client_id: "",
-      notes: ""
+      notes: "",
+      account: ""
     });
   };
 
-  const getCurrentBalance = () => {
-    if (ledgerData.length === 0) return 0;
-    const lastEntry = ledgerData[ledgerData.length - 1];
-    return lastEntry.balance;
+  const resetBalanceForm = () => {
+    setBalanceForm({
+      supplier_id: "",
+      opening_balance: 0,
+      balance_type: "debit",
+      status: "pending",
+      partial_amount: 0
+    });
+    setShowBalanceForm(false);
   };
 
   if (loading) {
@@ -401,10 +583,7 @@ export default function Suppliers() {
                     Provider
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Contact
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Address
+                    Balance
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -416,12 +595,11 @@ export default function Suppliers() {
                   <tr key={supplier.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">{supplier.name}</div>
+                      <div className="text-sm text-gray-500">{supplier.contact}</div>
+                      <div className="text-xs text-gray-400">{supplier.address}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {supplier.contact}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {supplier.address}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <SupplierBalanceDisplay supplierId={supplier.id} />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
@@ -434,6 +612,23 @@ export default function Suppliers() {
                           className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1"
                         >
                           <span>💰</span> Record Transaction
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedSupplier(supplier);
+                            const balance = supplierBalances.find(b => b.supplier_id === supplier.id);
+                            setBalanceForm({
+                              supplier_id: supplier.id,
+                              opening_balance: balance?.current_balance || 0,
+                              balance_type: balance?.balance_type || 'debit',
+                              status: balance?.status || 'pending',
+                              partial_amount: balance?.partial_amount || 0
+                            });
+                            setShowBalanceForm(true);
+                          }}
+                          className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-1"
+                        >
+                          <span>💼</span> Set Opening Balance
                         </button>
                         <button
                           onClick={() => {
@@ -543,6 +738,85 @@ export default function Suppliers() {
         </div>
       )}
 
+      {/* Opening Balance Form Modal */}
+      {showBalanceForm && selectedSupplier && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Set Opening Balance for {selectedSupplier.name}
+                </h3>
+                <button 
+                  onClick={() => setShowBalanceForm(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  ✕
+                </button>
+              </div>
+              <form onSubmit={handleBalanceSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Balance Type
+                  </label>
+                  <select
+                    value={balanceForm.balance_type}
+                    onChange={(e) => setBalanceForm({
+                      ...balanceForm,
+                      balance_type: e.target.value as 'debit' | 'credit'
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="debit">Supplier owes company</option>
+                    <option value="credit">Company owes supplier</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Amount (UGX)
+                  </label>
+                  <input
+                    type="number"
+                    value={balanceForm.opening_balance}
+                    onChange={(e) => setBalanceForm({
+                      ...balanceForm,
+                      opening_balance: Number(e.target.value)
+                    })}
+                    required
+                    min="0"
+                    step="0.01"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {error && (
+                  <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowBalanceForm(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    Save Balance
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Transaction Form Modal */}
       {showTransactionForm && selectedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -592,20 +866,40 @@ export default function Suppliers() {
                 </div>
 
                 {transactionForm.type === 'deposit' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Deposit Amount (UGX)
-                    </label>
-                    <input
-                      type="number"
-                      value={transactionForm.amount}
-                      onChange={(e) => setTransactionForm({...transactionForm, amount: Number(e.target.value)})}
-                      required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Deposit Amount (UGX)
+                      </label>
+                      <input
+                        type="number"
+                        value={transactionForm.amount}
+                        onChange={(e) => setTransactionForm({...transactionForm, amount: Number(e.target.value)})}
+                        required
+                        min="0"
+                        step="0.01"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Account
+                      </label>
+                      <select
+                        value={transactionForm.account}
+                        onChange={(e) => setTransactionForm({...transactionForm, account: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        required
+                      >
+                        <option value="">Select Account</option>
+                        {getUniqueAccounts().map(account => (
+                          <option key={account} value={account}>
+                            {formatAccountName(account)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
                 )}
 
                 {(transactionForm.type === 'delivery' || transactionForm.type === 'sold_to_client') && (
