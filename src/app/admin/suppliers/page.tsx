@@ -21,7 +21,7 @@ interface LedgerEntry {
   id: number;
   supplier_id: string;
   date: string;
-  description: 'Deposit' | 'Delivery' | 'Sold to Client';
+  description: 'Opening Balance' | 'Deposit' | 'Delivery' | 'Sold to Client';
   unit_price: number;
   selling_price?: number;
   quantity?: number;
@@ -62,6 +62,18 @@ interface FinanceAccount {
   mode_of_payment: string;
   bank_name?: string;
   mode_of_mobilemoney?: string;
+}
+
+interface Order {
+  id: number;
+  created_at: string;
+  user: string;
+  item: string;
+  cost: string;
+  quantity: string;
+  total_amount: string;
+  material: string;
+  client_id: string;
 }
 
 const formatCurrency = (amount: number) => {
@@ -188,10 +200,15 @@ export default function Suppliers() {
     fetchData();
   }, []);
 
-  // Fetch ledger data for a specific supplier
+  // Fetch ledger data for a specific supplier (including opening balances)
   const fetchLedgerData = async (supplierId: string) => {
     try {
       console.log('Fetching ledger for supplier:', supplierId);
+      
+      // First, get the opening balance for this supplier
+      const openingBalance = supplierBalances.find(b => b.supplier_id === supplierId);
+      
+      // Get ledger entries from database
       const { data, error } = await supabase
         .from('ledger_entries')
         .select('*')
@@ -203,8 +220,32 @@ export default function Suppliers() {
         throw error;
       }
 
-      console.log('Fetched ledger data:', data?.length || 0, 'records');
-      setLedgerData(data || []);
+      let allEntries: LedgerEntry[] = [];
+
+      // Add opening balance as first entry if it exists
+      if (openingBalance) {
+        const openingEntry: LedgerEntry = {
+          id: 0, // Temporary ID for opening balance
+          supplier_id: supplierId,
+          date: openingBalance.created_at,
+          description: 'Opening Balance',
+          unit_price: 0,
+          credit: 0,
+          debit: openingBalance.balance_type === 'debit' ? openingBalance.opening_balance : 0,
+          balance: openingBalance.balance_type === 'debit' ? openingBalance.opening_balance : -openingBalance.opening_balance,
+          item_name: 'Opening Balance',
+          created_at: openingBalance.created_at
+        };
+        allEntries.push(openingEntry);
+      }
+
+      // Add regular ledger entries
+      if (data) {
+        allEntries = [...allEntries, ...data];
+      }
+
+      console.log('Fetched ledger data:', allEntries.length, 'records (including opening balance)');
+      setLedgerData(allEntries);
     } catch (err) {
       console.error('Error fetching ledger data:', err);
       setError('Failed to load ledger data');
@@ -215,7 +256,12 @@ export default function Suppliers() {
   const calculateRunningBalance = (entries: LedgerEntry[]) => {
     let balance = 0;
     return entries.map(entry => {
-      balance += entry.debit - entry.credit;
+      // For opening balance, start with the given balance
+      if (entry.description === 'Opening Balance') {
+        balance = entry.balance;
+      } else {
+        balance += entry.debit - entry.credit;
+      }
       return { ...entry, balance };
     });
   };
@@ -234,7 +280,11 @@ export default function Suppliers() {
     
     let balance = 0;
     supplierLedgerEntries.forEach(entry => {
-      balance += entry.debit - entry.credit;
+      if (entry.description === 'Opening Balance') {
+        balance = entry.balance;
+      } else {
+        balance += entry.debit - entry.credit;
+      }
     });
     return balance;
   };
@@ -244,10 +294,16 @@ export default function Suppliers() {
     const openingBalance = supplierBalances.find(b => b.supplier_id === supplierId);
     const ledgerBalance = getSupplierLedgerBalance(supplierId);
     
+    // If we have ledger data, use it directly (it already includes opening balance)
+    if (ledgerData.length > 0) {
+      return ledgerBalance;
+    }
+    
+    // Fallback calculation if no ledger data
     const openingAmount = openingBalance ? 
       (openingBalance.balance_type === 'debit' ? openingBalance.current_balance : -openingBalance.current_balance) : 0;
     
-    const totalBalance = openingAmount + ledgerBalance;
+    const totalBalance = openingAmount;
     
     console.log(`Balance calculation for ${supplierId}:`, { 
       openingBalance: openingAmount, 
@@ -286,8 +342,12 @@ export default function Suppliers() {
         {openingBalance && (
           <div className="text-xs text-gray-500 flex gap-2">
             <span>Opening: {formatCurrency(openingBalance.opening_balance)}</span>
-            <span>•</span>
-            <span>Ledger: {formatCurrency(ledgerBalance)}</span>
+            {ledgerBalance !== openingBalance.current_balance && (
+              <>
+                <span>•</span>
+                <span>Ledger: {formatCurrency(ledgerBalance)}</span>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -398,6 +458,12 @@ export default function Suppliers() {
           }
           return [...prev, data[0]];
         });
+        
+        // Refresh ledger data to include the new opening balance
+        if (showLedgerModal) {
+          fetchLedgerData(selectedSupplier.id);
+        }
+        
         setShowBalanceForm(false);
       }
     } catch (err) {
@@ -473,17 +539,41 @@ export default function Suppliers() {
           break;
 
         case 'sold_to_client':
-          const saleValue = transactionForm.quantity * transactionForm.selling_price;
-          const client = clients.find(c => c.id === transactionForm.client_id);
+          // Use UNIT PRICE for supplier balance calculation (deduction from supplier account)
+          const supplierDeductionValue = transactionForm.quantity * transactionForm.unit_price;
+          
           ledgerEntry = {
             ...ledgerEntry,
             description: 'Sold to Client',
-            credit: saleValue,
-            unit_price: transactionForm.selling_price,
+            credit: supplierDeductionValue, // Use unit price for supplier deduction
+            unit_price: transactionForm.unit_price, // Store unit price
+            selling_price: transactionForm.selling_price, // Store selling price separately
             quantity: transactionForm.quantity,
             item_name: transactionForm.item_name,
-            client_name: client?.name
+            client_name: clients.find(c => c.id === transactionForm.client_id)?.name
           };
+
+          // Save to order table with SELLING PRICE for client billing
+          const client = clients.find(c => c.id === transactionForm.client_id);
+          const orderData = {
+            user: client?.name || 'Unknown Client',
+            item: transactionForm.item_name,
+            cost: transactionForm.selling_price.toString(), // Use selling price for client
+            quantity: transactionForm.quantity.toString(),
+            total_amount: (transactionForm.quantity * transactionForm.selling_price).toString(), // Use selling price for total
+            material: transactionForm.item_name,
+            client_id: transactionForm.client_id,
+            created_at: new Date(transactionForm.date).toISOString()
+          };
+
+          const { error: orderError } = await supabase
+            .from('order')
+            .insert([orderData]);
+
+          if (orderError) {
+            console.error('Error saving order:', orderError);
+            throw orderError;
+          }
           break;
       }
 
@@ -1047,18 +1137,12 @@ export default function Suppliers() {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {transactionForm.type === 'sold_to_client' ? 'Selling Price' : 'Unit Price'} (UGX)
+                          Unit Price (UGX)
                         </label>
                         <input
                           type="number"
-                          value={transactionForm.type === 'sold_to_client' ? transactionForm.selling_price : transactionForm.unit_price}
-                          onChange={(e) => {
-                            if (transactionForm.type === 'sold_to_client') {
-                              setTransactionForm({...transactionForm, selling_price: Number(e.target.value)});
-                            } else {
-                              setTransactionForm({...transactionForm, unit_price: Number(e.target.value)});
-                            }
-                          }}
+                          value={transactionForm.unit_price}
+                          onChange={(e) => setTransactionForm({...transactionForm, unit_price: Number(e.target.value)})}
                           required
                           min="0"
                           step="0.01"
@@ -1068,24 +1152,41 @@ export default function Suppliers() {
                     </div>
 
                     {transactionForm.type === 'sold_to_client' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Client
-                        </label>
-                        <select
-                          value={transactionForm.client_id}
-                          onChange={(e) => setTransactionForm({...transactionForm, client_id: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                          required
-                        >
-                          <option value="">Select Client</option>
-                          {clients.map(client => (
-                            <option key={client.id} value={client.id}>
-                              {client.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Selling Price (UGX)
+                          </label>
+                          <input
+                            type="number"
+                            value={transactionForm.selling_price}
+                            onChange={(e) => setTransactionForm({...transactionForm, selling_price: Number(e.target.value)})}
+                            required
+                            min="0"
+                            step="0.01"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Price charged to client"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Client
+                          </label>
+                          <select
+                            value={transactionForm.client_id}
+                            onChange={(e) => setTransactionForm({...transactionForm, client_id: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            required
+                          >
+                            <option value="">Select Client</option>
+                            {clients.map(client => (
+                              <option key={client.id} value={client.id}>
+                                {client.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
                     )}
                   </>
                 )}
@@ -1136,18 +1237,31 @@ export default function Suppliers() {
                         <div className="flex justify-between">
                           <span>Unit Price:</span>
                           <span className="font-medium">
-                            {formatCurrency(transactionForm.type === 'sold_to_client' ? transactionForm.selling_price : transactionForm.unit_price)}
+                            {formatCurrency(transactionForm.unit_price)}
                           </span>
                         </div>
+                        {transactionForm.type === 'sold_to_client' && (
+                          <div className="flex justify-between">
+                            <span>Selling Price:</span>
+                            <span className="font-medium text-purple-600">
+                              {formatCurrency(transactionForm.selling_price)}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex justify-between border-t pt-1">
-                          <span>Total Value:</span>
+                          <span>Supplier Deduction:</span>
                           <span className="font-medium text-red-600">
-                            -{formatCurrency(
-                              transactionForm.quantity * 
-                              (transactionForm.type === 'sold_to_client' ? transactionForm.selling_price : transactionForm.unit_price)
-                            )}
+                            -{formatCurrency(transactionForm.quantity * transactionForm.unit_price)}
                           </span>
                         </div>
+                        {transactionForm.type === 'sold_to_client' && (
+                          <div className="flex justify-between">
+                            <span>Client Charge:</span>
+                            <span className="font-medium text-green-600">
+                              +{formatCurrency(transactionForm.quantity * transactionForm.selling_price)}
+                            </span>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -1258,6 +1372,9 @@ export default function Suppliers() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {entry.description}
+                          {entry.description === 'Sold to Client' && entry.selling_price && (
+                            <div className="text-xs text-gray-500">(Sold at: {formatCurrency(entry.selling_price)})</div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
                           {entry.item_name && (
@@ -1287,12 +1404,14 @@ export default function Suppliers() {
                           {formatCurrency(Math.abs(entry.balance))}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            onClick={() => handleDeleteLedgerEntry(entry.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            Delete
-                          </button>
+                          {entry.description !== 'Opening Balance' && (
+                            <button
+                              onClick={() => handleDeleteLedgerEntry(entry.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Delete
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
