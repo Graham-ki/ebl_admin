@@ -210,7 +210,7 @@ export default function ClientsPage() {
       const { data: ordersData, error: ordersError } = await supabase
         .from("order")
         .select("*")
-        .eq("user", clientId)
+        .eq("client_id", clientId)
         .order("created_at", { ascending: true });
 
       if (ordersError) throw ordersError;
