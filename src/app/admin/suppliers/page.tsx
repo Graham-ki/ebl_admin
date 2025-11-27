@@ -405,6 +405,26 @@ export default function Suppliers() {
     return account.charAt(0).toUpperCase() + account.slice(1);
   };
 
+  // Parse account to extract mode and submode
+  const parseAccount = (account: string) => {
+    if (account === 'cash') {
+      return { mode: 'Cash', submode: 'Cash' };
+    } else if (account.startsWith('bank_')) {
+      const bankName = account.split('_').slice(1).join(' ');
+      return { 
+        mode: 'Bank', 
+        submode: bankName === 'generic' ? 'Bank' : bankName 
+      };
+    } else if (account.startsWith('mobile_')) {
+      const provider = account.split('_').slice(1).join(' ');
+      return { 
+        mode: 'Mobile Money', 
+        submode: provider === 'generic' ? 'Mobile Money' : provider 
+      };
+    }
+    return { mode: account, submode: account };
+  };
+
   // Handle supplier form submission
   const handleSupplierSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -498,23 +518,21 @@ export default function Suppliers() {
             unit_price: 0
           };
           
-          // Record expense for deposit
-          const selectedFinanceAccount = financeAccounts.find(acc => {
-            if (transactionForm.account === 'cash') return acc.mode_of_payment === 'Cash';
-            if (transactionForm.account.startsWith('bank_')) return acc.mode_of_payment === 'Bank';
-            if (transactionForm.account.startsWith('mobile_')) return acc.mode_of_payment === 'Mobile Money' || acc.mode_of_payment === 'Mobile Money';
-            return false;
-          });
+          // Parse the account to extract mode and submode
+          const { mode, submode } = parseAccount(transactionForm.account);
 
+          // Record expense for deposit with proper mode and submode separation
           const expenseData = {
             item: 'Material Payment',
             amount_spent: transactionForm.amount,
             department: selectedSupplier.name,
-            account: transactionForm.account,
-            mode_of_payment: selectedFinanceAccount?.mode_of_payment || transactionForm.account,
+            account: submode, // Use submode for account (e.g., "centenary", "mtn")
+            mode_of_payment: mode, // Use mode for mode_of_payment (e.g., "Bank", "Mobile Money")
             submittedby: 'Admin',
             date: new Date(transactionForm.date).toISOString()
           };
+
+          console.log('Recording expense:', expenseData);
 
           const { error: expenseError } = await supabase
             .from('expenses')
@@ -1216,12 +1234,22 @@ export default function Suppliers() {
                     </div>
                     
                     {transactionForm.type === 'deposit' && (
-                      <div className="flex justify-between">
-                        <span>Amount:</span>
-                        <span className="font-medium text-green-600">
-                          +{formatCurrency(transactionForm.amount)}
-                        </span>
-                      </div>
+                      <>
+                        <div className="flex justify-between">
+                          <span>Amount:</span>
+                          <span className="font-medium text-green-600">
+                            +{formatCurrency(transactionForm.amount)}
+                          </span>
+                        </div>
+                        {transactionForm.account && (
+                          <div className="flex justify-between">
+                            <span>Account:</span>
+                            <span className="font-medium">
+                              {formatAccountName(transactionForm.account)}
+                            </span>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {(transactionForm.type === 'delivery' || transactionForm.type === 'sold_to_client') && (
