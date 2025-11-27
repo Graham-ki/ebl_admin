@@ -358,7 +358,7 @@ export default function Suppliers() {
   const getUniqueAccounts = () => {
     const accounts = new Set<string>();
     
-    console.log('Processing finance accounts:', financeAccounts);
+    //console.log('Processing finance accounts:', financeAccounts);
     
     // Add default accounts first
     accounts.add('cash');
@@ -387,7 +387,7 @@ export default function Suppliers() {
     });
 
     const accountList = Array.from(accounts);
-    console.log('Available accounts:', accountList);
+    //console.log('Available accounts:', accountList);
     return accountList;
   };
 
@@ -500,9 +500,9 @@ export default function Suppliers() {
           
           // Record expense for deposit
           const selectedFinanceAccount = financeAccounts.find(acc => {
-            if (transactionForm.account === 'cash') return acc.mode_of_payment === 'cash';
-            if (transactionForm.account.startsWith('bank_')) return acc.mode_of_payment === 'bank';
-            if (transactionForm.account.startsWith('mobile_')) return acc.mode_of_payment === 'mobile_money' || acc.mode_of_payment === 'mobile money';
+            if (transactionForm.account === 'cash') return acc.mode_of_payment === 'Cash';
+            if (transactionForm.account.startsWith('bank_')) return acc.mode_of_payment === 'Bank';
+            if (transactionForm.account.startsWith('mobile_')) return acc.mode_of_payment === 'Mobile Money' || acc.mode_of_payment === 'Mobile Money';
             return false;
           });
 
