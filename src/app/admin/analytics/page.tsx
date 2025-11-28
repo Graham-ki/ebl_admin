@@ -996,18 +996,15 @@ const fetchCashAssets = async () => {
               <div className="border rounded-lg p-4 bg-orange-50">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Sum of Debit Entries (sum1)</div>
+                    <div className="text-sm text-orange-600 mb-1">Total Debit Entries (Amount demanded from suppliers)</div>
                     <div className="text-xl font-bold text-orange-700">
                       {formatCurrency(prepaidMaterials.sum1)}
                     </div>
                   </div>
                   <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Product Calculation (sum2)</div>
+                    <div className="text-sm text-orange-600 mb-1">Total credit (Amount delivered plus that Sold to client)</div>
                     <div className="text-xl font-bold text-orange-700">
                       {formatCurrency(prepaidMaterials.sum2)}
-                    </div>
-                    <div className="text-xs text-orange-500 mt-1">
-                      (Sum of Unit Prices × Sum of Quantities)
                     </div>
                   </div>
                   <div className="text-center">
@@ -1016,7 +1013,7 @@ const fetchCashAssets = async () => {
                       {formatCurrency(prepaidMaterials.total)}
                     </div>
                     <div className="text-xs text-orange-500 mt-1">
-                      (sum1 - sum2)
+                      (Outstanding balance from suppliers )
                     </div>
                   </div>
                 </div>
