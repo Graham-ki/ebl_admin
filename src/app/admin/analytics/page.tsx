@@ -93,7 +93,7 @@ interface GroupedReceivable {
 interface PrepaidMaterials {
   sum1: number; // Sum of all debit entries
   sum2: number; // Product of sum3 (sum of unit_price) and sum4 (sum of quantity)
-  total: number; // Product of sum1 and sum2 in UGX
+  total: number; // Difference: sum1 - sum2
 }
 
 export default function CurrentAssetsPage() {
@@ -144,8 +144,8 @@ export default function CurrentAssetsPage() {
         // Calculate sum2: sum3 * sum4
         const sum2 = sum3 * sum4;
 
-        // Calculate total: sum1 * sum2
-        const total = sum1 * sum2;
+        // Calculate total: sum1 - sum2
+        const total = sum1 - sum2;
 
         setPrepaidMaterials({
           sum1,
@@ -996,13 +996,13 @@ const fetchCashAssets = async () => {
               <div className="border rounded-lg p-4 bg-orange-50">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Sum of Debit Entries</div>
+                    <div className="text-sm text-orange-600 mb-1">Sum of Debit Entries (sum1)</div>
                     <div className="text-xl font-bold text-orange-700">
                       {formatCurrency(prepaidMaterials.sum1)}
                     </div>
                   </div>
                   <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Product Calculation</div>
+                    <div className="text-sm text-orange-600 mb-1">Product Calculation (sum2)</div>
                     <div className="text-xl font-bold text-orange-700">
                       {formatCurrency(prepaidMaterials.sum2)}
                     </div>
@@ -1016,7 +1016,7 @@ const fetchCashAssets = async () => {
                       {formatCurrency(prepaidMaterials.total)}
                     </div>
                     <div className="text-xs text-orange-500 mt-1">
-                      (Debit Sum × Product Calculation)
+                      (sum1 - sum2)
                     </div>
                   </div>
                 </div>
