@@ -90,6 +90,12 @@ interface GroupedReceivable {
   total_balance: number;
 }
 
+interface PrepaidMaterials {
+  sum1: number; // Sum of all debit entries
+  sum2: number; // Product of sum3 (sum of unit_price) and sum4 (sum of quantity)
+  total: number; // Product of sum1 and sum2 in UGX
+}
+
 export default function CurrentAssetsPage() {
   const [materialAssets, setMaterialAssets] = useState<MaterialAsset[]>([]);
   const [productAssets, setProductAssets] = useState<ProductAsset[]>([]);
@@ -110,6 +116,58 @@ export default function CurrentAssetsPage() {
     unit_cost: ''
   });
   const [openingBalanceOwners, setOpeningBalanceOwners] = useState<OpeningBalanceOwner[]>([]);
+  const [prepaidMaterials, setPrepaidMaterials] = useState<PrepaidMaterials>({
+    sum1: 0,
+    sum2: 0,
+    total: 0
+  });
+
+  // Fetch prepaid materials data from ledger_entries
+  const fetchPrepaidMaterials = async () => {
+    try {
+      const { data: ledgerEntries, error } = await supabase
+        .from("ledger_entries")
+        .select("debit, unit_price, quantity");
+
+      if (error) throw error;
+
+      if (ledgerEntries && ledgerEntries.length > 0) {
+        // Calculate sum1: sum of all debit entries
+        const sum1 = ledgerEntries.reduce((total, entry) => total + safeParseNumber(entry.debit), 0);
+
+        // Calculate sum3: sum of all unit_price entries
+        const sum3 = ledgerEntries.reduce((total, entry) => total + safeParseNumber(entry.unit_price), 0);
+
+        // Calculate sum4: sum of all quantity entries
+        const sum4 = ledgerEntries.reduce((total, entry) => total + safeParseNumber(entry.quantity), 0);
+
+        // Calculate sum2: sum3 * sum4
+        const sum2 = sum3 * sum4;
+
+        // Calculate total: sum1 * sum2
+        const total = sum1 * sum2;
+
+        setPrepaidMaterials({
+          sum1,
+          sum2,
+          total
+        });
+      } else {
+        setPrepaidMaterials({
+          sum1: 0,
+          sum2: 0,
+          total: 0
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching prepaid materials:", error);
+      setPrepaidMaterials({
+        sum1: 0,
+        sum2: 0,
+        total: 0
+      });
+    }
+  };
 
   // Fetch inventory costs
   const fetchInventoryCosts = async () => {
@@ -632,7 +690,8 @@ const fetchCashAssets = async () => {
       await Promise.all([
         fetchMaterialAssets(costs),
         fetchProductAssets(costs),
-        fetchCashAssets()
+        fetchCashAssets(),
+        fetchPrepaidMaterials()
       ]);
       
       // Show cost form if no costs are set
@@ -660,23 +719,6 @@ const fetchCashAssets = async () => {
   // Calculate total inventory value
   const totalInventoryValue = materialAssets.reduce((sum, item) => sum + item.total_value, 0) +
                             productAssets.reduce((sum, item) => sum + item.total_value, 0);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 p-6">
-        <div className="w-full max-w-2xl text-center">
-          <h1 className="text-4xl font-extrabold mb-4 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent animate-pulse">
-            Current Assets
-          </h1>
-          <p className="text-gray-700 mb-8">Loading assets data...</p>
-          <div className="grid gap-6">
-            <div className="h-40 w-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-2xl animate-pulse"></div>
-            <div className="h-40 w-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-2xl animate-pulse"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto p-6">
@@ -844,8 +886,6 @@ const fetchCashAssets = async () => {
         </Dialog>
       </div>
 
-      {/* Inventory Costs Management */}
-      
       <div className="grid gap-6 mb-8">
         {/* Cash Assets Summary */}
         <Card>
@@ -920,7 +960,7 @@ const fetchCashAssets = async () => {
             <CardDescription>Raw materials inventory value</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div className="border rounded-lg p-4 bg-blue-50">
                 <div className="text-sm text-blue-600 mb-1">Available Inventory Value</div>
                 <div className="text-2xl font-bold text-blue-700">
@@ -935,10 +975,50 @@ const fetchCashAssets = async () => {
                 </div>
               </div>
 
+              <div className="border rounded-lg p-4 bg-orange-50">
+                <div className="text-sm text-orange-600 mb-1">Prepaid Materials</div>
+                <div className="text-2xl font-bold text-orange-700">
+                  {formatCurrency(prepaidMaterials.total)}
+                </div>
+              </div>
+
               <div className="border rounded-lg p-4 bg-gray-50">
                 <div className="text-sm text-gray-600 mb-1">Number of Materials</div>
                 <div className="text-2xl font-bold text-gray-700">
                   {materialAssets.length} types
+                </div>
+              </div>
+            </div>
+
+            {/* Prepaid Materials Section */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-3">Prepaid Materials Details</h3>
+              <div className="border rounded-lg p-4 bg-orange-50">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-sm text-orange-600 mb-1">Sum of Debit Entries</div>
+                    <div className="text-xl font-bold text-orange-700">
+                      {formatCurrency(prepaidMaterials.sum1)}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-orange-600 mb-1">Product Calculation</div>
+                    <div className="text-xl font-bold text-orange-700">
+                      {formatCurrency(prepaidMaterials.sum2)}
+                    </div>
+                    <div className="text-xs text-orange-500 mt-1">
+                      (Sum of Unit Prices × Sum of Quantities)
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-orange-600 mb-1">Total Prepaid Materials</div>
+                    <div className="text-xl font-bold text-orange-700">
+                      {formatCurrency(prepaidMaterials.total)}
+                    </div>
+                    <div className="text-xs text-orange-500 mt-1">
+                      (Debit Sum × Product Calculation)
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1045,7 +1125,7 @@ const fetchCashAssets = async () => {
             <CardDescription>Complete overview of all current assets</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
               <div className="space-y-4">
                 <h4 className="font-semibold text-indigo-700">Cash Assets</h4>
                 <div className="space-y-2">
@@ -1073,10 +1153,16 @@ const fetchCashAssets = async () => {
                       {formatCurrency(materialAssets.reduce((sum, item) => sum + item.total_value, 0))}
                     </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span>Prepaid Materials:</span>
+                    <span className="font-semibold">
+                      {formatCurrency(prepaidMaterials.total)}
+                    </span>
+                  </div>
                   <div className="flex justify-between border-t pt-2">
                     <span className="font-semibold">Total Materials:</span>
                     <span className="font-semibold text-indigo-600">
-                      {formatCurrency(materialAssets.reduce((sum, item) => sum + item.total_value, 0))}
+                      {formatCurrency(materialAssets.reduce((sum, item) => sum + item.total_value, 0) + prepaidMaterials.total)}
                     </span>
                   </div>
                 </div>
@@ -1105,6 +1191,30 @@ const fetchCashAssets = async () => {
                   </div>
                 </div>
               </div>
+
+              <div className="space-y-4">
+                <h4 className="font-semibold text-indigo-700">Summary</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Total Inventory:</span>
+                    <span className="font-semibold">
+                      {formatCurrency(totalInventoryValue)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Prepaid Materials:</span>
+                    <span className="font-semibold">
+                      {formatCurrency(prepaidMaterials.total)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="font-semibold">Grand Total:</span>
+                    <span className="font-semibold text-indigo-600">
+                      {formatCurrency(cashAssets.total + totalInventoryValue + prepaidMaterials.total)}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
             
             <div className="p-4 bg-indigo-100 rounded-lg">
@@ -1114,10 +1224,16 @@ const fetchCashAssets = async () => {
                   {formatCurrency(totalInventoryValue)}
                 </span>
               </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-lg font-semibold text-indigo-800">Prepaid Materials Value:</span>
+                <span className="text-2xl font-bold text-indigo-900">
+                  {formatCurrency(prepaidMaterials.total)}
+                </span>
+              </div>
               <div className="flex justify-between items-center">
                 <span className="text-lg font-semibold text-indigo-800">Grand Total Current Assets:</span>
                 <span className="text-2xl font-bold text-indigo-900">
-                  {formatCurrency(cashAssets.total + totalInventoryValue)}
+                  {formatCurrency(cashAssets.total + totalInventoryValue + prepaidMaterials.total)}
                 </span>
               </div>
               <p className="text-sm text-indigo-600 mt-2">
