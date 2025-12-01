@@ -1016,13 +1016,13 @@ const fetchCashAssets = async () => {
               </div>
             </div>
 
-            {/* Prepaid Materials Section */}
+            {/* Prepaid Materials Section 
             <div className="mb-6">
-              <h3 className="font-semibold mb-3">Prepaid Materials Calculation</h3>
+              <h3 className="font-semibold mb-3">Prepaid Materials details</h3>
               <div className="border rounded-lg p-4 bg-orange-50">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Ledger Debits (sum1)</div>
+                    <div className="text-sm text-orange-600 mb-1">Ledger Debits (D)</div>
                     <div className="text-lg font-bold text-orange-700">
                       {formatCurrency(prepaidMaterials.sum1)}
                     </div>
@@ -1070,7 +1070,7 @@ const fetchCashAssets = async () => {
                   </div>
                 </div>
               </div>
-            </div>
+            </div>*/}
 
             <div>
               <h3 className="font-semibold mb-3">Material Details</h3>
