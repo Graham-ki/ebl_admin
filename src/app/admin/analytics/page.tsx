@@ -1001,21 +1001,6 @@ const fetchCashAssets = async () => {
                       {formatCurrency(prepaidMaterials.sum1)}
                     </div>
                   </div>
-                  <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Total credit (Amount delivered plus that Sold to client)</div>
-                    <div className="text-xl font-bold text-orange-700">
-                      {formatCurrency(prepaidMaterials.sum2)}
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Total Prepaid Materials</div>
-                    <div className="text-xl font-bold text-orange-700">
-                      {formatCurrency(prepaidMaterials.total)}
-                    </div>
-                    <div className="text-xs text-orange-500 mt-1">
-                      (Outstanding balance from suppliers )
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
