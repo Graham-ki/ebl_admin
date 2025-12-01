@@ -91,9 +91,11 @@ interface GroupedReceivable {
 }
 
 interface PrepaidMaterials {
-  sum1: number; // Sum of all debit entries
+  sum1: number; // Sum of all debit entries from ledger_entries
+  supplierDebitBalance: number; // Sum of opening_balance where balance_type is 'debit' from supplier_balances
+  totalDebitSum: number; // sum1 + supplierDebitBalance
   sum2: number; // Product of sum3 (sum of unit_price) and sum4 (sum of quantity)
-  total: number; // Difference: sum1 - sum2
+  total: number; // Difference: totalDebitSum - sum2
 }
 
 export default function CurrentAssetsPage() {
@@ -118,23 +120,49 @@ export default function CurrentAssetsPage() {
   const [openingBalanceOwners, setOpeningBalanceOwners] = useState<OpeningBalanceOwner[]>([]);
   const [prepaidMaterials, setPrepaidMaterials] = useState<PrepaidMaterials>({
     sum1: 0,
+    supplierDebitBalance: 0,
+    totalDebitSum: 0,
     sum2: 0,
     total: 0
   });
 
-  // Fetch prepaid materials data from ledger_entries
+  // Fetch prepaid materials data from ledger_entries and supplier_balances
   const fetchPrepaidMaterials = async () => {
     try {
-      const { data: ledgerEntries, error } = await supabase
+      // Fetch data from ledger_entries
+      const { data: ledgerEntries, error: ledgerError } = await supabase
         .from("ledger_entries")
         .select("debit, unit_price, quantity");
 
-      if (error) throw error;
+      if (ledgerError) throw ledgerError;
 
+      // Fetch data from supplier_balances
+      const { data: supplierBalances, error: supplierError } = await supabase
+        .from("supplier_balances")
+        .select("opening_balance, balance_type")
+        .eq("balance_type", "debit");
+
+      if (supplierError) throw supplierError;
+
+      let sum1 = 0;
+      let sum2 = 0;
+      let supplierDebitBalance = 0;
+
+      // Calculate sum1: sum of all debit entries from ledger_entries
       if (ledgerEntries && ledgerEntries.length > 0) {
-        // Calculate sum1: sum of all debit entries
-        const sum1 = ledgerEntries.reduce((total, entry) => total + safeParseNumber(entry.debit), 0);
+        sum1 = ledgerEntries.reduce((total, entry) => total + safeParseNumber(entry.debit), 0);
+      }
 
+      // Calculate supplierDebitBalance: sum of opening_balance where balance_type is 'debit'
+      if (supplierBalances && supplierBalances.length > 0) {
+        supplierDebitBalance = supplierBalances.reduce((total, balance) => total + safeParseNumber(balance.opening_balance), 0);
+      }
+
+      // Calculate totalDebitSum: sum1 + supplierDebitBalance
+      const totalDebitSum = sum1 + supplierDebitBalance;
+
+      // Calculate sum2: sum3 * sum4 (from ledger_entries)
+      if (ledgerEntries && ledgerEntries.length > 0) {
         // Calculate sum3: sum of all unit_price entries
         const sum3 = ledgerEntries.reduce((total, entry) => total + safeParseNumber(entry.unit_price), 0);
 
@@ -142,27 +170,25 @@ export default function CurrentAssetsPage() {
         const sum4 = ledgerEntries.reduce((total, entry) => total + safeParseNumber(entry.quantity), 0);
 
         // Calculate sum2: sum3 * sum4
-        const sum2 = sum3 * sum4;
-
-        // Calculate total: sum1 - sum2
-        const total = sum1 - sum2;
-
-        setPrepaidMaterials({
-          sum1,
-          sum2,
-          total
-        });
-      } else {
-        setPrepaidMaterials({
-          sum1: 0,
-          sum2: 0,
-          total: 0
-        });
+        sum2 = sum3 * sum4;
       }
+
+      // Calculate total: totalDebitSum - sum2
+      const total = totalDebitSum - sum2;
+
+      setPrepaidMaterials({
+        sum1,
+        supplierDebitBalance,
+        totalDebitSum,
+        sum2,
+        total
+      });
     } catch (error) {
       console.error("Error fetching prepaid materials:", error);
       setPrepaidMaterials({
         sum1: 0,
+        supplierDebitBalance: 0,
+        totalDebitSum: 0,
         sum2: 0,
         total: 0
       });
@@ -992,13 +1018,54 @@ const fetchCashAssets = async () => {
 
             {/* Prepaid Materials Section */}
             <div className="mb-6">
-              <h3 className="font-semibold mb-3">Prepaid Materials Details</h3>
+              <h3 className="font-semibold mb-3">Prepaid Materials Calculation</h3>
               <div className="border rounded-lg p-4 bg-orange-50">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Total Debit Entries (Amount demanded from suppliers)</div>
-                    <div className="text-xl font-bold text-orange-700">
+                    <div className="text-sm text-orange-600 mb-1">Ledger Debits (sum1)</div>
+                    <div className="text-lg font-bold text-orange-700">
                       {formatCurrency(prepaidMaterials.sum1)}
+                    </div>
+                  </div>
+                  <div className="text-center flex items-center justify-center">
+                    <div className="text-xl text-orange-500">+</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-orange-600 mb-1">Supplier Debit Balances</div>
+                    <div className="text-lg font-bold text-orange-700">
+                      {formatCurrency(prepaidMaterials.supplierDebitBalance)}
+                    </div>
+                  </div>
+                  <div className="text-center flex items-center justify-center">
+                    <div className="text-xl text-orange-500">-</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-orange-600 mb-1">Product Calculation (sum2)</div>
+                    <div className="text-lg font-bold text-orange-700">
+                      {formatCurrency(prepaidMaterials.sum2)}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-orange-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="text-center">
+                      <div className="text-sm text-orange-600 mb-1">Total Debit Sum</div>
+                      <div className="text-xl font-bold text-orange-700">
+                        {formatCurrency(prepaidMaterials.totalDebitSum)}
+                      </div>
+                      <div className="text-xs text-orange-500 mt-1">
+                        (sum1 + Supplier Debit Balances)
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-sm text-orange-600 mb-1">Final Prepaid Materials</div>
+                      <div className="text-xl font-bold text-orange-700">
+                        {formatCurrency(prepaidMaterials.total)}
+                      </div>
+                      <div className="text-xs text-orange-500 mt-1">
+                        (Total Debit Sum - sum2)
+                      </div>
                     </div>
                   </div>
                 </div>
