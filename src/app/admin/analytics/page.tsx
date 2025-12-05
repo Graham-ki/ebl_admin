@@ -1074,27 +1074,21 @@ const fetchCashAssets = async () => {
               </div>
               
               <div className="border rounded-lg p-4 bg-orange-50">
-                <div className="text-sm text-orange-600 mb-1">Paid Opening Balances</div>
+                <div className="text-sm text-orange-600 mb-1">Amount owed to clients</div>
                 <div className="text-2xl font-bold text-orange-700">
                   {formatCurrency(accountsPayable.sum1)}
-                </div>
-                <div className="text-xs text-orange-500 mt-1">
-                  Paid balances with client_id
                 </div>
               </div>
               
               <div className="border rounded-lg p-4 bg-yellow-50">
-                <div className="text-sm text-yellow-600 mb-1">Supplier Balance Difference</div>
+                <div className="text-sm text-yellow-600 mb-1">Amount owed to suppliers</div>
                 <div className="text-2xl font-bold text-yellow-700">
                   {formatCurrency(accountsPayable.sum4)}
-                </div>
-                <div className="text-xs text-yellow-500 mt-1">
-                  |Credit ({formatCurrency(accountsPayable.sum3)}) - Debit ({formatCurrency(accountsPayable.sum2)})|
                 </div>
               </div>
             </div>
 
-            <div className="mb-6">
+            {/* <div className="mb-6">
               <h3 className="font-semibold mb-3">Accounts Payable Calculation Details</h3>
               <div className="border rounded-lg p-4 bg-gray-50">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1154,7 +1148,7 @@ const fetchCashAssets = async () => {
                   </div>
                 </div>
               </div>
-            </div>
+            </div>*/}
           </CardContent>
         </Card>
 
