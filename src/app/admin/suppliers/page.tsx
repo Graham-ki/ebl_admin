@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { Edit2, Trash2, Eye, Plus, DollarSign } from "lucide-react";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -126,6 +127,8 @@ export default function Suppliers() {
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
   const [showBalanceForm, setShowBalanceForm] = useState(false);
+  const [isEditingBalance, setIsEditingBalance] = useState(false);
+  const [editingBalanceId, setEditingBalanceId] = useState<string | null>(null);
   
   const [supplierForm, setSupplierForm] = useState<Omit<Supplier, "id" | "created_at">>({
     name: "",
@@ -358,8 +361,6 @@ export default function Suppliers() {
   const getUniqueAccounts = () => {
     const accounts = new Set<string>();
     
-    //console.log('Processing finance accounts:', financeAccounts);
-    
     // Add default accounts first
     accounts.add('cash');
     
@@ -387,7 +388,6 @@ export default function Suppliers() {
     });
 
     const accountList = Array.from(accounts);
-    //console.log('Available accounts:', accountList);
     return accountList;
   };
 
@@ -448,7 +448,7 @@ export default function Suppliers() {
     }
   };
 
-  // Handle opening balance submission
+  // Handle opening balance submission (create or update)
   const handleBalanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -456,39 +456,116 @@ export default function Suppliers() {
     try {
       if (!selectedSupplier) return;
       
-      const { data, error } = await supabase
-        .from('supplier_balances')
-        .upsert([{ 
-          supplier_id: selectedSupplier.id,
-          opening_balance: balanceForm.opening_balance,
-          balance_type: balanceForm.balance_type,
-          current_balance: balanceForm.opening_balance,
-          status: balanceForm.status,
-          partial_amount: balanceForm.partial_amount
-        }])
-        .select();
+      const balanceData = {
+        supplier_id: selectedSupplier.id,
+        opening_balance: balanceForm.opening_balance,
+        balance_type: balanceForm.balance_type,
+        current_balance: balanceForm.opening_balance,
+        status: balanceForm.status,
+        partial_amount: balanceForm.partial_amount,
+        updated_at: new Date().toISOString()
+      };
 
-      if (error) throw error;
+      let result;
+      
+      if (isEditingBalance && editingBalanceId) {
+        // Update existing balance
+        result = await supabase
+          .from('supplier_balances')
+          .update(balanceData)
+          .eq('id', editingBalanceId)
+          .select();
+      } else {
+        // Create new balance
+        result = await supabase
+          .from('supplier_balances')
+          .upsert([balanceData])
+          .select();
+      }
 
-      if (data?.[0]) {
-        setSupplierBalances(prev => {
-          const existing = prev.find(b => b.supplier_id === selectedSupplier.id);
-          if (existing) {
-            return prev.map(b => b.supplier_id === selectedSupplier.id ? data[0] : b);
-          }
-          return [...prev, data[0]];
-        });
+      if (result.error) throw result.error;
+
+      if (result.data?.[0]) {
+        if (isEditingBalance) {
+          // Update existing balance in state
+          setSupplierBalances(prev => 
+            prev.map(b => b.id === editingBalanceId ? result.data[0] : b)
+          );
+        } else {
+          // Add new balance to state
+          setSupplierBalances(prev => {
+            const existing = prev.find(b => b.supplier_id === selectedSupplier.id);
+            if (existing) {
+              return prev.map(b => b.supplier_id === selectedSupplier.id ? result.data[0] : b);
+            }
+            return [...prev, result.data[0]];
+          });
+        }
         
-        // Refresh ledger data to include the new opening balance
+        // Refresh ledger data to reflect the updated opening balance
         if (showLedgerModal) {
           fetchLedgerData(selectedSupplier.id);
         }
         
-        setShowBalanceForm(false);
+        resetBalanceForm();
       }
     } catch (err) {
       console.error('Error saving balance:', err);
       setError('Failed to save balance. Please try again.');
+    }
+  };
+
+  // Handle edit opening balance
+  const handleEditBalance = (supplierId: string) => {
+    const balance = supplierBalances.find(b => b.supplier_id === supplierId);
+    if (!balance) return;
+    
+    const supplier = suppliers.find(s => s.id === supplierId);
+    if (supplier) {
+      setSelectedSupplier(supplier);
+      setBalanceForm({
+        supplier_id: supplierId,
+        opening_balance: balance.opening_balance,
+        balance_type: balance.balance_type,
+        status: balance.status,
+        partial_amount: balance.partial_amount
+      });
+      setIsEditingBalance(true);
+      setEditingBalanceId(balance.id);
+      setShowBalanceForm(true);
+    }
+  };
+
+  // Handle delete opening balance
+  const handleDeleteBalance = async (supplierId: string) => {
+    setError(null);
+    
+    if (!confirm('Are you sure you want to delete this opening balance?')) {
+      return;
+    }
+    
+    try {
+      const balance = supplierBalances.find(b => b.supplier_id === supplierId);
+      if (!balance) return;
+      
+      const { error } = await supabase
+        .from('supplier_balances')
+        .delete()
+        .eq('id', balance.id);
+
+      if (error) throw error;
+
+      // Remove from state
+      setSupplierBalances(prev => prev.filter(b => b.id !== balance.id));
+      
+      // Refresh ledger data if modal is open
+      if (showLedgerModal && selectedSupplier?.id === supplierId) {
+        fetchLedgerData(supplierId);
+      }
+      
+    } catch (err) {
+      console.error('Error deleting balance:', err);
+      setError('Failed to delete opening balance. Please try again.');
     }
   };
 
@@ -622,6 +699,10 @@ export default function Suppliers() {
   const handleDeleteSupplier = async (id: string) => {
     setError(null);
     
+    if (!confirm('Are you sure you want to delete this supplier? This will also delete all associated ledger entries and balances.')) {
+      return;
+    }
+    
     try {
       // First delete all ledger entries for this supplier
       await supabase
@@ -654,6 +735,10 @@ export default function Suppliers() {
   // Handle ledger entry deletion
   const handleDeleteLedgerEntry = async (id: number) => {
     setError(null);
+    
+    if (!confirm('Are you sure you want to delete this ledger entry?')) {
+      return;
+    }
     
     try {
       const { error } = await supabase
@@ -703,6 +788,8 @@ export default function Suppliers() {
       status: "pending",
       partial_amount: 0
     });
+    setIsEditingBalance(false);
+    setEditingBalanceId(null);
     setShowBalanceForm(false);
   };
 
@@ -731,7 +818,7 @@ export default function Suppliers() {
             onClick={() => setShowSupplierForm(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
           >
-            <span>+</span> Add Supplier
+            <Plus size={16} /> Add Supplier
           </button>
         </div>
       </header>
@@ -791,71 +878,111 @@ export default function Suppliers() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Balance
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Opening Balance Actions
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
+                    Supplier Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {suppliers.map((supplier) => (
-                  <tr key={supplier.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900">{supplier.name}</div>
-                      <div className="text-sm text-gray-500">{supplier.contact}</div>
-                      <div className="text-xs text-gray-400">{supplier.address}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <SupplierBalanceDisplay supplierId={supplier.id} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedSupplier(supplier);
-                            setShowTransactionForm(true);
-                            resetTransactionForm();
-                          }}
-                          className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1"
-                        >
-                          <span>💰</span> Record Transaction
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedSupplier(supplier);
-                            const balance = supplierBalances.find(b => b.supplier_id === supplier.id);
-                            setBalanceForm({
-                              supplier_id: supplier.id,
-                              opening_balance: balance?.current_balance || 0,
-                              balance_type: balance?.balance_type || 'debit',
-                              status: balance?.status || 'pending',
-                              partial_amount: balance?.partial_amount || 0
-                            });
-                            setShowBalanceForm(true);
-                          }}
-                          className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-1"
-                        >
-                          <span>💼</span> Set Opening Balance
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedSupplier(supplier);
-                            fetchLedgerData(supplier.id);
-                            setShowLedgerModal(true);
-                          }}
-                          className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-1"
-                        >
-                          <span>📊</span> View Ledger
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteSupplier(supplier.id)}
-                          className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-1"
-                        >
-                          <span>🗑️</span> Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {suppliers.map((supplier) => {
+                  const hasOpeningBalance = supplierBalances.some(b => b.supplier_id === supplier.id);
+                  const openingBalance = supplierBalances.find(b => b.supplier_id === supplier.id);
+                  
+                  return (
+                    <tr key={supplier.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-medium text-gray-900">{supplier.name}</div>
+                        <div className="text-sm text-gray-500">{supplier.contact}</div>
+                        <div className="text-xs text-gray-400">{supplier.address}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <SupplierBalanceDisplay supplierId={supplier.id} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {hasOpeningBalance ? (
+                            <>
+                              <button
+                                onClick={() => handleEditBalance(supplier.id)}
+                                className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm"
+                                title="Edit Opening Balance"
+                              >
+                                <Edit2 size={14} /> Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteBalance(supplier.id)}
+                                className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-1 text-sm"
+                                title="Delete Opening Balance"
+                              >
+                                <Trash2 size={14} /> Delete
+                              </button>
+                              {openingBalance && (
+                                <div className="text-xs text-gray-500 ml-2">
+                                  Last updated: {formatDate(openingBalance.updated_at)}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setSelectedSupplier(supplier);
+                                setBalanceForm({
+                                  supplier_id: supplier.id,
+                                  opening_balance: 0,
+                                  balance_type: "debit",
+                                  status: "pending",
+                                  partial_amount: 0
+                                });
+                                setIsEditingBalance(false);
+                                setShowBalanceForm(true);
+                              }}
+                              className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1 text-sm"
+                              title="Set Opening Balance"
+                            >
+                              <DollarSign size={14} /> Set Opening Balance
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => {
+                              setSelectedSupplier(supplier);
+                              setShowTransactionForm(true);
+                              resetTransactionForm();
+                            }}
+                            className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1"
+                            title="Record Transaction"
+                          >
+                            <span>💰</span> Record Transaction
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedSupplier(supplier);
+                              fetchLedgerData(supplier.id);
+                              setShowLedgerModal(true);
+                            }}
+                            className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-1"
+                            title="View Ledger"
+                          >
+                            <Eye size={14} /> View Ledger
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteSupplier(supplier.id)}
+                            className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-1"
+                            title="Delete Supplier"
+                          >
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -951,10 +1078,10 @@ export default function Suppliers() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Set Opening Balance for {selectedSupplier.name}
+                  {isEditingBalance ? 'Edit Opening Balance' : 'Set Opening Balance'} for {selectedSupplier.name}
                 </h3>
                 <button 
-                  onClick={() => setShowBalanceForm(false)}
+                  onClick={resetBalanceForm}
                   className="text-gray-400 hover:text-gray-500"
                 >
                   ✕
@@ -996,6 +1123,44 @@ export default function Suppliers() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={balanceForm.status}
+                    onChange={(e) => setBalanceForm({
+                      ...balanceForm,
+                      status: e.target.value as 'pending' | 'partially' | 'paid'
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="partially">Partially Paid</option>
+                    <option value="paid">Paid</option>
+                  </select>
+                </div>
+
+                {balanceForm.status === 'partially' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Partial Amount Paid (UGX)
+                    </label>
+                    <input
+                      type="number"
+                      value={balanceForm.partial_amount}
+                      onChange={(e) => setBalanceForm({
+                        ...balanceForm,
+                        partial_amount: Number(e.target.value)
+                      })}
+                      min="0"
+                      step="0.01"
+                      max={balanceForm.opening_balance}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                )}
+
                 {error && (
                   <div className="p-2 bg-red-100 text-red-700 text-sm rounded-lg">
                     {error}
@@ -1005,7 +1170,7 @@ export default function Suppliers() {
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => setShowBalanceForm(false)}
+                    onClick={resetBalanceForm}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
@@ -1014,7 +1179,7 @@ export default function Suppliers() {
                     type="submit"
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                   >
-                    Save Balance
+                    {isEditingBalance ? 'Update Balance' : 'Save Balance'}
                   </button>
                 </div>
               </form>
@@ -1350,15 +1515,26 @@ export default function Suppliers() {
                       {getCurrentBalance() >= 0 ? ' (Supplier owes company)' : ' (Company owes supplier)'}
                     </span>
                   </div>
-                  <button
-                    onClick={() => {
-                      setShowTransactionForm(true);
-                      setShowLedgerModal(false);
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                  >
-                    <span>+</span> New Transaction
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setShowBalanceForm(true);
+                        setShowLedgerModal(false);
+                      }}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                    >
+                      <DollarSign size={16} /> Opening Balance
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowTransactionForm(true);
+                        setShowLedgerModal(false);
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    >
+                      <Plus size={16} /> New Transaction
+                    </button>
+                  </div>
                 </div>
               </div>
               
@@ -1435,9 +1611,9 @@ export default function Suppliers() {
                           {entry.description !== 'Opening Balance' && (
                             <button
                               onClick={() => handleDeleteLedgerEntry(entry.id)}
-                              className="text-red-600 hover:text-red-900"
+                              className="text-red-600 hover:text-red-900 flex items-center gap-1"
                             >
-                              Delete
+                              <Trash2 size={14} /> Delete
                             </button>
                           )}
                         </td>
