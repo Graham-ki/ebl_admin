@@ -98,6 +98,14 @@ interface PrepaidMaterials {
   total: number; // Difference: totalDebitSum - sum2
 }
 
+interface AccountsPayable {
+  sum1: number; // Sum of Paid opening_balances where client_id is not null
+  sum2: number; // Sum of debit opening_balances from supplier_balances
+  sum3: number; // Sum of credit opening_balances from supplier_balances
+  sum4: number; // Absolute difference: |sum3 - sum2|
+  total: number; // sum1 + sum4
+}
+
 export default function CurrentAssetsPage() {
   const [materialAssets, setMaterialAssets] = useState<MaterialAsset[]>([]);
   const [productAssets, setProductAssets] = useState<ProductAsset[]>([]);
@@ -123,6 +131,13 @@ export default function CurrentAssetsPage() {
     supplierDebitBalance: 0,
     totalDebitSum: 0,
     sum2: 0,
+    total: 0
+  });
+  const [accountsPayable, setAccountsPayable] = useState<AccountsPayable>({
+    sum1: 0,
+    sum2: 0,
+    sum3: 0,
+    sum4: 0,
     total: 0
   });
 
@@ -190,6 +205,69 @@ export default function CurrentAssetsPage() {
         supplierDebitBalance: 0,
         totalDebitSum: 0,
         sum2: 0,
+        total: 0
+      });
+    }
+  };
+
+  // Fetch accounts payable data
+  const fetchAccountsPayable = async () => {
+    try {
+      // Fetch sum1: Sum of Paid opening_balances where client_id is not null
+      const { data: openingBalancesData, error: openingBalancesError } = await supabase
+        .from("opening_balances")
+        .select("amount, status, client_id")
+        .eq("status", "Paid")
+        .not("client_id", "is", null);
+
+      if (openingBalancesError) throw openingBalancesError;
+
+      let sum1 = 0;
+      if (openingBalancesData && openingBalancesData.length > 0) {
+        sum1 = openingBalancesData.reduce((total, balance) => total + safeParseNumber(balance.amount), 0);
+      }
+
+      // Fetch supplier balances
+      const { data: supplierBalances, error: supplierError } = await supabase
+        .from("supplier_balances")
+        .select("opening_balance, balance_type");
+
+      if (supplierError) throw supplierError;
+
+      let sum2 = 0; // Sum of debit balances
+      let sum3 = 0; // Sum of credit balances
+
+      if (supplierBalances && supplierBalances.length > 0) {
+        supplierBalances.forEach(balance => {
+          const amount = safeParseNumber(balance.opening_balance);
+          if (balance.balance_type === 'debit') {
+            sum2 += amount;
+          } else if (balance.balance_type === 'credit') {
+            sum3 += amount;
+          }
+        });
+      }
+
+      // Calculate sum4: Absolute difference between sum3 and sum2 (always positive)
+      const sum4 = Math.abs(sum3 - sum2);
+
+      // Calculate total accounts payable: sum1 + sum4
+      const total = sum1 + sum4;
+
+      setAccountsPayable({
+        sum1,
+        sum2,
+        sum3,
+        sum4,
+        total
+      });
+    } catch (error) {
+      console.error("Error fetching accounts payable:", error);
+      setAccountsPayable({
+        sum1: 0,
+        sum2: 0,
+        sum3: 0,
+        sum4: 0,
         total: 0
       });
     }
@@ -717,7 +795,8 @@ const fetchCashAssets = async () => {
         fetchMaterialAssets(costs),
         fetchProductAssets(costs),
         fetchCashAssets(),
-        fetchPrepaidMaterials()
+        fetchPrepaidMaterials(),
+        fetchAccountsPayable()
       ]);
       
       // Show cost form if no costs are set
@@ -976,6 +1055,109 @@ const fetchCashAssets = async () => {
           </CardContent>
         </Card>
 
+        {/* Accounts Payable Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span className="text-red-600">📝</span>
+              Accounts Payable
+            </CardTitle>
+            <CardDescription>Liabilities owed to suppliers and clients</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="border rounded-lg p-4 bg-red-50">
+                <div className="text-sm text-red-600 mb-1">Total Accounts Payable</div>
+                <div className="text-2xl font-bold text-red-700">
+                  {formatCurrency(accountsPayable.total)}
+                </div>
+              </div>
+              
+              <div className="border rounded-lg p-4 bg-orange-50">
+                <div className="text-sm text-orange-600 mb-1">Paid Opening Balances</div>
+                <div className="text-2xl font-bold text-orange-700">
+                  {formatCurrency(accountsPayable.sum1)}
+                </div>
+                <div className="text-xs text-orange-500 mt-1">
+                  Paid balances with client_id
+                </div>
+              </div>
+              
+              <div className="border rounded-lg p-4 bg-yellow-50">
+                <div className="text-sm text-yellow-600 mb-1">Supplier Balance Difference</div>
+                <div className="text-2xl font-bold text-yellow-700">
+                  {formatCurrency(accountsPayable.sum4)}
+                </div>
+                <div className="text-xs text-yellow-500 mt-1">
+                  |Credit ({formatCurrency(accountsPayable.sum3)}) - Debit ({formatCurrency(accountsPayable.sum2)})|
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="font-semibold mb-3">Accounts Payable Calculation Details</h3>
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600 mb-1">Paid Opening Balances</div>
+                    <div className="text-lg font-bold text-gray-700">
+                      {formatCurrency(accountsPayable.sum1)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      sum1
+                    </div>
+                  </div>
+                  
+                  <div className="text-center flex items-center justify-center">
+                    <div className="text-xl text-gray-500">+</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600 mb-1">|Credit - Debit|</div>
+                    <div className="text-lg font-bold text-gray-700">
+                      {formatCurrency(accountsPayable.sum4)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      |{formatCurrency(accountsPayable.sum3)} - {formatCurrency(accountsPayable.sum2)}|
+                    </div>
+                  </div>
+                  
+                  <div className="text-center flex items-center justify-center">
+                    <div className="text-xl text-gray-500">=</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-sm text-gray-600 mb-1">Total Payable</div>
+                    <div className="text-lg font-bold text-gray-700">
+                      {formatCurrency(accountsPayable.total)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      sum1 + sum4
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="text-center">
+                      <div className="text-sm text-gray-600 mb-1">Supplier Debit Balances</div>
+                      <div className="text-lg font-bold text-gray-700">
+                        {formatCurrency(accountsPayable.sum2)}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-sm text-gray-600 mb-1">Supplier Credit Balances</div>
+                      <div className="text-lg font-bold text-gray-700">
+                        {formatCurrency(accountsPayable.sum3)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Material Assets Summary */}
         <Card>
           <CardHeader>
@@ -1015,62 +1197,6 @@ const fetchCashAssets = async () => {
                 </div>
               </div>
             </div>
-
-            {/* Prepaid Materials Section 
-            <div className="mb-6">
-              <h3 className="font-semibold mb-3">Prepaid Materials details</h3>
-              <div className="border rounded-lg p-4 bg-orange-50">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                  <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Ledger Debits (D)</div>
-                    <div className="text-lg font-bold text-orange-700">
-                      {formatCurrency(prepaidMaterials.sum1)}
-                    </div>
-                  </div>
-                  <div className="text-center flex items-center justify-center">
-                    <div className="text-xl text-orange-500">+</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Supplier Debit Balances</div>
-                    <div className="text-lg font-bold text-orange-700">
-                      {formatCurrency(prepaidMaterials.supplierDebitBalance)}
-                    </div>
-                  </div>
-                  <div className="text-center flex items-center justify-center">
-                    <div className="text-xl text-orange-500">-</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-orange-600 mb-1">Product Calculation (sum2)</div>
-                    <div className="text-lg font-bold text-orange-700">
-                      {formatCurrency(prepaidMaterials.sum2)}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-4 pt-4 border-t border-orange-200">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="text-center">
-                      <div className="text-sm text-orange-600 mb-1">Total Debit Sum</div>
-                      <div className="text-xl font-bold text-orange-700">
-                        {formatCurrency(prepaidMaterials.totalDebitSum)}
-                      </div>
-                      <div className="text-xs text-orange-500 mt-1">
-                        (sum1 + Supplier Debit Balances)
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-sm text-orange-600 mb-1">Final Prepaid Materials</div>
-                      <div className="text-xl font-bold text-orange-700">
-                        {formatCurrency(prepaidMaterials.total)}
-                      </div>
-                      <div className="text-xs text-orange-500 mt-1">
-                        (Total Debit Sum - sum2)
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>*/}
 
             <div>
               <h3 className="font-semibold mb-3">Material Details</h3>
@@ -1171,7 +1297,7 @@ const fetchCashAssets = async () => {
               <span className="text-indigo-600">📊</span>
               Total Current Assets Summary
             </CardTitle>
-            <CardDescription>Complete overview of all current assets</CardDescription>
+            <CardDescription>Complete overview of all current assets and liabilities</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
@@ -1242,24 +1368,24 @@ const fetchCashAssets = async () => {
               </div>
 
               <div className="space-y-4">
-                <h4 className="font-semibold text-indigo-700">Summary</h4>
+                <h4 className="font-semibold text-indigo-700">Liabilities</h4>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span>Total Inventory:</span>
-                    <span className="font-semibold">
-                      {formatCurrency(totalInventoryValue)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Prepaid Materials:</span>
-                    <span className="font-semibold">
-                      {formatCurrency(prepaidMaterials.total)}
+                    <span>Accounts Payable:</span>
+                    <span className="font-semibold text-red-600">
+                      {formatCurrency(accountsPayable.total)}
                     </span>
                   </div>
                   <div className="flex justify-between border-t pt-2">
-                    <span className="font-semibold">Grand Total:</span>
+                    <span className="font-semibold">Net Assets:</span>
                     <span className="font-semibold text-indigo-600">
-                      {formatCurrency(cashAssets.total + totalInventoryValue + prepaidMaterials.total)}
+                      {formatCurrency(
+                        cashAssets.total + 
+                        materialAssets.reduce((sum, item) => sum + item.total_value, 0) + 
+                        prepaidMaterials.total +
+                        productAssets.reduce((sum, item) => sum + item.total_value, 0) -
+                        accountsPayable.total
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1268,25 +1394,36 @@ const fetchCashAssets = async () => {
             
             <div className="p-4 bg-indigo-100 rounded-lg">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-lg font-semibold text-indigo-800">Total Inventory Value:</span>
+                <span className="text-lg font-semibold text-indigo-800">Total Assets:</span>
                 <span className="text-2xl font-bold text-indigo-900">
-                  {formatCurrency(totalInventoryValue)}
+                  {formatCurrency(
+                    cashAssets.total + 
+                    materialAssets.reduce((sum, item) => sum + item.total_value, 0) + 
+                    prepaidMaterials.total +
+                    productAssets.reduce((sum, item) => sum + item.total_value, 0)
+                  )}
                 </span>
               </div>
               <div className="flex justify-between items-center mb-2">
-                <span className="text-lg font-semibold text-indigo-800">Prepaid Materials Value:</span>
-                <span className="text-2xl font-bold text-indigo-900">
-                  {formatCurrency(prepaidMaterials.total)}
+                <span className="text-lg font-semibold text-red-800">Total Liabilities:</span>
+                <span className="text-2xl font-bold text-red-900">
+                  {formatCurrency(accountsPayable.total)}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-lg font-semibold text-indigo-800">Grand Total Current Assets:</span>
-                <span className="text-2xl font-bold text-indigo-900">
-                  {formatCurrency(cashAssets.total + totalInventoryValue + prepaidMaterials.total)}
+              <div className="flex justify-between items-center border-t border-indigo-300 pt-2">
+                <span className="text-lg font-semibold text-green-800">Net Current Assets:</span>
+                <span className="text-2xl font-bold text-green-900">
+                  {formatCurrency(
+                    cashAssets.total + 
+                    materialAssets.reduce((sum, item) => sum + item.total_value, 0) + 
+                    prepaidMaterials.total +
+                    productAssets.reduce((sum, item) => sum + item.total_value, 0) -
+                    accountsPayable.total
+                  )}
                 </span>
               </div>
               <p className="text-sm text-indigo-600 mt-2">
-                Represents the total value of all liquid and convertible assets
+                Represents the net value of current assets after accounting for liabilities
               </p>
             </div>
           </CardContent>
